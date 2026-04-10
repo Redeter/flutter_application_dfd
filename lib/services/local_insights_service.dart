@@ -2,9 +2,9 @@ import 'dart:convert';
 
 import 'package:shared_preferences/shared_preferences.dart';
 
+import '../models/aggregated_data.dart';
 import '../models/insight_result.dart';
 import '../models/state_entries.dart';
-import 'insights_service.dart';
 
 /// Локальный анализ без облака. Извлекает ключевые слова, формирует резюме
 /// и рекомендации. Паттерны сохраняются и «обучают» систему под пользователя.

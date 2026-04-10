@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import 'neural/neural_insights_service.dart';
 import 'screens/articles_screen.dart';
 import 'screens/calendar_screen.dart';
 import 'screens/notes_screen.dart';
@@ -13,8 +14,11 @@ import 'widgets/app_bottom_nav.dart';
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
   await SharedPreferences.getInstance();
+  unawaited(NeuralInsightsService.instance.init());
   runApp(const MyApp());
 }
+
+void unawaited(Future<void> f) {}
 
 class MyApp extends StatelessWidget {
   const MyApp({super.key});

@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 
+import '../models/aggregated_data.dart';
 import '../models/insight_result.dart';
 import '../services/insights_service.dart';
 import '../theme/app_colors.dart';

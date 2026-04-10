@@ -1,9 +1,8 @@
+import '../models/aggregated_data.dart';
 import '../models/calendar_entry.dart';
 import '../models/insight_result.dart';
-import '../models/note_item.dart';
-import '../models/state_entries.dart';
 import 'calendar_storage.dart';
-import 'local_insights_service.dart';
+import '../neural/neural_insights_service.dart';
 import 'notes_storage.dart';
 import 'state_storage.dart';
 
@@ -27,25 +26,9 @@ class InsightsService {
     );
   }
 
-  /// Локальный анализ: ключевые слова, резюме, выводы, рекомендации.
-  /// Система сохраняет паттерны (дни недели, связь сна и настроения)
-  /// и со временем даёт более персонализированные советы.
+  /// Локальный анализ нейросетью: ключевые слова, резюме, выводы, рекомендации.
+  /// Самописная нейросеть анализирует заметки и записи о состоянии.
   Future<InsightResult> getInsights(AggregatedData data) async {
-    return LocalInsightsService.instance.getInsights(data);
+    return NeuralInsightsService.instance.getInsights(data);
   }
-}
-
-/// Агрегированные данные для анализа.
-class AggregatedData {
-  AggregatedData({
-    required this.notes,
-    required this.stateEntries,
-    required this.medications,
-    required this.appointments,
-  });
-
-  final List<NoteItem> notes;
-  final List<StateEntryBase> stateEntries;
-  final List<Medication> medications;
-  final List<Appointment> appointments;
 }

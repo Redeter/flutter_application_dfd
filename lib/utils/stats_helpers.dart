@@ -1,5 +1,5 @@
+import '../models/aggregated_data.dart';
 import '../models/state_entries.dart';
-import '../services/insights_service.dart';
 
 /// Локальная статистика за выбранный период (без ИИ).
 class LocalStats {
