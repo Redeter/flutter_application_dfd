@@ -48,9 +48,24 @@ class LocalInsightsService {
       );
     }
 
+    final quality = _dataQualityScore(data);
+    final observationDays = _observationDays(data);
+    if (observationDays < 7 || quality < 0.45) {
+      return InsightResult(
+        keywords: _extractKeywords(data).take(5).toList(),
+        stateSummary: 'Пока недостаточно качественных данных для устойчивого анализа.',
+        overallInsight: 'Добавляйте регулярные записи в течение хотя бы 7 дней.',
+        recommendations: const ['Продолжайте вести записи — система станет точнее.'],
+        confidence: (quality * 0.6).clamp(0.0, 0.6),
+        dataQualityScore: quality,
+        insufficientData: true,
+      );
+    }
+
     final keywords = _extractKeywords(data);
     final (stateSummary, overallInsight) = await _buildSummaries(data);
     final recommendations = await _buildRecommendations(data);
+    final reasons = _buildRecommendationReasons(data, recommendations);
 
     await _updatePatterns(data);
 
@@ -59,7 +74,118 @@ class LocalInsightsService {
       stateSummary: stateSummary,
       overallInsight: overallInsight,
       recommendations: recommendations,
+      recommendationReasons: reasons,
+      confidence: _estimateConfidence(data, quality),
+      dataQualityScore: quality,
     );
+  }
+
+  double _estimateConfidence(AggregatedData d, double quality) {
+    final coverage = ((d.stateEntries.length + d.notes.length) / 40).clamp(0.0, 1.0);
+    final richness = _observationDays(d) >= 7 ? 1.0 : 0.4;
+    return (0.45 * quality + 0.4 * coverage + 0.15 * richness).clamp(0.0, 1.0);
+  }
+
+  int _observationDays(AggregatedData d) {
+    DateTime? minDate;
+    DateTime? maxDate;
+    for (final n in d.notes) {
+      minDate = minDate == null || n.date.isBefore(minDate) ? n.date : minDate;
+      maxDate = maxDate == null || n.date.isAfter(maxDate) ? n.date : maxDate;
+    }
+    for (final e in d.stateEntries) {
+      minDate = minDate == null || e.createdAt.isBefore(minDate) ? e.createdAt : minDate;
+      maxDate = maxDate == null || e.createdAt.isAfter(maxDate) ? e.createdAt : maxDate;
+    }
+    if (minDate == null || maxDate == null) return 0;
+    return maxDate.difference(minDate).inDays + 1;
+  }
+
+  double _dataQualityScore(AggregatedData d) {
+    final total = (d.notes.length + d.stateEntries.length).toDouble();
+    if (total == 0) return 0;
+
+    var scoreSum = 0.0;
+    for (final n in d.notes) {
+      final text = '${n.title} ${n.preview}'.trim();
+      final lenScore = (text.length / 80).clamp(0.0, 1.0);
+      final tagsScore = n.tags.isNotEmpty ? 1.0 : 0.6;
+      final spamPenalty = _looksSpam(text) ? 0.4 : 1.0;
+      scoreSum += (0.7 * lenScore + 0.3 * tagsScore) * spamPenalty;
+    }
+    for (final e in d.stateEntries) {
+      scoreSum += _stateEntryQuality(e);
+    }
+    return (scoreSum / total).clamp(0.0, 1.0);
+  }
+
+  bool _looksSpam(String text) {
+    if (text.isEmpty) return true;
+    final compact = text.toLowerCase().replaceAll(RegExp(r'\s+'), ' ').trim();
+    if (compact.length < 4) return true;
+    final repeatedChars = RegExp(r'(.)\1{5,}').hasMatch(compact);
+    return repeatedChars;
+  }
+
+  double _stateEntryQuality(StateEntryBase e) {
+    switch (e) {
+      case MoodEntry(:final value, :final factors):
+        if (value < 1 || value > 10) return 0;
+        return factors.isNotEmpty ? 1.0 : 0.75;
+      case SleepEntry(:final quality, :final tags):
+        if (quality < 1 || quality > 10) return 0;
+        return tags.isNotEmpty ? 1.0 : 0.8;
+      case EnergyEntry(:final level, :final factors):
+        if (level < 1 || level > 10) return 0;
+        return factors.isNotEmpty ? 1.0 : 0.8;
+      case EmotionsEntry(:final emotions):
+        return emotions.isEmpty ? 0.5 : 1.0;
+      case NutritionEntry(:final meals, :final sensations, :final emotionalConnection):
+        final filled = [
+          meals.isNotEmpty,
+          sensations.isNotEmpty,
+          emotionalConnection.isNotEmpty,
+        ].where((v) => v).length;
+        return (0.5 + filled / 6).clamp(0.0, 1.0);
+      default:
+        return 0.7;
+    }
+  }
+
+  Map<String, List<String>> _buildRecommendationReasons(
+    AggregatedData d,
+    List<String> recommendations,
+  ) {
+    final reasons = <String, List<String>>{};
+    final moodValues = d.stateEntries.whereType<MoodEntry>().map((e) => e.value).toList();
+    final sleepValues = d.stateEntries.whereType<SleepEntry>().map((e) => e.quality).toList();
+    final energyValues = d.stateEntries.whereType<EnergyEntry>().map((e) => e.level).toList();
+    final recentLowSleep = sleepValues.where((v) => v < 6).length;
+    final recentLowMood = moodValues.where((v) => v < 5).length;
+    final recentLowEnergy = energyValues.where((v) => v < 5).length;
+    final anxiousWords = _extractKeywords(d).where((w) =>
+        w.contains('трев') || w.contains('стресс') || w.contains('устал')).length;
+
+    for (final rec in recommendations) {
+      final r = <String>[];
+      if (rec.contains('сна') && recentLowSleep > 0) {
+        r.add('обнаружено дней с низким качеством сна: $recentLowSleep');
+      }
+      if (rec.contains('энерг') && recentLowEnergy > 0) {
+        r.add('часто фиксируется низкая энергия: $recentLowEnergy записей');
+      }
+      if (rec.contains('настроен') && recentLowMood > 0) {
+        r.add('есть повторяющиеся записи со сниженным настроением');
+      }
+      if (rec.contains('замет') && anxiousWords > 0) {
+        r.add('в тексте заметок встречаются тревожные маркеры');
+      }
+      if (r.isEmpty) {
+        r.add('рекомендация основана на суммарном тренде последних записей');
+      }
+      reasons[rec] = r.take(3).toList();
+    }
+    return reasons;
   }
 
   List<String> _extractKeywords(AggregatedData d) {

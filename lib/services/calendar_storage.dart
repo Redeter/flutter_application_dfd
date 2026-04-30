@@ -1,8 +1,7 @@
 import 'dart:convert';
 
-import 'package:shared_preferences/shared_preferences.dart';
-
 import '../models/calendar_entry.dart';
+import 'secure_kv_service.dart';
 
 const _keyCalendar = 'calendar_entries';
 
@@ -11,15 +10,8 @@ class CalendarStorage {
   static CalendarStorage get instance => _instance;
   static final _instance = CalendarStorage._();
 
-  SharedPreferences? _prefs;
-
-  Future<void> _init() async {
-    _prefs ??= await SharedPreferences.getInstance();
-  }
-
   Future<List<CalendarEntry>> loadAll() async {
-    await _init();
-    final raw = _prefs!.getString(_keyCalendar);
+    final raw = await SecureKvService.instance.readWithMigration(_keyCalendar);
     if (raw == null || raw.isEmpty) return [];
 
     try {
@@ -48,7 +40,6 @@ class CalendarStorage {
   }
 
   Future<void> save(CalendarEntry entry) async {
-    await _init();
     final all = await loadAll();
     final idx = all.indexWhere((e) => e.id == entry.id);
     if (idx >= 0) {
@@ -60,7 +51,6 @@ class CalendarStorage {
   }
 
   Future<void> delete(String id) async {
-    await _init();
     final all = await loadAll();
     all.removeWhere((e) => e.id == id);
     await _write(all);
@@ -68,7 +58,7 @@ class CalendarStorage {
 
   Future<void> _write(List<CalendarEntry> list) async {
     final encoded = jsonEncode(list.map((e) => e.toJson()).toList());
-    await _prefs!.setString(_keyCalendar, encoded);
+    await SecureKvService.instance.writeString(_keyCalendar, encoded);
   }
 
   Future<List<CalendarEntry>> loadForDate(DateTime date) async {

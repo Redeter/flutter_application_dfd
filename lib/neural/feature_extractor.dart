@@ -35,6 +35,7 @@ class FeatureExtractor {
     final moodByDate = <DateTime, int>{};
     final sleepByDate = <DateTime, int>{};
     final energyByDate = <DateTime, int>{};
+    final entryTimes = <DateTime>[];
 
     for (final e in data.stateEntries) {
       switch (e) {
@@ -42,16 +43,19 @@ class FeatureExtractor {
           moodSum += value;
           moodCount++;
           moodByDate[_day(createdAt)] = value;
+          entryTimes.add(createdAt);
         case EmotionsEntry(emotions: final ems):
           emotions.addAll(ems);
         case SleepEntry(:final quality, :final createdAt):
           sleepSum += quality;
           sleepCount++;
           sleepByDate[_day(createdAt)] = quality;
+          entryTimes.add(createdAt);
         case EnergyEntry(:final level, :final createdAt):
           energySum += level;
           energyCount++;
           energyByDate[_day(createdAt)] = level;
+          entryTimes.add(createdAt);
         case NutritionEntry(:final snackCount):
           nutritionCount++;
           totalSnacks += snackCount;
@@ -128,6 +132,23 @@ class FeatureExtractor {
     final (moodSleepInteraction, moodEnergyInteraction, daysBothLow) =
         _computeContext(avgMood, avgSleep, avgEnergy, sleepQualities, moodSameDay);
 
+    final (
+      mood7,
+      mood14,
+      mood30,
+      sleep7,
+      sleep14,
+      sleep30,
+      energy7,
+      energy14,
+      energy30,
+    ) = _windowedAverages(data);
+
+    final (morningRatio, eveningRatio, weekdayVariance, cadenceScore, gapScore) =
+        _recordingPatternFeatures(entryTimes, data.notes);
+    final sequenceQuality = _sequenceConsistency(moodByDate, sleepByDate, energyByDate);
+    final baselineShift = _baselineShift(moodByDate);
+
     final now = DateTime.now();
     DateTime? earliest;
     for (final e in data.stateEntries) {
@@ -162,23 +183,122 @@ class FeatureExtractor {
       (textStr.length / 1000).clamp(0.0, 1.0),
       emotionDensity.clamp(0.0, 1.0),
       daysOfData,
-      (moodCount > 0 ? moodSum / moodCount / 10 : 0.5),
-      (sleepCount > 0 ? sleepSum / sleepCount / 10 : 0.5),
-      (energyCount > 0 ? energySum / energyCount / 10 : 0.5),
+      mood7,
+      sleep7,
+      energy7,
       emotions.isNotEmpty ? 1.0 : 0.0,
       data.notes.isEmpty && data.stateEntries.isEmpty ? 1.0 : 0.0,
       textFeatures[0],
       textFeatures[1],
       textFeatures[2],
       textFeatures[3],
-      moodSlope,
-      sleepSlope,
-      moodVolatility,
-      improvingTrend,
-      moodSleepInteraction,
-      moodEnergyInteraction,
-      daysBothLow,
+      ((moodSlope + mood14 + mood30) / 3).clamp(0.0, 1.0),
+      ((sleepSlope + sleep14 + sleep30) / 3).clamp(0.0, 1.0),
+      ((moodVolatility + weekdayVariance) / 2).clamp(0.0, 1.0),
+      ((improvingTrend + energy14 + energy30) / 3).clamp(0.0, 1.0),
+      ((moodSleepInteraction + sequenceQuality) / 2).clamp(0.0, 1.0),
+      ((moodEnergyInteraction + baselineShift) / 2).clamp(0.0, 1.0),
+      ((daysBothLow + cadenceScore + gapScore + morningRatio + eveningRatio) / 5)
+          .clamp(0.0, 1.0),
     ];
+  }
+
+  static (double, double, double, double, double, double, double, double, double)
+      _windowedAverages(AggregatedData data) {
+    final now = DateTime.now();
+    double avgWindow<T extends StateEntryBase>(
+      int days,
+      bool Function(StateEntryBase e) test,
+      int Function(StateEntryBase e) valueOf,
+    ) {
+      final from = now.subtract(Duration(days: days));
+      final vals = data.stateEntries
+          .where((e) => test(e) && !e.createdAt.isBefore(from))
+          .map(valueOf)
+          .toList();
+      if (vals.isEmpty) return 0.5;
+      return ((vals.reduce((a, b) => a + b) / vals.length) / 10).clamp(0.0, 1.0);
+    }
+
+    return (
+      avgWindow(7, (e) => e is MoodEntry, (e) => (e as MoodEntry).value),
+      avgWindow(14, (e) => e is MoodEntry, (e) => (e as MoodEntry).value),
+      avgWindow(30, (e) => e is MoodEntry, (e) => (e as MoodEntry).value),
+      avgWindow(7, (e) => e is SleepEntry, (e) => (e as SleepEntry).quality),
+      avgWindow(14, (e) => e is SleepEntry, (e) => (e as SleepEntry).quality),
+      avgWindow(30, (e) => e is SleepEntry, (e) => (e as SleepEntry).quality),
+      avgWindow(7, (e) => e is EnergyEntry, (e) => (e as EnergyEntry).level),
+      avgWindow(14, (e) => e is EnergyEntry, (e) => (e as EnergyEntry).level),
+      avgWindow(30, (e) => e is EnergyEntry, (e) => (e as EnergyEntry).level),
+    );
+  }
+
+  static (double, double, double, double, double) _recordingPatternFeatures(
+    List<DateTime> entryTimes,
+    List<dynamic> notes,
+  ) {
+    if (entryTimes.isEmpty) return (0.0, 0.0, 0.0, 0.0, 1.0);
+    var morning = 0;
+    var evening = 0;
+    final byWeekday = <int, int>{};
+    for (final t in entryTimes) {
+      if (t.hour < 12) morning++;
+      if (t.hour >= 18) evening++;
+      byWeekday[t.weekday] = (byWeekday[t.weekday] ?? 0) + 1;
+    }
+    final total = entryTimes.length.toDouble();
+    final morningRatio = (morning / total).clamp(0.0, 1.0);
+    final eveningRatio = (evening / total).clamp(0.0, 1.0);
+    final weekdayCounts = List.generate(7, (i) => (byWeekday[i + 1] ?? 0).toDouble());
+    final mean = weekdayCounts.reduce((a, b) => a + b) / 7;
+    final variance =
+        weekdayCounts.map((v) => (v - mean) * (v - mean)).reduce((a, b) => a + b) / 7;
+    final weekdayVariance = (variance / 6).clamp(0.0, 1.0);
+
+    final daysSet = entryTimes
+        .map((t) => DateTime(t.year, t.month, t.day))
+        .toSet()
+        .toList()
+      ..sort();
+    final cadenceScore = (daysSet.length / 21).clamp(0.0, 1.0);
+    var maxGap = 0;
+    for (var i = 1; i < daysSet.length; i++) {
+      final gap = daysSet[i].difference(daysSet[i - 1]).inDays;
+      if (gap > maxGap) maxGap = gap;
+    }
+    final gapScore = (1 - (maxGap / 10)).clamp(0.0, 1.0);
+
+    return (morningRatio, eveningRatio, weekdayVariance, cadenceScore, gapScore);
+  }
+
+  static double _sequenceConsistency(
+    Map<DateTime, int> moodByDate,
+    Map<DateTime, int> sleepByDate,
+    Map<DateTime, int> energyByDate,
+  ) {
+    final days = moodByDate.keys.where((d) => sleepByDate.containsKey(d) && energyByDate.containsKey(d)).toList();
+    if (days.length < 2) return 0.5;
+    var aligned = 0;
+    for (final d in days) {
+      final mood = moodByDate[d]!;
+      final sleep = sleepByDate[d]!;
+      final energy = energyByDate[d]!;
+      final lowAll = mood < 5 && sleep < 5 && energy < 5;
+      final highAll = mood >= 7 && sleep >= 7 && energy >= 7;
+      if (lowAll || highAll) aligned++;
+    }
+    return (aligned / days.length).clamp(0.0, 1.0);
+  }
+
+  static double _baselineShift(Map<DateTime, int> moodByDate) {
+    if (moodByDate.length < 6) return 0.5;
+    final days = moodByDate.keys.toList()..sort();
+    final half = days.length ~/ 2;
+    final first = days.take(half).map((d) => moodByDate[d]!).toList();
+    final second = days.skip(half).map((d) => moodByDate[d]!).toList();
+    final fAvg = first.reduce((a, b) => a + b) / first.length;
+    final sAvg = second.reduce((a, b) => a + b) / second.length;
+    return ((sAvg - fAvg).abs() / 10).clamp(0.0, 1.0);
   }
 
   static DateTime _day(DateTime d) =>

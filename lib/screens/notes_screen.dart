@@ -309,69 +309,88 @@ class _NoteCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final tagLine = note.tags.map((t) => '#$t').join(' ');
+    final normalizedTags = note.tags
+        .map((t) => t.replaceFirst('#', '').trim())
+        .where((t) => t.isNotEmpty)
+        .toList();
     return Material(
       color: Colors.transparent,
       child: InkWell(
         onTap: onEdit,
-        borderRadius: BorderRadius.circular(24),
+        borderRadius: BorderRadius.circular(22),
         child: Ink(
           decoration: BoxDecoration(
             color: AppColors.white,
-            borderRadius: BorderRadius.circular(24),
-            border: Border.all(color: AppColors.orange, width: 4),
+            borderRadius: BorderRadius.circular(22),
+            border: Border.all(
+              color: const Color(0xFFE8E8ED), // iOS-like soft border
+              width: 1.2,
+            ),
             boxShadow: [
               BoxShadow(
-                color: AppColors.orange.withValues(alpha: 0.18),
-                blurRadius: 14,
+                color: Colors.black.withValues(alpha: 0.06),
+                blurRadius: 18,
                 offset: const Offset(0, 6),
               ),
             ],
           ),
           child: Padding(
-            padding: const EdgeInsets.fromLTRB(16, 16, 12, 16),
+            padding: const EdgeInsets.fromLTRB(16, 14, 10, 14),
             child: Row(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Container(
-                  width: 22,
-                  height: 22,
-                  margin: const EdgeInsets.only(top: 4),
-                  decoration: BoxDecoration(
-                    shape: BoxShape.circle,
-                    border: Border.all(color: AppColors.orange, width: 2),
-                    color: AppColors.white,
-                  ),
-                ),
-                const SizedBox(width: 14),
                 Expanded(
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Text(
-                        note.title,
-                        style: GoogleFonts.caveat(
-                          fontSize: 28,
-                          height: 1.1,
-                          fontWeight: FontWeight.w600,
-                          color: AppColors.textDark,
-                        ),
-                      ),
-                      const SizedBox(height: 6),
-                      Text(
-                        tagLine,
-                        style: GoogleFonts.alegreyaSans(
-                          fontSize: 14,
-                          color: AppColors.textDark.withValues(alpha: 0.55),
+                      Row(
+                        children: List.generate(
+                          3,
+                          (_) => Container(
+                            width: 16,
+                            height: 16,
+                            margin: const EdgeInsets.only(right: 6),
+                            decoration: const BoxDecoration(
+                              shape: BoxShape.circle,
+                              color: Color(0xFFD1D1D6), // стикеры (placeholder)
+                            ),
+                          ),
                         ),
                       ),
                       const SizedBox(height: 8),
                       Text(
+                        note.title,
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                        style: GoogleFonts.alegreyaSans(
+                          fontSize: 22,
+                          height: 1.15,
+                          fontWeight: FontWeight.w800,
+                          color: AppColors.textDark,
+                        ),
+                      ),
+                      const SizedBox(height: 6),
+                      Wrap(
+                        spacing: 6,
+                        runSpacing: 6,
+                        children: normalizedTags.isEmpty
+                            ? [
+                                _TagPill(label: 'без тега'),
+                              ]
+                            : normalizedTags
+                                .take(4)
+                                .map((t) => _TagPill(label: t))
+                                .toList(),
+                      ),
+                      const SizedBox(height: 8),
+                      Text(
                         note.preview,
-                        style: GoogleFonts.caveat(
-                          fontSize: 20,
-                          height: 1.25,
-                          color: AppColors.textDark.withValues(alpha: 0.8),
+                        maxLines: 4,
+                        overflow: TextOverflow.ellipsis,
+                        style: GoogleFonts.alegreyaSans(
+                          fontSize: 16,
+                          height: 1.35,
+                          color: AppColors.textDark.withValues(alpha: 0.78),
                         ),
                       ),
                     ],
@@ -381,8 +400,8 @@ class _NoteCard extends StatelessWidget {
                   onPressed: onEdit,
                   icon: const Icon(
                     Icons.edit_outlined,
-                    color: AppColors.orange,
-                    size: 26,
+                    color: Color(0xFF8E8E93),
+                    size: 22,
                   ),
                   padding: EdgeInsets.zero,
                   constraints: const BoxConstraints(
@@ -393,6 +412,31 @@ class _NoteCard extends StatelessWidget {
               ],
             ),
           ),
+        ),
+      ),
+    );
+  }
+}
+
+class _TagPill extends StatelessWidget {
+  const _TagPill({required this.label});
+
+  final String label;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+      decoration: BoxDecoration(
+        color: const Color(0xFFF2F2F7),
+        borderRadius: BorderRadius.circular(12),
+      ),
+      child: Text(
+        '#$label',
+        style: GoogleFonts.alegreyaSans(
+          fontSize: 12,
+          fontWeight: FontWeight.w600,
+          color: const Color(0xFF636366),
         ),
       ),
     );

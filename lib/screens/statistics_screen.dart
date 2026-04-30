@@ -3,7 +3,12 @@ import 'package:google_fonts/google_fonts.dart';
 
 import '../models/aggregated_data.dart';
 import '../models/insight_result.dart';
+import '../models/local_quality_metrics.dart';
+import '../models/state_entries.dart';
+import '../services/dev_data_seed_service.dart';
 import '../services/insights_service.dart';
+import '../services/offline_validation_service.dart';
+import '../services/quality_metrics_service.dart';
 import '../theme/app_colors.dart';
 import '../utils/stats_helpers.dart';
 import '../widgets/app_bottom_nav.dart';
@@ -22,14 +27,31 @@ class StatisticsScreen extends StatefulWidget {
 class _StatisticsScreenState extends State<StatisticsScreen> {
   InsightResult? _insight;
   AggregatedData? _data;
+  LocalQualityMetrics _qualityMetrics = const LocalQualityMetrics();
   bool _loading = false;
   DateTime _selectedDate = DateTime.now();
   bool _viewWeek = true; // true = неделя, false = день
+  String _abMode = 'auto';
+  String? _draggingBlockId;
+  final List<String> _blockOrder = [
+    'data_summary',
+    'rings',
+    'analysis',
+    'advice',
+    'accuracy_card',
+  ];
 
   @override
   void initState() {
     super.initState();
+    _loadMode();
     _load();
+  }
+
+  Future<void> _loadMode() async {
+    final mode = await InsightsService.instance.getManualAbMode();
+    if (!mounted) return;
+    setState(() => _abMode = mode);
   }
 
   Future<void> _load() async {
@@ -37,10 +59,20 @@ class _StatisticsScreenState extends State<StatisticsScreen> {
     try {
       final data = await InsightsService.instance.aggregateData();
       final result = await InsightsService.instance.getInsights(data);
+      await QualityMetricsService.instance.registerInsightShown(result, data);
+      final offline = await OfflineValidationService.instance.evaluate(
+        (sample) => InsightsService.instance.getInsights(sample),
+      );
+      await QualityMetricsService.instance.saveOfflineValidation(
+        score: offline.score,
+        cases: offline.totalCases,
+      );
+      final metrics = await QualityMetricsService.instance.getMetrics();
       if (mounted) {
         setState(() {
           _data = data;
           _insight = result;
+          _qualityMetrics = metrics;
           _loading = false;
         });
       }
@@ -80,12 +112,15 @@ class _StatisticsScreenState extends State<StatisticsScreen> {
           icon: const Icon(Icons.arrow_back, color: AppColors.orange),
           onPressed: () => Navigator.pop(context),
         ),
-        title: Text(
-          'Статистика',
-          style: GoogleFonts.alegreyaSans(
-            fontSize: 22,
-            fontWeight: FontWeight.w800,
-            color: AppColors.textDark,
+        title: GestureDetector(
+          onLongPress: _showHiddenDevActions,
+          child: Text(
+            'Статистика',
+            style: GoogleFonts.alegreyaSans(
+              fontSize: 22,
+              fontWeight: FontWeight.w800,
+              color: AppColors.textDark,
+            ),
           ),
         ),
         actions: [
@@ -129,11 +164,247 @@ class _StatisticsScreenState extends State<StatisticsScreen> {
     );
   }
 
+  Future<void> _showHiddenDevActions() async {
+    final action = await showModalBottomSheet<String>(
+      context: context,
+      backgroundColor: AppColors.white,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(18)),
+      ),
+      builder: (context) {
+        return SafeArea(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              ListTile(
+                leading: const Icon(Icons.auto_awesome, color: AppColors.orange),
+                title: const Text('Сгенерировать 90 дней (позитивный сценарий)'),
+                subtitle: const Text('Больше стабильных и улучшенных показателей'),
+                onTap: () => Navigator.pop(context, 'seed_positive'),
+              ),
+              ListTile(
+                leading: const Icon(Icons.auto_awesome, color: AppColors.orange),
+                title: const Text('Сгенерировать 90 дней (негативный сценарий)'),
+                subtitle: const Text('Больше рисковых и нестабильных показателей'),
+                onTap: () => Navigator.pop(context, 'seed_negative'),
+              ),
+              ListTile(
+                leading: const Icon(Icons.auto_graph, color: AppColors.orange),
+                title: const Text('Сгенерировать 90 дней (смешанный сценарий)'),
+                subtitle: const Text('Волны: улучшение -> просадка -> восстановление'),
+                onTap: () => Navigator.pop(context, 'seed_mixed'),
+              ),
+              ListTile(
+                leading: const Icon(Icons.science_outlined, color: AppColors.orange),
+                title: const Text('Режим анализа (A/B)'),
+                subtitle: Text('Текущий: ${_abMode.toUpperCase()}'),
+                onTap: () => Navigator.pop(context, 'mode'),
+              ),
+              ListTile(
+                leading: const Icon(Icons.analytics_outlined, color: AppColors.orange),
+                title: const Text('Показать качество модели'),
+                subtitle: const Text('Локальные метрики и offline test'),
+                onTap: () => Navigator.pop(context, 'quality'),
+              ),
+              ListTile(
+                leading: const Icon(Icons.delete_forever_outlined, color: Colors.redAccent),
+                title: const Text('Стереть все данные'),
+                subtitle: const Text('Полный сброс данных и модели'),
+                onTap: () => Navigator.pop(context, 'wipe'),
+              ),
+              const SizedBox(height: 8),
+            ],
+          ),
+        );
+      },
+    );
+
+    if (action == 'mode') {
+      await _showHiddenModeSelector();
+      return;
+    }
+    if (action == 'quality') {
+      _showHiddenQualityDialog();
+      return;
+    }
+    if (action == 'wipe') {
+      await _confirmAndWipeAllData();
+      return;
+    }
+    if (action != 'seed_positive' &&
+        action != 'seed_negative' &&
+        action != 'seed_mixed') {
+      return;
+    }
+    if (!mounted) return;
+    setState(() => _loading = true);
+    try {
+      final created = action == 'seed_positive'
+          ? await DevDataSeedService.instance.generatePositive90Days()
+          : (action == 'seed_negative'
+              ? await DevDataSeedService.instance.generateNegative90Days()
+              : await DevDataSeedService.instance.generateMixed90Days());
+      await _load();
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            action == 'seed_positive'
+                ? 'Добавлен позитивный набор: $created записей'
+                : (action == 'seed_negative'
+                    ? 'Добавлен негативный набор: $created записей'
+                    : 'Добавлен смешанный набор: $created записей'),
+          ),
+        ),
+      );
+    } catch (e) {
+      if (!mounted) return;
+      setState(() => _loading = false);
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Ошибка генерации: $e')),
+      );
+    }
+  }
+
+  Future<void> _showHiddenModeSelector() async {
+    final selected = await showModalBottomSheet<String>(
+      context: context,
+      backgroundColor: AppColors.white,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(18)),
+      ),
+      builder: (_) {
+        return SafeArea(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              ListTile(
+                title: const Text('ML (по умолчанию)'),
+                trailing: _abMode == 'ml' ? const Icon(Icons.check, color: AppColors.orange) : null,
+                onTap: () => Navigator.pop(context, 'ml'),
+              ),
+              ListTile(
+                title: const Text('Rule'),
+                trailing: _abMode == 'rule' ? const Icon(Icons.check, color: AppColors.orange) : null,
+                onTap: () => Navigator.pop(context, 'rule'),
+              ),
+              ListTile(
+                title: const Text('Auto'),
+                trailing: _abMode == 'auto' ? const Icon(Icons.check, color: AppColors.orange) : null,
+                onTap: () => Navigator.pop(context, 'auto'),
+              ),
+              const SizedBox(height: 8),
+            ],
+          ),
+        );
+      },
+    );
+    if (selected == null) return;
+    await InsightsService.instance.setManualAbMode(selected);
+    if (!mounted) return;
+    setState(() => _abMode = selected);
+    await _load();
+  }
+
+  void _showHiddenQualityDialog() {
+    final m = _qualityMetrics;
+    showDialog<void>(
+      context: context,
+      builder: (_) => AlertDialog(
+        title: const Text('Качество модели (локально)'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text('Precision@k: ${(m.precisionAtK * 100).round()}%'),
+            Text('Acceptance: ${(m.acceptanceRate * 100).round()}%'),
+            Text('Follow-through: ${(m.followThroughRate * 100).round()}%'),
+            Text('7d delta: ${(m.outcomeDelta7d * 100).round()}%'),
+            Text('Calib.err: ${(m.calibrationError * 100).round()}%'),
+            Text('Stability: ${(m.insightStability * 100).round()}%'),
+            Text('Coverage: ${(m.coverage * 100).round()}%'),
+            Text('Offline test: ${(m.offlineValidationScore * 100).round()}% (${m.offlineValidationCases})'),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Закрыть'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Future<void> _confirmAndWipeAllData() async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (_) => AlertDialog(
+        title: const Text('Стереть все данные?'),
+        content: const Text(
+          'Будут удалены все записи, метрики, кэш модели и тестовые данные. Действие необратимо.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('Отмена'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(context, true),
+            child: const Text('Стереть'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true) return;
+    if (!mounted) return;
+    setState(() => _loading = true);
+    try {
+      await DevDataSeedService.instance.wipeAllData();
+      await _loadMode();
+      await _load();
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Все локальные данные удалены.')),
+      );
+    } catch (e) {
+      if (!mounted) return;
+      setState(() => _loading = false);
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Ошибка сброса: $e')),
+      );
+    }
+  }
+
   Widget _buildContent() {
     if (_insight == null) return const SizedBox.shrink();
     if (_insight!.hasError) {
       return _buildError(_insight!.error!);
     }
+    final blocks = <String, Widget>{};
+    if (_data != null && _hasAnyData) {
+      blocks['data_summary'] = _buildDataSummary();
+    }
+    if (_localStats.hasAny || _hasAnyData) {
+      blocks['rings'] = _buildRingsAndCards();
+    }
+    if (_insight!.stateSummary.isNotEmpty ||
+        _insight!.overallInsight.isNotEmpty ||
+        _insight!.keywords.isNotEmpty) {
+      blocks['analysis'] = _buildAiAnalysisCard();
+    }
+    if (_insight!.recommendations.isNotEmpty) {
+      blocks['advice'] = _buildAdviceCard();
+    }
+    if (_data != null && _insight!.recommendations.isNotEmpty) {
+      blocks['accuracy_card'] = _buildEvidenceCard();
+    }
+
+    final visibleIds = _blockOrder.where(blocks.containsKey).toList();
+    final ordered = visibleIds
+        .map((id) => _buildDraggableBlock(id: id, child: blocks[id]!))
+        .toList();
+
     return SingleChildScrollView(
       padding: const EdgeInsets.fromLTRB(16, 0, 16, 100),
       child: Column(
@@ -141,13 +412,8 @@ class _StatisticsScreenState extends State<StatisticsScreen> {
         children: [
           _buildDateStrip(),
           const SizedBox(height: 16),
-          if (_data != null && _hasAnyData) _buildDataSummary(),
-          if (_localStats.hasAny || _hasAnyData) _buildRingsAndCards(),
-          if (_insight!.stateSummary.isNotEmpty ||
-              _insight!.overallInsight.isNotEmpty ||
-              _insight!.keywords.isNotEmpty)
-            _buildAiAnalysisCard(),
-          if (_insight!.recommendations.isNotEmpty) _buildAdviceCard(),
+          ...ordered,
+          if (_insight!.insufficientData) _buildInsufficientDataCard(),
           if (!_localStats.hasAny &&
               !_hasAnyData &&
               _insight!.keywords.isEmpty &&
@@ -157,6 +423,65 @@ class _StatisticsScreenState extends State<StatisticsScreen> {
             _buildEmpty(),
         ],
       ),
+    );
+  }
+
+  Widget _buildDraggableBlock({
+    required String id,
+    required Widget child,
+  }) {
+    final width = MediaQuery.of(context).size.width - 32;
+    return DragTarget<String>(
+      onWillAcceptWithDetails: (details) => details.data != id,
+      onAcceptWithDetails: (details) {
+        final fromId = details.data;
+        final fromIndex = _blockOrder.indexOf(fromId);
+        final toIndex = _blockOrder.indexOf(id);
+        if (fromIndex < 0 || toIndex < 0 || fromIndex == toIndex) return;
+        setState(() {
+          final moved = _blockOrder.removeAt(fromIndex);
+          _blockOrder.insert(toIndex, moved);
+          _draggingBlockId = null;
+        });
+      },
+      builder: (context, candidateData, rejectedData) {
+        final highlighted = candidateData.isNotEmpty;
+        return AnimatedContainer(
+          duration: const Duration(milliseconds: 120),
+          margin: const EdgeInsets.only(bottom: 8),
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(14),
+            border: highlighted
+                ? Border.all(color: AppColors.orange.withValues(alpha: 0.5), width: 1.5)
+                : null,
+          ),
+          child: LongPressDraggable<String>(
+            data: id,
+            delay: const Duration(milliseconds: 220),
+            onDragStarted: () => setState(() => _draggingBlockId = id),
+            onDragEnd: (_) => setState(() => _draggingBlockId = null),
+            feedback: Material(
+              color: Colors.transparent,
+              child: SizedBox(
+                width: width,
+                child: Opacity(
+                  opacity: 0.9,
+                  child: child,
+                ),
+              ),
+            ),
+            childWhenDragging: Opacity(
+              opacity: 0.35,
+              child: child,
+            ),
+            child: AnimatedScale(
+              duration: const Duration(milliseconds: 120),
+              scale: _draggingBlockId == id ? 0.98 : 1.0,
+              child: child,
+            ),
+          ),
+        );
+      },
     );
   }
 
@@ -445,6 +770,7 @@ class _StatisticsScreenState extends State<StatisticsScreen> {
     if (_insight!.stateSummary.isNotEmpty) parts.add(_insight!.stateSummary);
     if (_insight!.overallInsight.isNotEmpty) parts.add(_insight!.overallInsight);
     final text = parts.join('\n\n');
+    final detailed = _composeStateNarrative();
     return Container(
       width: double.infinity,
       margin: const EdgeInsets.only(bottom: 16),
@@ -468,15 +794,23 @@ class _StatisticsScreenState extends State<StatisticsScreen> {
             children: [
               Icon(Icons.psychology_rounded, color: AppColors.orange, size: 24),
               const SizedBox(width: 10),
-              Text(
-                'Анализ состояния',
-                style: GoogleFonts.alegreyaSans(
-                  fontSize: 16,
-                  fontWeight: FontWeight.w800,
-                  color: AppColors.textDark,
+              Expanded(
+                child: Text(
+                  'Анализ состояния',
+                  style: GoogleFonts.alegreyaSans(
+                    fontSize: 16,
+                    fontWeight: FontWeight.w800,
+                    color: AppColors.textDark,
+                  ),
                 ),
               ),
-              const Spacer(),
+            ],
+          ),
+          const SizedBox(height: 8),
+          Wrap(
+            spacing: 8,
+            runSpacing: 8,
+            children: [
               Container(
                 padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                 decoration: BoxDecoration(
@@ -485,7 +819,24 @@ class _StatisticsScreenState extends State<StatisticsScreen> {
                 ),
                 child: Text(
                   'на устройстве',
-                  style: GoogleFonts.alegreyaSans(fontSize: 11, color: AppColors.textDark.withValues(alpha: 0.8)),
+                  style: GoogleFonts.alegreyaSans(
+                    fontSize: 11,
+                    color: AppColors.textDark.withValues(alpha: 0.8),
+                  ),
+                ),
+              ),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                decoration: BoxDecoration(
+                  color: AppColors.orange.withValues(alpha: 0.18),
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: Text(
+                  'уверенность ${(_insight!.confidence * 100).round()}%',
+                  style: GoogleFonts.alegreyaSans(
+                    fontSize: 11,
+                    color: AppColors.textDark.withValues(alpha: 0.8),
+                  ),
                 ),
               ),
             ],
@@ -498,6 +849,17 @@ class _StatisticsScreenState extends State<StatisticsScreen> {
                 fontSize: 15,
                 height: 1.5,
                 color: AppColors.textDark,
+              ),
+            ),
+          ],
+          if (detailed.isNotEmpty) ...[
+            const SizedBox(height: 10),
+            Text(
+              detailed,
+              style: GoogleFonts.alegreyaSans(
+                fontSize: 14,
+                height: 1.45,
+                color: AppColors.textDark.withValues(alpha: 0.82),
               ),
             ),
           ],
@@ -561,26 +923,556 @@ class _StatisticsScreenState extends State<StatisticsScreen> {
           const SizedBox(height: 12),
           ..._insight!.recommendations.map((r) => Padding(
                 padding: const EdgeInsets.only(bottom: 10),
-                child: Row(
+                child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    const Icon(Icons.check_circle_outline,
-                        color: AppColors.orange, size: 20),
-                    const SizedBox(width: 10),
-                    Expanded(
-                      child: Text(
-                        r,
-                        style: GoogleFonts.alegreyaSans(
-                          fontSize: 15,
-                          height: 1.4,
-                          color: AppColors.textDark,
+                    Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        const Icon(Icons.check_circle_outline,
+                            color: AppColors.orange, size: 20),
+                        const SizedBox(width: 10),
+                        Expanded(
+                          child: Text(
+                            r,
+                            style: GoogleFonts.alegreyaSans(
+                              fontSize: 15,
+                              height: 1.4,
+                              color: AppColors.textDark,
+                            ),
+                          ),
                         ),
+                      ],
+                    ),
+                    ...(_insight!.recommendationReasons[r] ?? const <String>[])
+                        .take(3)
+                        .map((reason) => Padding(
+                              padding: const EdgeInsets.only(left: 30, top: 4),
+                              child: Text(
+                                'Почему: $reason',
+                                style: GoogleFonts.alegreyaSans(
+                                  fontSize: 12,
+                                  color: AppColors.textDark.withValues(alpha: 0.65),
+                                ),
+                              ),
+                            )),
+                    const SizedBox(height: 6),
+                    Padding(
+                      padding: const EdgeInsets.only(left: 30),
+                      child: Wrap(
+                        spacing: 8,
+                        children: [
+                          _feedbackChip(
+                            label: 'Полезно',
+                            icon: Icons.thumb_up_alt_outlined,
+                            onTap: () => _submitRecommendationFeedback(
+                              recommendation: r,
+                              helpful: true,
+                              accepted: false,
+                            ),
+                          ),
+                          _feedbackChip(
+                            label: 'Не полезно',
+                            icon: Icons.thumb_down_alt_outlined,
+                            onTap: () => _submitRecommendationFeedback(
+                              recommendation: r,
+                              helpful: false,
+                              accepted: false,
+                            ),
+                          ),
+                          _feedbackChip(
+                            label: 'Сделал',
+                            icon: Icons.task_alt,
+                            onTap: () => _submitRecommendationFeedback(
+                              recommendation: r,
+                              helpful: true,
+                              accepted: true,
+                            ),
+                          ),
+                        ],
                       ),
                     ),
                   ],
                 ),
               )),
         ],
+      ),
+    );
+  }
+
+  Widget _buildEvidenceCard() {
+    final timeline = _buildDayEvidence(_data!);
+    final hasTimeline = timeline.isNotEmpty;
+    final highRiskDays = timeline.where((d) => d.risk >= 0.66).length;
+    final midRiskDays = timeline.where((d) => d.risk >= 0.4 && d.risk < 0.66).length;
+    final stableDays = timeline.where((d) => d.risk < 0.4).length;
+    final trackedDays = timeline.length;
+    return Container(
+      width: double.infinity,
+      margin: const EdgeInsets.only(bottom: 16),
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: AppColors.white,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: AppColors.orange.withValues(alpha: 0.25)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              const Icon(Icons.fact_check_outlined, color: AppColors.orange, size: 20),
+              const SizedBox(width: 8),
+              Text(
+                'Карточка точности анализа',
+                style: GoogleFonts.alegreyaSans(
+                  fontSize: 15,
+                  fontWeight: FontWeight.w800,
+                  color: AppColors.textDark,
+                ),
+              ),
+              const Spacer(),
+              TextButton.icon(
+                onPressed: _showDecisionTreeDialog,
+                icon: const Icon(Icons.account_tree_outlined, size: 16),
+                label: const Text('Как решили'),
+              ),
+            ],
+          ),
+          const SizedBox(height: 8),
+          Text(
+            'Решения основаны на фактах из последних дней, без выдуманных данных.',
+            style: GoogleFonts.alegreyaSans(
+              fontSize: 13,
+              color: AppColors.textDark.withValues(alpha: 0.7),
+            ),
+          ),
+          const SizedBox(height: 8),
+          Wrap(
+            spacing: 8,
+            runSpacing: 8,
+            children: [
+              _metricPill('Дней с данными', '$trackedDays'),
+              _metricPill('Рисковых', '$highRiskDays'),
+              _metricPill('Средних', '$midRiskDays'),
+              _metricPill('Стабильных', '$stableDays'),
+            ],
+          ),
+          if (hasTimeline) ...[
+            const SizedBox(height: 12),
+            SizedBox(
+              height: 58,
+              child: ListView.separated(
+                scrollDirection: Axis.horizontal,
+                itemCount: timeline.length,
+                separatorBuilder: (_, _) => const SizedBox(width: 6),
+                itemBuilder: (_, i) {
+                  final d = timeline[i];
+                  final riskColor = d.risk >= 0.66
+                      ? const Color(0xFFE57373)
+                      : (d.risk >= 0.4 ? const Color(0xFFFFB74D) : const Color(0xFF81C784));
+                  return Container(
+                    width: 34,
+                    decoration: BoxDecoration(
+                      color: riskColor.withValues(alpha: 0.22),
+                      borderRadius: BorderRadius.circular(10),
+                      border: Border.all(color: riskColor.withValues(alpha: 0.65)),
+                    ),
+                    child: Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Text(
+                          '${d.date.day}',
+                          style: GoogleFonts.alegreyaSans(
+                            fontSize: 12,
+                            fontWeight: FontWeight.w700,
+                            color: AppColors.textDark,
+                          ),
+                        ),
+                        const SizedBox(height: 2),
+                        Text(
+                          d.shortLabel,
+                          style: GoogleFonts.alegreyaSans(
+                            fontSize: 9,
+                            color: AppColors.textDark.withValues(alpha: 0.75),
+                          ),
+                        ),
+                      ],
+                    ),
+                  );
+                },
+              ),
+            ),
+            const SizedBox(height: 6),
+            Wrap(
+              spacing: 10,
+              children: const [
+                _LegendDot(color: Color(0xFF81C784), label: 'стабильно'),
+                _LegendDot(color: Color(0xFFFFB74D), label: 'средний риск'),
+                _LegendDot(color: Color(0xFFE57373), label: 'высокий риск'),
+              ],
+            ),
+          ] else ...[
+            const SizedBox(height: 10),
+            Text(
+              'Пока мало данных для визуального таймлайна. Добавьте больше записей по дням.',
+              style: GoogleFonts.alegreyaSans(
+                fontSize: 12,
+                color: AppColors.textDark.withValues(alpha: 0.65),
+              ),
+            ),
+          ],
+          const SizedBox(height: 10),
+          ..._insight!.recommendations.take(3).map((rec) {
+            final facts = (_insight!.recommendationReasons[rec] ?? const <String>[]).take(3).toList();
+            return Padding(
+              padding: const EdgeInsets.only(bottom: 8),
+              child: Container(
+                padding: const EdgeInsets.all(10),
+                decoration: BoxDecoration(
+                  color: AppColors.cream,
+                  borderRadius: BorderRadius.circular(10),
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      rec,
+                      style: GoogleFonts.alegreyaSans(
+                        fontSize: 13,
+                        fontWeight: FontWeight.w700,
+                        color: AppColors.textDark,
+                      ),
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      'Скор уверенности: ${(((_insight!.recommendationScores[rec] ?? _insight!.confidence) * 100).round())}%',
+                      style: GoogleFonts.alegreyaSans(
+                        fontSize: 12,
+                        color: AppColors.textDark.withValues(alpha: 0.65),
+                      ),
+                    ),
+                    const SizedBox(height: 4),
+                    ...facts.map((f) => Text(
+                          '• $f',
+                          style: GoogleFonts.alegreyaSans(
+                            fontSize: 12,
+                            color: AppColors.textDark.withValues(alpha: 0.75),
+                          ),
+                        )),
+                  ],
+                ),
+              ),
+            );
+          }),
+        ],
+      ),
+    );
+  }
+
+  List<_DayEvidence> _buildDayEvidence(AggregatedData data) {
+    final now = DateTime.now();
+    final byDayMood = <DateTime, List<int>>{};
+    final byDaySleep = <DateTime, List<int>>{};
+    final byDayEnergy = <DateTime, List<int>>{};
+    for (final e in data.stateEntries) {
+      final day = DateTime(e.createdAt.year, e.createdAt.month, e.createdAt.day);
+      if (now.difference(day).inDays > 13) continue;
+      switch (e) {
+        case MoodEntry(:final value):
+          byDayMood.putIfAbsent(day, () => []).add(value);
+        case SleepEntry(:final quality):
+          byDaySleep.putIfAbsent(day, () => []).add(quality);
+        case EnergyEntry(:final level):
+          byDayEnergy.putIfAbsent(day, () => []).add(level);
+        default:
+          break;
+      }
+    }
+
+    final out = <_DayEvidence>[];
+    for (var i = 13; i >= 0; i--) {
+      final day = DateTime(now.year, now.month, now.day).subtract(Duration(days: i));
+      final mood = byDayMood[day];
+      final sleep = byDaySleep[day];
+      final energy = byDayEnergy[day];
+      if (mood == null && sleep == null && energy == null) continue;
+      final m = mood == null ? null : mood.reduce((a, b) => a + b) / mood.length;
+      final s = sleep == null ? null : sleep.reduce((a, b) => a + b) / sleep.length;
+      final e = energy == null ? null : energy.reduce((a, b) => a + b) / energy.length;
+      var risk = 0.0;
+      var denom = 0.0;
+      if (m != null) {
+        risk += (10 - m) / 10;
+        denom++;
+      }
+      if (s != null) {
+        risk += (10 - s) / 10;
+        denom++;
+      }
+      if (e != null) {
+        risk += (10 - e) / 10;
+        denom++;
+      }
+      final normRisk = denom > 0 ? (risk / denom).clamp(0.0, 1.0) : 0.0;
+      final label = normRisk >= 0.66 ? 'низк' : (normRisk >= 0.4 ? 'сред' : 'стаб');
+      out.add(_DayEvidence(date: day, risk: normRisk, shortLabel: label));
+    }
+    return out;
+  }
+
+  void _showDecisionTreeDialog() {
+    final firstRec = _insight?.recommendations.isNotEmpty == true
+        ? _insight!.recommendations.first
+        : 'Советов пока недостаточно';
+    final reasons = _insight?.recommendationReasons[firstRec] ?? const <String>[];
+    final confidencePct = ((_insight?.recommendationScores[firstRec] ?? _insight?.confidence ?? 0) * 100).round();
+    final trackedDays = _buildDayEvidence(_data ?? AggregatedData(
+      notes: const [],
+      stateEntries: const [],
+      medications: const [],
+      appointments: const [],
+    )).length;
+
+    showDialog<void>(
+      context: context,
+      builder: (_) => AlertDialog(
+        title: const Text('Дерево решений (простое)'),
+        content: SizedBox(
+          width: 380,
+          child: SingleChildScrollView(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                _treeNode(
+                  title: 'Входные данные',
+                  subtitle: '$trackedDays дней наблюдений',
+                  color: const Color(0xFFE3F2FD),
+                ),
+                _treeConnector(),
+                Row(
+                  children: [
+                    Expanded(
+                      child: _treeNode(
+                        title: 'Качество данных',
+                        subtitle: 'шум/дубли/валидность',
+                        color: const Color(0xFFFFF3E0),
+                      ),
+                    ),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: _treeNode(
+                        title: 'Тренды',
+                        subtitle: 'сон/энергия/настроение',
+                        color: const Color(0xFFE8F5E9),
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 4),
+                _splitConnector(),
+                Row(
+                  children: [
+                    Expanded(
+                      child: _treeNode(
+                        title: 'Персонализация',
+                        subtitle: 'baseline/регулярность',
+                        color: const Color(0xFFF3E5F5),
+                      ),
+                    ),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: _treeNode(
+                        title: 'Факты из заметок',
+                        subtitle: 'тревожные маркеры',
+                        color: const Color(0xFFFFEBEE),
+                      ),
+                    ),
+                  ],
+                ),
+                _treeConnector(),
+                _treeNode(
+                  title: 'Ранжирование рекомендаций',
+                  subtitle: 'только подтвержденные, top-3',
+                  color: const Color(0xFFEDE7F6),
+                ),
+                _treeConnector(),
+                _treeNode(
+                  title: 'Итоговое решение',
+                  subtitle: '"$firstRec"\nУверенность: $confidencePct%',
+                  color: const Color(0xFFE0F2F1),
+                ),
+                if (reasons.isNotEmpty) ...[
+                  const SizedBox(height: 10),
+                  _treeNode(
+                    title: 'Почему выбран этот совет',
+                    subtitle: reasons.take(3).join('\n'),
+                    color: const Color(0xFFFFF8E1),
+                  ),
+                ],
+              ],
+            ),
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Понятно'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _treeNode({
+    required String title,
+    required String subtitle,
+    required Color color,
+  }) {
+    return Container(
+      padding: const EdgeInsets.all(10),
+      decoration: BoxDecoration(
+        color: color,
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(color: AppColors.greyMuted.withValues(alpha: 0.5)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            title,
+            style: GoogleFonts.alegreyaSans(
+              fontSize: 13,
+              fontWeight: FontWeight.w800,
+              color: AppColors.textDark,
+            ),
+          ),
+          const SizedBox(height: 2),
+          Text(
+            subtitle,
+            style: GoogleFonts.alegreyaSans(
+              fontSize: 12,
+              color: AppColors.textDark.withValues(alpha: 0.78),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _treeConnector() {
+    return const Padding(
+      padding: EdgeInsets.symmetric(vertical: 4),
+      child: Center(
+        child: Icon(Icons.arrow_downward_rounded, size: 18, color: AppColors.orange),
+      ),
+    );
+  }
+
+  Widget _splitConnector() {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 4),
+      child: Row(
+        children: [
+          Expanded(child: Divider(color: AppColors.greyMuted.withValues(alpha: 0.7))),
+          const SizedBox(width: 6),
+          const Icon(Icons.call_split, size: 14, color: AppColors.orange),
+          const SizedBox(width: 6),
+          Expanded(child: Divider(color: AppColors.greyMuted.withValues(alpha: 0.7))),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildInsufficientDataCard() {
+    return Container(
+      width: double.infinity,
+      margin: const EdgeInsets.only(bottom: 16),
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: AppColors.orange.withValues(alpha: 0.12),
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: AppColors.orange.withValues(alpha: 0.35)),
+      ),
+      child: Text(
+        'Недостаточно качественных данных: желательно минимум 7 дней регулярных записей.',
+        style: GoogleFonts.alegreyaSans(
+          fontSize: 13,
+          color: AppColors.textDark.withValues(alpha: 0.85),
+        ),
+      ),
+    );
+  }
+
+  Future<void> _submitRecommendationFeedback({
+    required String recommendation,
+    required bool helpful,
+    required bool accepted,
+  }) async {
+    await QualityMetricsService.instance.registerRecommendationFeedback(
+      recommendation: recommendation,
+      helpful: helpful,
+      accepted: accepted,
+    );
+    final metrics = await QualityMetricsService.instance.getMetrics();
+    if (!mounted) return;
+    setState(() => _qualityMetrics = metrics);
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(
+          accepted ? 'Отлично, отметили выполнение.' : 'Спасибо за обратную связь.',
+        ),
+        duration: const Duration(seconds: 2),
+      ),
+    );
+  }
+
+  Widget _feedbackChip({
+    required String label,
+    required IconData icon,
+    required VoidCallback onTap,
+  }) {
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(20),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+        decoration: BoxDecoration(
+          color: AppColors.cream,
+          borderRadius: BorderRadius.circular(20),
+          border: Border.all(color: AppColors.greyMuted),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(icon, size: 14, color: AppColors.textDark.withValues(alpha: 0.7)),
+            const SizedBox(width: 4),
+            Text(
+              label,
+              style: GoogleFonts.alegreyaSans(
+                fontSize: 12,
+                color: AppColors.textDark.withValues(alpha: 0.75),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _metricPill(String label, String value) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+      decoration: BoxDecoration(
+        color: AppColors.cream,
+        borderRadius: BorderRadius.circular(10),
+      ),
+      child: Text(
+        '$label: $value',
+        style: GoogleFonts.alegreyaSans(
+          fontSize: 12,
+          color: AppColors.textDark.withValues(alpha: 0.8),
+        ),
       ),
     );
   }
@@ -627,6 +1519,47 @@ class _StatisticsScreenState extends State<StatisticsScreen> {
         ),
       ),
     );
+  }
+
+  String _composeStateNarrative() {
+    if (_data == null) return '';
+    final stats = _localStats;
+    final pieces = <String>[];
+
+    if (stats.avgMood != null) {
+      if (stats.avgMood! < 5) {
+        pieces.add('Эмоциональный фон сейчас ниже комфортного уровня, это обычно заметно в повседневной мотивации.');
+      } else if (stats.avgMood! < 7) {
+        pieces.add('Настроение в нейтральной зоне: без резких провалов, но с потенциалом для улучшения.');
+      } else {
+        pieces.add('Эмоциональный фон в устойчивой зоне, это хороший базовый признак восстановления.');
+      }
+    }
+
+    if (stats.avgSleep != null) {
+      if (stats.avgSleep! < 5.5) {
+        pieces.add('Сон выглядит ключевым ограничителем состояния: при таком качестве часто проседают энергия и настроение.');
+      } else if (stats.avgSleep! < 7) {
+        pieces.add('Сон на среднем уровне: небольшое улучшение режима обычно дает заметный эффект уже в течение недели.');
+      } else {
+        pieces.add('Сон сейчас скорее поддерживающий фактор и помогает держать стабильность дня.');
+      }
+    }
+
+    if (stats.avgEnergy != null) {
+      if (stats.avgEnergy! < 5) {
+        pieces.add('Энергия снижена: лучше делать упор на короткие, выполнимые действия вместо больших задач.');
+      } else if (stats.avgEnergy! >= 7) {
+        pieces.add('Энергия в норме — это подходящий момент закреплять полезные привычки и режим.');
+      }
+    }
+
+    if (_insight!.keywords.isNotEmpty) {
+      final k = _insight!.keywords.take(3).join(', ');
+      pieces.add('Чаще всего в записях встречаются маркеры: $k — они и влияют на итоговые рекомендации.');
+    }
+
+    return pieces.join(' ');
   }
 
   String _plural(int n, String one, String few, String many) {
@@ -721,4 +1654,50 @@ class _RingPainter extends CustomPainter {
   @override
   bool shouldRepaint(covariant _RingPainter old) =>
       old.progress != progress || old.color != color;
+}
+
+class _DayEvidence {
+  const _DayEvidence({
+    required this.date,
+    required this.risk,
+    required this.shortLabel,
+  });
+  final DateTime date;
+  final double risk;
+  final String shortLabel;
+}
+
+class _LegendDot extends StatelessWidget {
+  const _LegendDot({
+    required this.color,
+    required this.label,
+  });
+
+  final Color color;
+  final String label;
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Container(
+          width: 8,
+          height: 8,
+          decoration: BoxDecoration(
+            color: color,
+            shape: BoxShape.circle,
+          ),
+        ),
+        const SizedBox(width: 4),
+        Text(
+          label,
+          style: GoogleFonts.alegreyaSans(
+            fontSize: 11,
+            color: AppColors.textDark.withValues(alpha: 0.75),
+          ),
+        ),
+      ],
+    );
+  }
 }
