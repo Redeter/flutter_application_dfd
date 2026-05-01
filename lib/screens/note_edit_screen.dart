@@ -112,7 +112,7 @@ class _NoteEditScreenState extends State<NoteEditScreen> {
                     const SizedBox(height: 12),
                     _roundedField(
                       controller: _tagsController,
-                      hint: '#теги',
+                      hint: '#теги (можно не заполнять)',
                       minLines: 1,
                       maxLines: 1,
                       style: GoogleFonts.alegreyaSans(

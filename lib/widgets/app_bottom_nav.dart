@@ -50,7 +50,7 @@ class AppBottomNavBar extends StatelessWidget {
                 onTap: () => onTabSelected(BottomNavTab.calendar),
               ),
               _BottomNavItem(
-                label: 'СТАТЬИ',
+                label: 'ЦЕЛИ',
                 isActive: activeTab == BottomNavTab.articles,
                 iconBuilder: (a) => ArticlesNavIcon(active: a),
                 onTap: () => onTabSelected(BottomNavTab.articles),

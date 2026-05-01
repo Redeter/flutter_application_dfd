@@ -5,8 +5,8 @@ import '../models/note_item.dart';
 import '../services/notes_storage.dart';
 import '../theme/app_colors.dart';
 import '../widgets/app_bottom_nav.dart';
-import 'articles_screen.dart';
 import 'calendar_screen.dart';
+import 'goals_screen.dart';
 import 'note_edit_screen.dart';
 import 'state_categories_sheet.dart';
 import 'statistics_screen.dart';
@@ -72,7 +72,7 @@ class _NotesScreenState extends State<NotesScreen> {
         Navigator.pushReplacement(
           context,
           MaterialPageRoute<void>(
-            builder: (_) => const ArticlesScreen(),
+            builder: (_) => const GoalsScreen(),
           ),
         );
     }
@@ -97,17 +97,26 @@ class _NotesScreenState extends State<NotesScreen> {
     final tagsRaw = (result['tags'] as String?)?.trim() ?? '';
     final date = result['date'] as DateTime? ?? DateTime.now();
 
-    final tagList = tagsRaw
+    final manualTags = tagsRaw
         .split(RegExp(r'\s+'))
         .map((e) => e.replaceFirst('#', '').trim())
         .where((e) => e.isNotEmpty)
         .toList();
+    final autoTags = _suggestTags(
+      title: title ?? '',
+      body: body ?? '',
+    );
+    final tagList = _normalizeTags([...manualTags, ...autoTags]);
+
+    final normalizedTitle =
+        (title != null && title.isNotEmpty) ? title : 'Заголовок';
+    final normalizedBody = (body != null && body.isNotEmpty) ? body : 'Текст заметки';
 
     final item = NoteItem(
       date: date,
-      title: (title != null && title.isNotEmpty) ? title : 'Заголовок',
-      tags: tagList.isNotEmpty ? tagList : ['тэг1'],
-      preview: (body != null && body.isNotEmpty) ? body : 'Текст заметки',
+      title: normalizedTitle,
+      tags: tagList,
+      preview: normalizedBody,
     );
     setState(() {
       if (index != null && index >= 0 && index < _notes.length) {
@@ -116,6 +125,85 @@ class _NotesScreenState extends State<NotesScreen> {
         _notes.insert(0, item);
       }
     });
+    await NotesStorage.instance.saveAll(_notes);
+    if (!mounted) return;
+    final summary = _buildAutoSummary(normalizedBody);
+    final tagsLine = tagList.isEmpty ? 'без авто-тегов' : '#${tagList.take(3).join(' #')}';
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text('Кратко: $summary • $tagsLine'),
+        duration: const Duration(seconds: 3),
+      ),
+    );
+  }
+
+  List<String> _normalizeTags(List<String> tags) {
+    final out = <String>[];
+    final seen = <String>{};
+    for (final raw in tags) {
+      final normalized = raw
+          .toLowerCase()
+          .replaceAll(RegExp(r'[^a-zа-яё0-9_-]', caseSensitive: false), '')
+          .trim();
+      if (normalized.isEmpty || normalized.length < 2) continue;
+      if (seen.add(normalized)) out.add(normalized);
+    }
+    return out;
+  }
+
+  List<String> _suggestTags({
+    required String title,
+    required String body,
+  }) {
+    final text = '$title $body'.toLowerCase();
+    final tags = <String>[];
+    final map = <String, List<String>>{
+      'сон': ['сон', 'бессон', 'уснул', 'проснул', 'кошмар'],
+      'стресс': ['стресс', 'тревог', 'напряж', 'паник', 'выгор'],
+      'работа': ['работ', 'офис', 'коллег', 'дедлайн', 'проект'],
+      'учеба': ['учеб', 'экзам', 'лекц', 'курс', 'дз'],
+      'отношения': ['отнош', 'семья', 'партнер', 'друз', 'конфликт'],
+      'здоровье': ['болит', 'врач', 'лечение', 'симптом', 'самочув'],
+      'энергия': ['устал', 'энерг', 'бодр', 'вымот', 'сил'],
+      'настроение': ['радост', 'груст', 'апат', 'злость', 'настроен'],
+    };
+    for (final entry in map.entries) {
+      final hit = entry.value.any((token) => text.contains(token));
+      if (hit) tags.add(entry.key);
+    }
+    return tags.take(4).toList();
+  }
+
+  String _buildAutoSummary(String body) {
+    final cleaned = body.replaceAll(RegExp(r'\s+'), ' ').trim();
+    if (cleaned.isEmpty) return 'короткая запись';
+    final firstSentence = cleaned.split(RegExp(r'[.!?]')).first.trim();
+    if (firstSentence.isEmpty) return 'короткая запись';
+    if (firstSentence.length <= 72) return firstSentence;
+    return '${firstSentence.substring(0, 72).trimRight()}...';
+  }
+
+  Future<void> _deleteNote(int index) async {
+    if (index < 0 || index >= _notes.length) return;
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (_) => AlertDialog(
+        title: const Text('Удалить заметку?'),
+        content: const Text('Это действие нельзя отменить.'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('Отмена'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(context, true),
+            child: const Text('Удалить'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true) return;
+    setState(() => _notes.removeAt(index));
     await NotesStorage.instance.saveAll(_notes);
   }
 
@@ -163,11 +251,33 @@ class _NotesScreenState extends State<NotesScreen> {
                         final globalIndex = _notes.indexOf(e.value);
                         return Padding(
                           padding: const EdgeInsets.only(bottom: 14),
-                          child: _NoteCard(
-                            note: e.value,
-                            onEdit: () => _openEditor(
+                          child: Dismissible(
+                            key: ValueKey('${e.value.date.toIso8601String()}-${e.value.title}-$globalIndex'),
+                            direction: DismissDirection.endToStart,
+                            background: Container(
+                              alignment: Alignment.centerRight,
+                              padding: const EdgeInsets.only(right: 16),
+                              decoration: BoxDecoration(
+                                color: Colors.redAccent.withValues(alpha: 0.85),
+                                borderRadius: BorderRadius.circular(22),
+                              ),
+                              child: const Icon(
+                                Icons.delete_outline_rounded,
+                                color: Colors.white,
+                                size: 24,
+                              ),
+                            ),
+                            confirmDismiss: (_) async {
+                              await _deleteNote(globalIndex);
+                              return false;
+                            },
+                            child: _NoteCard(
                               note: e.value,
-                              index: globalIndex,
+                              onEdit: () => _openEditor(
+                                note: e.value,
+                                index: globalIndex,
+                              ),
+                              onDelete: () => _deleteNote(globalIndex),
                             ),
                           ),
                         );
@@ -302,10 +412,12 @@ class _NoteCard extends StatelessWidget {
   const _NoteCard({
     required this.note,
     required this.onEdit,
+    required this.onDelete,
   });
 
   final NoteItem note;
   final VoidCallback onEdit;
+  final VoidCallback onDelete;
 
   @override
   Widget build(BuildContext context) {
@@ -400,6 +512,19 @@ class _NoteCard extends StatelessWidget {
                   onPressed: onEdit,
                   icon: const Icon(
                     Icons.edit_outlined,
+                    color: Color(0xFF8E8E93),
+                    size: 22,
+                  ),
+                  padding: EdgeInsets.zero,
+                  constraints: const BoxConstraints(
+                    minWidth: 40,
+                    minHeight: 40,
+                  ),
+                ),
+                IconButton(
+                  onPressed: onDelete,
+                  icon: const Icon(
+                    Icons.delete_outline_rounded,
                     color: Color(0xFF8E8E93),
                     size: 22,
                   ),

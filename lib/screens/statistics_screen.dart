@@ -5,17 +5,21 @@ import '../models/aggregated_data.dart';
 import '../models/insight_result.dart';
 import '../models/local_quality_metrics.dart';
 import '../models/state_entries.dart';
+import '../models/user_profile.dart';
 import '../services/dev_data_seed_service.dart';
+import '../services/user_profile_service.dart';
 import '../services/insights_service.dart';
+import '../services/notification_service.dart';
 import '../services/offline_validation_service.dart';
 import '../services/quality_metrics_service.dart';
 import '../theme/app_colors.dart';
 import '../utils/stats_helpers.dart';
 import '../widgets/app_bottom_nav.dart';
-import 'articles_screen.dart';
 import 'calendar_screen.dart';
+import 'goals_screen.dart';
 import 'notes_screen.dart';
 import 'state_categories_sheet.dart';
+import 'user_profile_screen.dart';
 
 class StatisticsScreen extends StatefulWidget {
   const StatisticsScreen({super.key});
@@ -29,6 +33,7 @@ class _StatisticsScreenState extends State<StatisticsScreen> {
   AggregatedData? _data;
   LocalQualityMetrics _qualityMetrics = const LocalQualityMetrics();
   bool _loading = false;
+  UserProfile _profile = const UserProfile();
   DateTime _selectedDate = DateTime.now();
   bool _viewWeek = true; // true = неделя, false = день
   String _abMode = 'auto';
@@ -45,7 +50,14 @@ class _StatisticsScreenState extends State<StatisticsScreen> {
   void initState() {
     super.initState();
     _loadMode();
+    _loadProfile();
     _load();
+  }
+
+  Future<void> _loadProfile() async {
+    final p = await UserProfileService.instance.load();
+    if (!mounted) return;
+    setState(() => _profile = p);
   }
 
   Future<void> _loadMode() async {
@@ -125,6 +137,18 @@ class _StatisticsScreenState extends State<StatisticsScreen> {
         ),
         actions: [
           IconButton(
+            icon: const Icon(Icons.person_outline_rounded, color: AppColors.orange),
+            tooltip: 'Профиль',
+            onPressed: () async {
+              await Navigator.push(
+                context,
+                MaterialPageRoute(builder: (_) => const UserProfileScreen()),
+              );
+              await _loadProfile();
+              await _load();
+            },
+          ),
+          IconButton(
             icon: const Icon(Icons.refresh_rounded, color: AppColors.orange),
             onPressed: _loading ? null : _load,
           ),
@@ -155,7 +179,7 @@ class _StatisticsScreenState extends State<StatisticsScreen> {
             case BottomNavTab.articles:
               Navigator.pushReplacement(
                 context,
-                MaterialPageRoute(builder: (_) => const ArticlesScreen()),
+                MaterialPageRoute(builder: (_) => const GoalsScreen()),
               );
           }
         },
@@ -167,15 +191,21 @@ class _StatisticsScreenState extends State<StatisticsScreen> {
   Future<void> _showHiddenDevActions() async {
     final action = await showModalBottomSheet<String>(
       context: context,
+      isScrollControlled: true,
+      useSafeArea: true,
       backgroundColor: AppColors.white,
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(18)),
       ),
       builder: (context) {
-        return SafeArea(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
+        return ConstrainedBox(
+          constraints: BoxConstraints(
+            maxHeight: MediaQuery.of(context).size.height * 0.88,
+          ),
+          child: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
               ListTile(
                 leading: const Icon(Icons.auto_awesome, color: AppColors.orange),
                 title: const Text('Сгенерировать 90 дней (позитивный сценарий)'),
@@ -207,13 +237,20 @@ class _StatisticsScreenState extends State<StatisticsScreen> {
                 onTap: () => Navigator.pop(context, 'quality'),
               ),
               ListTile(
+                leading: const Icon(Icons.notifications_active_outlined, color: AppColors.orange),
+                title: const Text('Проверить пуш'),
+                subtitle: const Text('Тест локального уведомления'),
+                onTap: () => Navigator.pop(context, 'test_push'),
+              ),
+              ListTile(
                 leading: const Icon(Icons.delete_forever_outlined, color: Colors.redAccent),
                 title: const Text('Стереть все данные'),
                 subtitle: const Text('Полный сброс данных и модели'),
                 onTap: () => Navigator.pop(context, 'wipe'),
               ),
-              const SizedBox(height: 8),
-            ],
+                const SizedBox(height: 8),
+              ],
+            ),
           ),
         );
       },
@@ -225,6 +262,14 @@ class _StatisticsScreenState extends State<StatisticsScreen> {
     }
     if (action == 'quality') {
       _showHiddenQualityDialog();
+      return;
+    }
+    if (action == 'test_push') {
+      await NotificationService.instance.showTestNotification();
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Тестовое уведомление отправлено.')),
+      );
       return;
     }
     if (action == 'wipe') {
@@ -244,6 +289,7 @@ class _StatisticsScreenState extends State<StatisticsScreen> {
           : (action == 'seed_negative'
               ? await DevDataSeedService.instance.generateNegative90Days()
               : await DevDataSeedService.instance.generateMixed90Days());
+      await NotificationService.instance.rescheduleCalendarNotifications();
       await _load();
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
@@ -269,15 +315,21 @@ class _StatisticsScreenState extends State<StatisticsScreen> {
   Future<void> _showHiddenModeSelector() async {
     final selected = await showModalBottomSheet<String>(
       context: context,
+      isScrollControlled: true,
+      useSafeArea: true,
       backgroundColor: AppColors.white,
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(18)),
       ),
       builder: (_) {
-        return SafeArea(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
+        return ConstrainedBox(
+          constraints: BoxConstraints(
+            maxHeight: MediaQuery.of(context).size.height * 0.65,
+          ),
+          child: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
               ListTile(
                 title: const Text('ML (по умолчанию)'),
                 trailing: _abMode == 'ml' ? const Icon(Icons.check, color: AppColors.orange) : null,
@@ -293,8 +345,9 @@ class _StatisticsScreenState extends State<StatisticsScreen> {
                 trailing: _abMode == 'auto' ? const Icon(Icons.check, color: AppColors.orange) : null,
                 onTap: () => Navigator.pop(context, 'auto'),
               ),
-              const SizedBox(height: 8),
-            ],
+                const SizedBox(height: 8),
+              ],
+            ),
           ),
         );
       },
@@ -361,6 +414,7 @@ class _StatisticsScreenState extends State<StatisticsScreen> {
     setState(() => _loading = true);
     try {
       await DevDataSeedService.instance.wipeAllData();
+      await NotificationService.instance.rescheduleCalendarNotifications();
       await _loadMode();
       await _load();
       if (!mounted) return;
@@ -561,6 +615,8 @@ class _StatisticsScreenState extends State<StatisticsScreen> {
 
   Widget _buildRingsAndCards() {
     final stats = _localStats;
+    final medsCount = stats.medicationsCount;
+    final visitsCount = stats.appointmentsCount;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -645,6 +701,20 @@ class _StatisticsScreenState extends State<StatisticsScreen> {
                   '${stats.notesCount}',
                   Icons.edit_note_rounded,
                   [AppColors.lightBlue, const Color(0xFF64B5F6)],
+                ),
+                _buildMetricCard(
+                  cardWidth,
+                  'Таблетки',
+                  '$medsCount',
+                  Icons.medication_outlined,
+                  [const Color(0xFFF8BBD0), const Color(0xFFF48FB1)],
+                ),
+                _buildMetricCard(
+                  cardWidth,
+                  'Приёмы',
+                  '$visitsCount',
+                  Icons.event_available_rounded,
+                  [const Color(0xFFC8E6C9), const Color(0xFFA5D6A7)],
                 ),
               ],
             );
@@ -832,13 +902,28 @@ class _StatisticsScreenState extends State<StatisticsScreen> {
                   borderRadius: BorderRadius.circular(8),
                 ),
                 child: Text(
-                  'уверенность ${(_insight!.confidence * 100).round()}%',
+                  'уверенность ${(_insight!.confidence * 100).round()}% (${_confidenceLabel(_insight!.confidence)})',
                   style: GoogleFonts.alegreyaSans(
                     fontSize: 11,
                     color: AppColors.textDark.withValues(alpha: 0.8),
                   ),
                 ),
               ),
+              if (_insight!.insufficientData)
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                  decoration: BoxDecoration(
+                    color: AppColors.lavender.withValues(alpha: 0.28),
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: Text(
+                    'это гипотеза',
+                    style: GoogleFonts.alegreyaSans(
+                      fontSize: 11,
+                      color: AppColors.textDark.withValues(alpha: 0.8),
+                    ),
+                  ),
+                ),
             ],
           ),
           if (text.isNotEmpty) ...[
@@ -862,6 +947,94 @@ class _StatisticsScreenState extends State<StatisticsScreen> {
                 color: AppColors.textDark.withValues(alpha: 0.82),
               ),
             ),
+          ],
+          if (_insight!.weeklyDigest.isNotEmpty) ...[
+            const SizedBox(height: 10),
+            Text(
+              'Дайджест недели: ${_insight!.weeklyDigest}',
+              style: GoogleFonts.alegreyaSans(
+                fontSize: 13,
+                height: 1.4,
+                color: AppColors.textDark.withValues(alpha: 0.82),
+              ),
+            ),
+          ],
+          if (_insight!.burnoutAlert.isNotEmpty) ...[
+            const SizedBox(height: 8),
+            Container(
+              padding: const EdgeInsets.all(10),
+              decoration: BoxDecoration(
+                color: const Color(0xFFFFF3E0),
+                borderRadius: BorderRadius.circular(10),
+                border: Border.all(color: AppColors.orange.withValues(alpha: 0.4)),
+              ),
+              child: Text(
+                _insight!.burnoutAlert,
+                style: GoogleFonts.alegreyaSans(
+                  fontSize: 12,
+                  height: 1.35,
+                  color: AppColors.textDark.withValues(alpha: 0.85),
+                ),
+              ),
+            ),
+          ],
+          if (_insight!.topTriggers.isNotEmpty) ...[
+            const SizedBox(height: 10),
+            Text(
+              'Топ-триггеры недели',
+              style: GoogleFonts.alegreyaSans(
+                fontSize: 13,
+                fontWeight: FontWeight.w700,
+                color: AppColors.textDark,
+              ),
+            ),
+            const SizedBox(height: 6),
+            Wrap(
+              spacing: 8,
+              runSpacing: 8,
+              children: _insight!.topTriggers
+                  .map((t) => Chip(
+                        label: Text(t, style: const TextStyle(fontSize: 12)),
+                        backgroundColor: AppColors.lightBlue.withValues(alpha: 0.2),
+                        side: BorderSide.none,
+                        padding: EdgeInsets.zero,
+                        materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                      ))
+                  .toList(),
+            ),
+          ],
+          if (_insight!.causalInsights.isNotEmpty) ...[
+            const SizedBox(height: 8),
+            ..._insight!.causalInsights.take(2).map(
+                  (c) => Text(
+                    '• $c',
+                    style: GoogleFonts.alegreyaSans(
+                      fontSize: 12,
+                      color: AppColors.textDark.withValues(alpha: 0.78),
+                    ),
+                  ),
+                ),
+          ],
+          if (_insight!.confidenceReasons.isNotEmpty) ...[
+            const SizedBox(height: 10),
+            Text(
+              'Почему такая уверенность',
+              style: GoogleFonts.alegreyaSans(
+                fontSize: 13,
+                fontWeight: FontWeight.w700,
+                color: AppColors.textDark,
+              ),
+            ),
+            const SizedBox(height: 4),
+            ..._insight!.confidenceReasons.take(4).map(
+                  (r) => Text(
+                    '• $r',
+                    style: GoogleFonts.alegreyaSans(
+                      fontSize: 12,
+                      color: AppColors.textDark.withValues(alpha: 0.72),
+                    ),
+                  ),
+                ),
           ],
           if (_insight!.keywords.isNotEmpty) ...[
             const SizedBox(height: 14),
@@ -988,6 +1161,26 @@ class _StatisticsScreenState extends State<StatisticsScreen> {
                               helpful: true,
                               accepted: true,
                             ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    Padding(
+                      padding: const EdgeInsets.only(left: 30, top: 6),
+                      child: Row(
+                        children: [
+                          Expanded(
+                            child: Text(
+                              'Основание: ${_insight!.recommendationExplanations[r] ?? 'тренд последних дней'}',
+                              style: GoogleFonts.alegreyaSans(
+                                fontSize: 12,
+                                color: AppColors.textDark.withValues(alpha: 0.65),
+                              ),
+                            ),
+                          ),
+                          TextButton(
+                            onPressed: () => _showRecommendationExplain(r),
+                            child: const Text('Подробнее'),
                           ),
                         ],
                       ),
@@ -1460,6 +1653,26 @@ class _StatisticsScreenState extends State<StatisticsScreen> {
     );
   }
 
+  void _showRecommendationExplain(String recommendation) {
+    final reasons = (_insight?.recommendationReasons[recommendation] ?? const <String>[]).take(3).toList();
+    showDialog<void>(
+      context: context,
+      builder: (_) => AlertDialog(
+        title: const Text('На чем основан совет'),
+        content: Text(
+          reasons.isEmpty ? 'Совет построен на трендах последних дней.' : reasons.join('\n'),
+          style: GoogleFonts.alegreyaSans(fontSize: 14, height: 1.4),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Закрыть'),
+          ),
+        ],
+      ),
+    );
+  }
+
   Widget _metricPill(String label, String value) {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
@@ -1492,6 +1705,11 @@ class _StatisticsScreenState extends State<StatisticsScreen> {
     if (d.stateEntries.isNotEmpty) parts.add('${d.stateEntries.length} ${_plural(d.stateEntries.length, 'запись', 'записи', 'записей')} о состоянии');
     if (d.medications.isNotEmpty) parts.add('${d.medications.length} ${_plural(d.medications.length, 'препарат', 'препарата', 'препаратов')}');
     if (d.appointments.isNotEmpty) parts.add('${d.appointments.length} ${_plural(d.appointments.length, 'визит', 'визита', 'визитов')}');
+    if (_profile.hasConditions) {
+      parts.add('режим: ${_profile.conditions.map((e) => e.label).join(', ')}');
+    } else {
+      parts.add('режим: без заболевания');
+    }
     if (parts.isEmpty) return const SizedBox.shrink();
     return Padding(
       padding: const EdgeInsets.only(bottom: 16),
@@ -1566,6 +1784,12 @@ class _StatisticsScreenState extends State<StatisticsScreen> {
     if (n % 10 == 1 && n % 100 != 11) return one;
     if (n % 10 >= 2 && n % 10 <= 4 && (n % 100 < 10 || n % 100 >= 20)) return few;
     return many;
+  }
+
+  String _confidenceLabel(double value) {
+    if (value < 0.45) return 'низкая';
+    if (value < 0.72) return 'средняя';
+    return 'высокая';
   }
 
   Widget _buildEmpty() {

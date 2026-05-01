@@ -3,13 +3,14 @@ import 'package:google_fonts/google_fonts.dart';
 
 import '../models/calendar_entry.dart';
 import '../services/calendar_storage.dart';
+import '../services/notification_service.dart';
 import '../theme/app_colors.dart';
 import '../widgets/app_bottom_nav.dart';
 import '../widgets/delete_confirm_dialog.dart';
 import 'add_appointment_screen.dart';
 import 'add_medication_screen.dart';
-import 'articles_screen.dart';
 import 'calendar_full_screen.dart';
+import 'goals_screen.dart';
 import 'notes_screen.dart';
 import 'state_categories_sheet.dart';
 import 'statistics_screen.dart';
@@ -42,6 +43,7 @@ class _CalendarScreenState extends State<CalendarScreen> {
   Future<void> _load() async {
     final date = _selectedDate;
     final list = await CalendarStorage.instance.loadForDate(date);
+    await NotificationService.instance.rescheduleCalendarNotifications();
     if (mounted && date.year == _selectedDate.year &&
         date.month == _selectedDate.month &&
         date.day == _selectedDate.day) {
@@ -170,6 +172,23 @@ class _CalendarScreenState extends State<CalendarScreen> {
     _load();
   }
 
+  void _skipMedication(Medication m) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text('Прием "${m.name}" отмечен как пропущенный.')),
+    );
+  }
+
+  Future<void> _snoozeMedication(Medication m) async {
+    await NotificationService.instance.scheduleSnooze(
+      title: 'Отложенный прием',
+      body: '${m.name} ${m.dosage}',
+    );
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text('Напоминание для "${m.name}" перенесено на 30 минут.')),
+    );
+  }
+
   void _onNavTab(BottomNavTab tab) {
     switch (tab) {
       case BottomNavTab.calendar:
@@ -187,7 +206,7 @@ class _CalendarScreenState extends State<CalendarScreen> {
       case BottomNavTab.articles:
         Navigator.pushReplacement(
           context,
-          MaterialPageRoute(builder: (_) => const ArticlesScreen()),
+          MaterialPageRoute(builder: (_) => const GoalsScreen()),
         );
     }
   }
@@ -421,6 +440,8 @@ class _CalendarScreenState extends State<CalendarScreen> {
                 onEdit: () => _openAddMedication(m: e),
                 onDelete: () => _deleteEntry(e),
                 onMarkTaken: () => _markTaken(e),
+                onSkip: () => _skipMedication(e),
+                onSnooze: () => _snoozeMedication(e),
               ),
             Appointment() => _AppointmentCard(
                 appointment: e,
@@ -440,12 +461,16 @@ class _MedicationCard extends StatelessWidget {
     required this.onEdit,
     required this.onDelete,
     required this.onMarkTaken,
+    required this.onSkip,
+    required this.onSnooze,
   });
 
   final Medication medication;
   final VoidCallback onEdit;
   final VoidCallback onDelete;
   final VoidCallback onMarkTaken;
+  final VoidCallback onSkip;
+  final VoidCallback onSnooze;
 
   @override
   Widget build(BuildContext context) {
@@ -541,7 +566,7 @@ class _MedicationCard extends StatelessWidget {
               child: Row(
                 children: [
                   Expanded(
-                    child: _actionBtn('Пропустить', AppColors.skipRed, () {}),
+                    child: _actionBtn('Пропустить', AppColors.skipRed, onSkip),
                   ),
                   const SizedBox(width: 8),
                   Expanded(
@@ -549,7 +574,7 @@ class _MedicationCard extends StatelessWidget {
                   ),
                   const SizedBox(width: 8),
                   Expanded(
-                    child: _actionBtn('В выбранное время', AppColors.takeYellow, () {}),
+                    child: _actionBtn('Отложить 30м', AppColors.takeYellow, onSnooze),
                   ),
                 ],
               ),

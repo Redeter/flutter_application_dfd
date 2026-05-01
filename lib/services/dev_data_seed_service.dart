@@ -186,6 +186,10 @@ class DevDataSeedService {
     final stateKeys = existingStates
         .map((s) => '${s.runtimeType}:${s.createdAt.year}-${s.createdAt.month}-${s.createdAt.day}')
         .toSet();
+    final existingCalendar = await CalendarStorage.instance.loadAll();
+    final calendarKeys = existingCalendar
+        .map((c) => '${c.runtimeType}:${c.date.year}-${c.date.month}-${c.date.day}')
+        .toSet();
 
     for (var d = start; !d.isAfter(end); d = d.add(const Duration(days: 1))) {
       final dayIndex = d.difference(start).inDays;
@@ -249,6 +253,46 @@ class DevDataSeedService {
             ),
           );
           noteKeys.add(noteKey);
+          created++;
+        }
+      }
+
+      if (random.nextDouble() < 0.2) {
+        final medKey = 'Medication:${d.year}-${d.month}-${d.day}';
+        if (!calendarKeys.contains(medKey)) {
+          final id = 'seed-mix-med-${d.millisecondsSinceEpoch}-${random.nextInt(9999)}';
+          await CalendarStorage.instance.save(
+            Medication(
+              id: id,
+              date: d,
+              time: const TimeOfDay(hour: 8, minute: 0),
+              name: positive ? 'Поддерживающий препарат' : 'Корректирующая терапия',
+              dosage: '${random.nextInt(2) + 1} таб',
+              schedule: [
+                MedicationDose(time: const TimeOfDay(hour: 8, minute: 0), amount: '1'),
+              ],
+            ),
+          );
+          calendarKeys.add(medKey);
+          created++;
+        }
+      }
+
+      if (random.nextDouble() < 0.12) {
+        final appKey = 'Appointment:${d.year}-${d.month}-${d.day}';
+        if (!calendarKeys.contains(appKey)) {
+          final id = 'seed-mix-app-${d.millisecondsSinceEpoch}-${random.nextInt(9999)}';
+          await CalendarStorage.instance.save(
+            Appointment(
+              id: id,
+              date: d,
+              time: TimeOfDay(hour: 10 + random.nextInt(7), minute: 0),
+              title: positive ? 'Контрольный визит' : 'Внеплановый прием',
+              meetingDate: d,
+              note: 'Смешанный сценарий для теста календарной аналитики',
+            ),
+          );
+          calendarKeys.add(appKey);
           created++;
         }
       }

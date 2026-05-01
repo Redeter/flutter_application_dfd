@@ -48,6 +48,12 @@ class InsightSafetyService {
       insufficientData: input.insufficientData,
       personalizationScores: input.personalizationScores,
       recommendationScores: input.recommendationScores,
+      weeklyDigest: input.weeklyDigest,
+      burnoutAlert: input.burnoutAlert,
+      topTriggers: input.topTriggers,
+      causalInsights: input.causalInsights,
+      confidenceReasons: input.confidenceReasons,
+      recommendationExplanations: input.recommendationExplanations,
       error: input.error,
     );
   }

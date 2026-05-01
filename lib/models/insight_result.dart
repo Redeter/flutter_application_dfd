@@ -11,6 +11,12 @@ class InsightResult {
     this.insufficientData = false,
     this.personalizationScores = const {},
     this.recommendationScores = const {},
+    this.weeklyDigest = '',
+    this.burnoutAlert = '',
+    this.topTriggers = const [],
+    this.causalInsights = const [],
+    this.confidenceReasons = const [],
+    this.recommendationExplanations = const {},
     this.error,
   });
 
@@ -24,6 +30,12 @@ class InsightResult {
   final bool insufficientData;
   final Map<String, double> personalizationScores;
   final Map<String, double> recommendationScores;
+  final String weeklyDigest;
+  final String burnoutAlert;
+  final List<String> topTriggers;
+  final List<String> causalInsights;
+  final List<String> confidenceReasons;
+  final Map<String, String> recommendationExplanations;
   final String? error;
 
   bool get hasError => error != null && error!.isNotEmpty;
