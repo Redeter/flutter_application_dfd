@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../theme/app_colors.dart';
+import 'package:flutter_svg/flutter_svg.dart';
 
 /// Вкладки нижней панели (без центральной «+»).
 enum BottomNavTab { statistics, notes, calendar, articles }
@@ -63,15 +64,14 @@ class AppBottomNavBar extends StatelessWidget {
               child: Container(
                 width: 72,
                 height: 72,
-                decoration: const BoxDecoration(
-                  shape: BoxShape.circle,
-                  color: AppColors.white,
-                ),
-                child: const Center(
-                  child: Icon(
-                    Icons.add,
-                    color: AppColors.orange,
-                    size: 40,
+                child: Center(
+                  child: Transform.translate(
+                    offset: const Offset(6, -8),
+                    child: SvgPicture.asset(
+                      'assets/icons/plus.svg',
+                      width: 48,
+                      height: 48,
+                    ),
                   ),
                 ),
               ),
@@ -105,15 +105,17 @@ class _BottomNavItem extends StatelessWidget {
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
           iconBuilder(isActive),
-          const SizedBox(height: 4),
-          Text(
-            label.toUpperCase(),
-            style: const TextStyle(
-              fontSize: 11,
-              fontWeight: FontWeight.w500,
-              color: AppColors.white,
+          if (!isActive) ...[
+            const SizedBox(height: 4),
+            Text(
+              label.toUpperCase(),
+              style: const TextStyle(
+                fontSize: 11,
+                fontWeight: FontWeight.w500,
+                color: AppColors.white,
+              ),
             ),
-          ),
+          ],
         ],
       ),
     );
@@ -127,28 +129,17 @@ class StatisticsNavIcon extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final inner = Container(
-      width: 46,
-      height: 46,
-      decoration: BoxDecoration(
-        color: AppColors.white,
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: AppColors.orange, width: 2),
-      ),
-      child: Center(
-        child: SizedBox(
-          width: 34,
-          height: 34,
-          child: CustomPaint(
-            painter: _PieChartPainter(
-              color: AppColors.orange,
-              accentColor: AppColors.cream,
-            ),
-          ),
-        ),
+    final size = active ? 74.0 : 43.0;
+    return Transform.translate(
+      offset: const Offset(0, -2),
+      child: SvgPicture.asset(
+        active
+            ? 'assets/icons/highlighted diagram.svg'
+            : 'assets/icons/Diagram.svg',
+        width: size,
+        height: size,
       ),
     );
-    return _maybeActiveWrap(active, inner);
   }
 }
 
@@ -159,68 +150,13 @@ class NotesNavIcon extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final inner = Container(
-      width: 46,
-      height: 46,
-      decoration: BoxDecoration(
-        color: AppColors.white,
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: AppColors.orange, width: 2),
-      ),
-      child: Center(
-        child: Stack(
-          children: [
-            Container(
-              margin: const EdgeInsets.all(6),
-              decoration: BoxDecoration(
-                color: AppColors.orange,
-                borderRadius: BorderRadius.circular(10),
-              ),
-            ),
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  _docLine(1),
-                  _docLine(1),
-                  _docLine(0.7),
-                ],
-              ),
-            ),
-            Positioned(
-              right: 8,
-              top: 8,
-              child: Transform.rotate(
-                angle: -0.5,
-                child: Container(
-                  width: 18,
-                  height: 6,
-                  decoration: BoxDecoration(
-                    color: AppColors.greyMuted,
-                    borderRadius: BorderRadius.circular(4),
-                  ),
-                ),
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-    return _maybeActiveWrap(active, inner);
-  }
-
-  Widget _docLine(double widthFactor) {
-    return SizedBox(
-      width: 22 * widthFactor,
-      child: Container(
-        height: 3,
-        decoration: BoxDecoration(
-          color: AppColors.cream,
-          borderRadius: BorderRadius.circular(2),
-        ),
-      ),
+    final size = active ? 67.0 : 43.0;
+    return SvgPicture.asset(
+      active
+          ? 'assets/icons/highlighted notebook.svg'
+          : 'assets/icons/notebook.svg',
+      width: size,
+      height: size,
     );
   }
 }
@@ -232,87 +168,13 @@ class CalendarNavIcon extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final inner = Container(
-      width: 46,
-      height: 46,
-      decoration: BoxDecoration(
-        color: AppColors.white,
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: AppColors.orange, width: 2),
-      ),
-      child: Center(
-        child: Container(
-          width: 32,
-          height: 32,
-          decoration: BoxDecoration(
-            color: AppColors.orange,
-            borderRadius: BorderRadius.circular(10),
-          ),
-          child: Stack(
-            children: [
-              Align(
-                alignment: Alignment.center,
-                child: Container(
-                  width: 24,
-                  height: 22,
-                  decoration: BoxDecoration(
-                    color: AppColors.cream,
-                    borderRadius: BorderRadius.circular(8),
-                  ),
-                  child: Align(
-                    alignment: Alignment.bottomLeft,
-                    child: Padding(
-                      padding: const EdgeInsets.all(4),
-                      child: Container(
-                        width: 8,
-                        height: 8,
-                        decoration: BoxDecoration(
-                          color: AppColors.orange,
-                          borderRadius: BorderRadius.circular(4),
-                        ),
-                      ),
-                    ),
-                  ),
-                ),
-              ),
-              Positioned(
-                top: 6,
-                left: 7,
-                right: 7,
-                child: Container(
-                  height: 4,
-                  decoration: BoxDecoration(
-                    color: AppColors.greyMuted,
-                    borderRadius: BorderRadius.circular(4),
-                  ),
-                ),
-              ),
-              Positioned(
-                top: 2,
-                left: 11,
-                child: _bubble(),
-              ),
-              Positioned(
-                top: 2,
-                right: 11,
-                child: _bubble(),
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-    return _maybeActiveWrap(active, inner);
-  }
-
-  Widget _bubble() {
-    return Container(
-      width: 6,
-      height: 6,
-      decoration: BoxDecoration(
-        color: AppColors.greyMuted,
-        borderRadius: BorderRadius.circular(3),
-      ),
+    final size = active ? 66.0 : 43.0;
+    return SvgPicture.asset(
+      active
+          ? 'assets/icons/highlighted calendar.svg'
+          : 'assets/icons/calendar.svg',
+      width: size,
+      height: size,
     );
   }
 }
@@ -324,114 +186,13 @@ class ArticlesNavIcon extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final inner = Container(
-      width: 46,
-      height: 46,
-      decoration: BoxDecoration(
-        color: AppColors.white,
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: AppColors.orange, width: 2),
-      ),
-      child: Center(
-        child: Stack(
-          alignment: Alignment.centerLeft,
-          children: [
-            Container(
-              width: 30,
-              height: 22,
-              decoration: BoxDecoration(
-                color: AppColors.orange,
-                borderRadius: BorderRadius.circular(10),
-              ),
-            ),
-            Positioned(
-              right: 5,
-              child: Container(
-                width: 10,
-                height: 16,
-                decoration: BoxDecoration(
-                  color: AppColors.greyMuted,
-                  borderRadius: BorderRadius.circular(8),
-                ),
-              ),
-            ),
-            Positioned(
-              left: 8,
-              child: Container(
-                width: 9,
-                height: 9,
-                decoration: BoxDecoration(
-                  color: AppColors.cream,
-                  borderRadius: BorderRadius.circular(6),
-                ),
-              ),
-            ),
-            Positioned(
-              left: 14,
-              bottom: 5,
-              child: Container(
-                width: 11,
-                height: 11,
-                decoration: BoxDecoration(
-                  color: AppColors.orange.withValues(alpha: 0.9),
-                  borderRadius: BorderRadius.circular(6),
-                ),
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-    return _maybeActiveWrap(active, inner);
-  }
-}
-
-/// Белая обводка вокруг активной иконки (макет «Заметки»).
-Widget _maybeActiveWrap(bool active, Widget child) {
-  if (!active) return child;
-  return Container(
-    padding: const EdgeInsets.all(3),
-    decoration: BoxDecoration(
-      borderRadius: BorderRadius.circular(16),
-      border: Border.all(color: AppColors.white, width: 3),
-    ),
-    child: child,
-  );
-}
-
-class _PieChartPainter extends CustomPainter {
-  const _PieChartPainter({required this.color, required this.accentColor});
-
-  final Color color;
-  final Color accentColor;
-
-  @override
-  void paint(Canvas canvas, Size size) {
-    final center = Offset(size.width / 2, size.height / 2);
-    final radius = size.width / 2 - 3;
-
-    final paint = Paint()
-      ..color = color
-      ..style = PaintingStyle.fill;
-
-    canvas.drawCircle(center, radius, paint);
-
-    final cutoutPaint = Paint()
-      ..color = accentColor
-      ..style = PaintingStyle.fill;
-
-    const startAngle = -0.5;
-    const sweepAngle = 0.52;
-
-    canvas.drawArc(
-      Rect.fromCircle(center: center, radius: radius + 1),
-      startAngle,
-      sweepAngle,
-      true,
-      cutoutPaint,
+    final size = active ? 66.0 : 43.0;
+    return SvgPicture.asset(
+      active
+          ? 'assets/icons/highlighted megaphone.svg'
+          : 'assets/icons/Megaphone.svg',
+      width: size,
+      height: size,
     );
   }
-
-  @override
-  bool shouldRepaint(covariant CustomPainter oldDelegate) => false;
 }

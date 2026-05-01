@@ -1,3 +1,4 @@
+
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 
@@ -16,18 +17,18 @@ void showEmotionsEntrySheet(BuildContext context) {
 }
 
 const _emotions = [
-  ('Спокойствие', [Color(0xFFE8E4E0), Color(0xFFFFD8B1)]),
-  ('Радость', [Color(0xFFFFE082), Color(0xFFFFAB6D)]),
-  ('Отвращение', [Color(0xFF558B2F), Color(0xFFD4A574)]),
-  ('Злость', [Color(0xFFE53935), Color(0xFFFFAB6D)]),
-  ('Тревога', [Color(0xFFD4A574), Color(0xFFE8DCC8)]),
-  ('Страх', [Color(0xFF7E57C2), Color(0xFFFFAB9E)]),
-  ('Грусть', [Color(0xFF42A5F5), Color(0xFFFFD8B1)]),
-  ('Стыд', [Color(0xFFF48FB1), Color(0xFFFFD8B1)]),
-  ('Раздражение', [Color(0xFFC62828), Color(0xFFFFAB6D)]),
-  ('Беспокойство', [Color(0xFF66BB6A), Color(0xFFA5D6A7)]),
-  ('Напряжение', [Color(0xFF424242), Color(0xFFBCAAA4)]),
-  ('Вдохновение', [Color(0xFFFFF59D), Color(0xFFFFD8B1)]),
+  ('Спокойствие', 'assets/icons/emotions/chill.png', [Color(0xFFE8E4E0), Color(0xFFFFD8B1)]),
+  ('Радость', 'assets/icons/emotions/joy.png', [Color(0xFFFFE082), Color(0xFFFFAB6D)]),
+  ('Отвращение', 'assets/icons/emotions/disgust.png', [Color(0xFF558B2F), Color(0xFFD4A574)]),
+  ('Злость', 'assets/icons/emotions/anger.png', [Color(0xFFE53935), Color(0xFFFFAB6D)]),
+  ('Тревога', 'assets/icons/emotions/anxiety.png', [Color(0xFFD4A574), Color(0xFFE8DCC8)]),
+  ('Страх', 'assets/icons/emotions/fear.png', [Color(0xFF7E57C2), Color(0xFFFFAB9E)]),
+  ('Грусть', 'assets/icons/emotions/sadness.png', [Color(0xFF42A5F5), Color(0xFFFFD8B1)]),
+  ('Стыд', 'assets/icons/emotions/shame.png', [Color(0xFFF48FB1), Color(0xFFFFD8B1)]),
+  ('Раздражение', 'assets/icons/emotions/irritation.png', [Color(0xFFC62828), Color(0xFFFFAB6D)]),
+  ('Беспокойство', 'assets/icons/emotions/worry.png', [Color(0xFF66BB6A), Color(0xFFA5D6A7)]),
+  ('Напряжение', 'assets/icons/emotions/voltage.png', [Color(0xFF424242), Color(0xFFBCAAA4)]),
+  ('Вдохновение', 'assets/icons/emotions/inspiration.png', [Color(0xFFFFF59D), Color(0xFFFFD8B1)]),
 ];
 
 class _EmotionsEntrySheet extends StatefulWidget {
@@ -112,9 +113,9 @@ class _EmotionsEntrySheetState extends State<_EmotionsEntrySheet> {
                       crossAxisCount: 3,
                       mainAxisSpacing: 12,
                       crossAxisSpacing: 12,
-                      childAspectRatio: 0.85,
+                      childAspectRatio: 0.78,
                       children: _emotions.asMap().entries.map((e) {
-                        final (label, colors) = e.value;
+                        final (label, iconPath, _) = e.value;
                         final selected = _selected.contains(label);
                         return GestureDetector(
                           onTap: () {
@@ -126,14 +127,12 @@ class _EmotionsEntrySheetState extends State<_EmotionsEntrySheet> {
                               }
                             });
                           },
-                          child: Container(
+                          child: AnimatedContainer(
+                            duration: const Duration(milliseconds: 120),
+                            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 6),
                             decoration: BoxDecoration(
-                              gradient: LinearGradient(
-                                begin: Alignment.topLeft,
-                                end: Alignment.bottomRight,
-                                colors: colors,
-                              ),
                               borderRadius: BorderRadius.circular(16),
+                              color: AppColors.white.withValues(alpha: 0.55),
                               border: selected
                                   ? Border.all(color: AppColors.orangeHandle, width: 4)
                                   : null,
@@ -141,25 +140,12 @@ class _EmotionsEntrySheetState extends State<_EmotionsEntrySheet> {
                             child: Column(
                               mainAxisAlignment: MainAxisAlignment.center,
                               children: [
-                                Container(
-                                  width: 36,
-                                  height: 36,
-                                  decoration: BoxDecoration(
-                                    color: AppColors.white.withValues(alpha: 0.7),
-                                    shape: BoxShape.circle,
-                                  ),
-                                ),
-                                const SizedBox(height: 8),
-                                Padding(
-                                  padding: const EdgeInsets.symmetric(horizontal: 4),
-                                  child: Text(
-                                    label,
-                                    textAlign: TextAlign.center,
-                                    style: GoogleFonts.alegreyaSans(
-                                      fontSize: 12,
-                                      fontWeight: FontWeight.w700,
-                                      color: AppColors.textDark,
-                                    ),
+                                SizedBox(
+                                  height: 68,
+                                  width: double.infinity,
+                                  child: Image.asset(
+                                    iconPath,
+                                    fit: BoxFit.contain,
                                   ),
                                 ),
                               ],
