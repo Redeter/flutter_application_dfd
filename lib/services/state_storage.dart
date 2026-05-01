@@ -1,8 +1,7 @@
 import 'dart:convert';
 
-import 'package:shared_preferences/shared_preferences.dart';
-
 import '../models/state_entries.dart';
+import 'secure_kv_service.dart';
 
 const _keyStateEntries = 'state_entries';
 
@@ -11,15 +10,8 @@ class StateStorage {
   static StateStorage get instance => _instance;
   static final _instance = StateStorage._();
 
-  SharedPreferences? _prefs;
-
-  Future<void> init() async {
-    _prefs ??= await SharedPreferences.getInstance();
-  }
-
   Future<List<StateEntryBase>> loadAll() async {
-    await init();
-    final raw = _prefs!.getString(_keyStateEntries);
+    final raw = await SecureKvService.instance.readWithMigration(_keyStateEntries);
     if (raw == null || raw.isEmpty) return [];
 
     try {
@@ -60,11 +52,10 @@ class StateStorage {
   }
 
   Future<void> save(StateEntryBase entry) async {
-    await init();
     final all = await loadAll();
     all.insert(0, entry);
     final encoded = jsonEncode(all.map((e) => e.toJson()).toList());
-    await _prefs!.setString(_keyStateEntries, encoded);
+    await SecureKvService.instance.writeString(_keyStateEntries, encoded);
   }
 
   Future<List<T>> loadByCategory<T extends StateEntryBase>(

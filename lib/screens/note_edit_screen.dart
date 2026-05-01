@@ -60,9 +60,14 @@ class _NoteEditScreenState extends State<NoteEditScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final hintStyle = GoogleFonts.caveat(
+    final titleHintStyle = GoogleFonts.alegreyaSans(
       fontSize: 22,
-      color: AppColors.textDark.withValues(alpha: 0.45),
+      fontWeight: FontWeight.w700,
+      color: AppColors.textDark.withValues(alpha: 0.4),
+    );
+    final bodyHintStyle = GoogleFonts.alegreyaSans(
+      fontSize: 18,
+      color: AppColors.textDark.withValues(alpha: 0.42),
     );
     return Scaffold(
       backgroundColor: AppColors.peachBackground,
@@ -93,30 +98,31 @@ class _NoteEditScreenState extends State<NoteEditScreen> {
                     _buildMediaRow(),
                     const SizedBox(height: 16),
                     _roundedField(
-                      controller: _tagsController,
-                      hint: 'Тэги',
-                      minLines: 1,
-                      maxLines: 1,
-                      style: GoogleFonts.alegreyaSans(
-                        fontSize: 18,
-                        color: AppColors.textDark,
-                      ),
-                      hintStyle: GoogleFonts.alegreyaSans(
-                        fontSize: 18,
-                        color: AppColors.textDark.withValues(alpha: 0.45),
-                      ),
-                    ),
-                    const SizedBox(height: 16),
-                    _roundedField(
                       controller: _titleController,
                       hint: 'Заголовок...',
                       minLines: 1,
                       maxLines: 2,
-                      style: GoogleFonts.caveat(
-                        fontSize: 26,
+                      style: GoogleFonts.alegreyaSans(
+                        fontSize: 22,
+                        fontWeight: FontWeight.w800,
                         color: AppColors.textDark,
                       ),
-                      hintStyle: hintStyle,
+                      hintStyle: titleHintStyle,
+                    ),
+                    const SizedBox(height: 12),
+                    _roundedField(
+                      controller: _tagsController,
+                      hint: '#теги (можно не заполнять)',
+                      minLines: 1,
+                      maxLines: 1,
+                      style: GoogleFonts.alegreyaSans(
+                        fontSize: 17,
+                        color: const Color(0xFF636366),
+                      ),
+                      hintStyle: GoogleFonts.alegreyaSans(
+                        fontSize: 17,
+                        color: AppColors.textDark.withValues(alpha: 0.4),
+                      ),
                     ),
                     const SizedBox(height: 16),
                     _roundedField(
@@ -125,12 +131,12 @@ class _NoteEditScreenState extends State<NoteEditScreen> {
                       minLines: 12,
                       maxLines: 24,
                       alignTop: true,
-                      style: GoogleFonts.caveat(
-                        fontSize: 22,
-                        height: 1.35,
+                      style: GoogleFonts.alegreyaSans(
+                        fontSize: 18,
+                        height: 1.45,
                         color: AppColors.textDark,
                       ),
-                      hintStyle: hintStyle,
+                      hintStyle: bodyHintStyle,
                     ),
                   ],
                 ),
@@ -270,13 +276,20 @@ class _NoteEditScreenState extends State<NoteEditScreen> {
           height: 48,
           decoration: BoxDecoration(
             borderRadius: BorderRadius.circular(14),
-            border: Border.all(color: AppColors.orange, width: 3),
+            border: Border.all(color: const Color(0xFFE8E8ED), width: 1.4),
             color: AppColors.white,
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withValues(alpha: 0.06),
+                blurRadius: 8,
+                offset: const Offset(0, 2),
+              ),
+            ],
           ),
           child: const Icon(
             Icons.arrow_back_ios_new_rounded,
-            color: AppColors.orange,
-            size: 22,
+            color: Color(0xFF8E8E93),
+            size: 20,
           ),
         ),
       ),
@@ -285,7 +298,7 @@ class _NoteEditScreenState extends State<NoteEditScreen> {
 
   Widget _buildSaveButton(BuildContext context) {
     return Material(
-      color: AppColors.orange,
+      color: const Color(0xFF111111),
       borderRadius: BorderRadius.circular(28),
       child: InkWell(
         onTap: () {
@@ -302,7 +315,7 @@ class _NoteEditScreenState extends State<NoteEditScreen> {
           child: Text(
             'Сохранить',
             style: GoogleFonts.alegreyaSans(
-              fontSize: 18,
+              fontSize: 17,
               fontWeight: FontWeight.w700,
               color: AppColors.white,
             ),
@@ -317,12 +330,12 @@ class _NoteEditScreenState extends State<NoteEditScreen> {
       crossAxisAlignment: CrossAxisAlignment.center,
       children: [
         Container(
-          width: 72,
-          height: 72,
+          width: 70,
+          height: 70,
           decoration: BoxDecoration(
             shape: BoxShape.circle,
-            color: AppColors.greyPlaceholder,
-            border: Border.all(color: AppColors.white, width: 3),
+            color: const Color(0xFFD1D1D6),
+            border: Border.all(color: AppColors.white, width: 2),
           ),
         ),
         const SizedBox(width: 12),
@@ -332,11 +345,11 @@ class _NoteEditScreenState extends State<NoteEditScreen> {
             children: List.generate(
               4,
               (_) => Container(
-                width: 48,
-                height: 48,
+                width: 44,
+                height: 44,
                 decoration: BoxDecoration(
                   shape: BoxShape.circle,
-                  color: AppColors.greyPlaceholder,
+                  color: const Color(0xFFD1D1D6),
                   border: Border.all(
                     color: AppColors.white.withValues(alpha: 0.9),
                     width: 2,
@@ -363,12 +376,12 @@ class _NoteEditScreenState extends State<NoteEditScreen> {
       decoration: BoxDecoration(
         color: AppColors.white,
         borderRadius: BorderRadius.circular(22),
-        border: Border.all(color: AppColors.orange.withValues(alpha: 0.35), width: 2),
+        border: Border.all(color: const Color(0xFFE8E8ED), width: 1.2),
         boxShadow: [
           BoxShadow(
-            color: AppColors.orange.withValues(alpha: 0.12),
+            color: Colors.black.withValues(alpha: 0.05),
             blurRadius: 12,
-            offset: const Offset(0, 4),
+            offset: const Offset(0, 5),
           ),
         ],
       ),

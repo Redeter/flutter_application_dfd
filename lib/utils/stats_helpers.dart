@@ -1,5 +1,5 @@
+import '../models/aggregated_data.dart';
 import '../models/state_entries.dart';
-import '../services/insights_service.dart';
 
 /// Локальная статистика за выбранный период (без ИИ).
 class LocalStats {
@@ -11,6 +11,8 @@ class LocalStats {
     this.avgEnergy,
     this.energyCount = 0,
     this.notesCount = 0,
+    this.medicationsCount = 0,
+    this.appointmentsCount = 0,
   });
 
   final double? avgMood;
@@ -20,9 +22,16 @@ class LocalStats {
   final double? avgEnergy;
   final int energyCount;
   final int notesCount;
+  final int medicationsCount;
+  final int appointmentsCount;
 
   bool get hasAny =>
-      avgMood != null || avgSleep != null || avgEnergy != null || notesCount > 0;
+      avgMood != null ||
+      avgSleep != null ||
+      avgEnergy != null ||
+      notesCount > 0 ||
+      medicationsCount > 0 ||
+      appointmentsCount > 0;
 }
 
 /// Вычисляет локальную статистику из агрегированных данных за период.
@@ -75,6 +84,18 @@ LocalStats computeLocalStats(
     if (!day.isBefore(startDay) && !day.isAfter(endDay)) notesInRange++;
   }
 
+  int medicationsInRange = 0;
+  for (final m in data.medications) {
+    final day = DateTime(m.date.year, m.date.month, m.date.day);
+    if (!day.isBefore(startDay) && !day.isAfter(endDay)) medicationsInRange++;
+  }
+
+  int appointmentsInRange = 0;
+  for (final a in data.appointments) {
+    final day = DateTime(a.date.year, a.date.month, a.date.day);
+    if (!day.isBefore(startDay) && !day.isAfter(endDay)) appointmentsInRange++;
+  }
+
   return LocalStats(
     avgMood: avgMood,
     moodCount: moodCount,
@@ -83,5 +104,7 @@ LocalStats computeLocalStats(
     avgEnergy: avgEnergy,
     energyCount: energyCount,
     notesCount: notesInRange,
+    medicationsCount: medicationsInRange,
+    appointmentsCount: appointmentsInRange,
   );
 }

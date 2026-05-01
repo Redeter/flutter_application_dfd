@@ -1,8 +1,7 @@
 import 'dart:convert';
 
-import 'package:shared_preferences/shared_preferences.dart';
-
 import '../models/note_item.dart';
+import 'secure_kv_service.dart';
 
 const _keyNotes = 'notes';
 
@@ -11,15 +10,8 @@ class NotesStorage {
   static NotesStorage get instance => _instance;
   static final _instance = NotesStorage._();
 
-  SharedPreferences? _prefs;
-
-  Future<void> _init() async {
-    _prefs ??= await SharedPreferences.getInstance();
-  }
-
   Future<List<NoteItem>> loadAll() async {
-    await _init();
-    final raw = _prefs!.getString(_keyNotes);
+    final raw = await SecureKvService.instance.readWithMigration(_keyNotes);
     if (raw == null || raw.isEmpty) return [];
 
     try {
@@ -48,13 +40,12 @@ class NotesStorage {
   }
 
   Future<void> saveAll(List<NoteItem> notes) async {
-    await _init();
     final encoded = jsonEncode(notes.map((n) => {
           'date': n.date.toIso8601String(),
           'title': n.title,
           'tags': n.tags,
           'preview': n.preview,
         }).toList());
-    await _prefs!.setString(_keyNotes, encoded);
+    await SecureKvService.instance.writeString(_keyNotes, encoded);
   }
 }

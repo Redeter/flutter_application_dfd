@@ -2,8 +2,10 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
-import 'screens/articles_screen.dart';
+import 'neural/neural_insights_service.dart';
+import 'services/notification_service.dart';
 import 'screens/calendar_screen.dart';
+import 'screens/goals_screen.dart';
 import 'screens/notes_screen.dart';
 import 'screens/state_categories_sheet.dart';
 import 'screens/statistics_screen.dart';
@@ -13,8 +15,13 @@ import 'widgets/app_bottom_nav.dart';
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
   await SharedPreferences.getInstance();
+  unawaited(NeuralInsightsService.instance.init());
+  unawaited(NotificationService.instance.init());
+  unawaited(NotificationService.instance.rescheduleCalendarNotifications());
   runApp(const MyApp());
 }
+
+void unawaited(Future<void> f) {}
 
 class MyApp extends StatelessWidget {
   const MyApp({super.key});
@@ -31,7 +38,7 @@ class MyApp extends StatelessWidget {
         ),
         scaffoldBackgroundColor: AppColors.cream,
       ),
-      home: const MainScreen(),
+      home: const StatisticsScreen(),
     );
   }
 }
@@ -44,7 +51,7 @@ class MainScreen extends StatelessWidget {
       BottomNavTab.statistics => const StatisticsScreen(),
       BottomNavTab.notes => const NotesScreen(),
       BottomNavTab.calendar => const CalendarScreen(),
-      BottomNavTab.articles => const ArticlesScreen(),
+      BottomNavTab.articles => const GoalsScreen(),
     };
     Navigator.push<void>(
       context,
