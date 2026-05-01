@@ -161,7 +161,7 @@ class _StatisticsScreenState extends State<StatisticsScreen> {
             : _buildContent(),
       ),
       bottomNavigationBar: AppBottomNavBar(
-        activeTab: null,
+        activeTab: BottomNavTab.statistics,
         onTabSelected: (tab) {
           switch (tab) {
             case BottomNavTab.statistics:
