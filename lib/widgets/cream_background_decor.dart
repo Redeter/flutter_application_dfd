@@ -13,7 +13,8 @@ class CreamBackgroundDecor extends StatelessWidget {
     return IgnorePointer(
       child: Stack(
         fit: StackFit.expand,
-        clipBehavior: Clip.none,
+        // Иначе круги с отрицательным top рисуются выше области виджета и наезжают на шапку календаря.
+        clipBehavior: Clip.antiAlias,
         children: [
           Positioned(
             top: -160,

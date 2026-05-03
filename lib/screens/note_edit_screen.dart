@@ -4,7 +4,9 @@ import 'package:google_fonts/google_fonts.dart';
 
 import '../models/note_item.dart';
 import '../theme/app_colors.dart';
+import '../theme/peach_app_bar.dart';
 import '../widgets/cream_background_decor.dart';
+import '../widgets/unified_horizontal_date_strip.dart';
 
 /// Создание / редактирование заметки (макет справа).
 class NoteEditScreen extends StatefulWidget {
@@ -38,7 +40,6 @@ class _NoteEditScreenState extends State<NoteEditScreen> {
   late final TextEditingController _titleController;
   late final TextEditingController _bodyController;
 
-  static const _weekdaysShort = ['Пн', 'Вт', 'Ср', 'Чт', 'Пт', 'Сб', 'Вс'];
   static const _stickersOrder = NoteStickerKind.values;
   static const Color _stickerPreviewCircleFill = Color(0xFFF8C994);
 
@@ -62,17 +63,9 @@ class _NoteEditScreenState extends State<NoteEditScreen> {
 
   List<DateTime> get _stripDays {
     final base = DateTime.now();
-    return List.generate(
-      18,
-      (i) => DateTime(base.year, base.month, base.day).add(Duration(days: i - 5)),
-    );
+    final norm = DateTime(base.year, base.month, base.day);
+    return List.generate(14, (i) => norm.add(Duration(days: i - 5)));
   }
-
-  bool _isSameDay(DateTime a, DateTime b) =>
-      a.year == b.year && a.month == b.month && a.day == b.day;
-
-  /// Цвет выбранной даты в полоске (как в макете).
-  static const Color _selectedDatePillOrange = Color(0xFFF5A261);
 
   @override
   Widget build(BuildContext context) {
@@ -178,183 +171,24 @@ class _NoteEditScreenState extends State<NoteEditScreen> {
     final topInset = MediaQuery.paddingOf(context).top;
     return Container(
       width: double.infinity,
-      color: AppColors.headerPeach,
-      padding: EdgeInsets.only(top: topInset + 6, bottom: 12),
-      child: SizedBox(
-        height: 118,
-        child: ListView.separated(
-          scrollDirection: Axis.horizontal,
-          padding: const EdgeInsets.symmetric(horizontal: 12),
-          itemCount: days.length,
-          separatorBuilder: (_, __) => const SizedBox(width: 4),
-          itemBuilder: (context, index) {
-            final d = days[index];
-            final today = DateTime.now();
-            final isToday = _isSameDay(d, today);
-            final selected = _isSameDay(d, _selectedDay);
-
-            return GestureDetector(
-              onTap: () => setState(() => _selectedDay = d),
-              child: selected
-                  ? _selectedDatePill(d, isToday)
-                  : (isToday ? _todayUnselectedFrame(d) : _dayCircle(d)),
-            );
-          },
-        ),
-      ),
-    );
-  }
-
-  Widget _dayCircle(DateTime d) {
-    final wd = _weekdaysShort[d.weekday - 1];
-    return Column(
-      mainAxisAlignment: MainAxisAlignment.center,
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        Text(
-          wd,
-          style: GoogleFonts.alegreyaSans(
-            fontSize: 12,
-            fontWeight: FontWeight.w600,
-            color: AppColors.textDark.withValues(alpha: 0.75),
-          ),
-        ),
-        const SizedBox(height: 8),
-        Container(
-          width: 46,
-          height: 46,
-          decoration: BoxDecoration(
-            shape: BoxShape.circle,
-            color: AppColors.white,
-            border: Border.all(
-              color: const Color(0xFFFFE0C8),
-              width: 1.8,
-            ),
-            boxShadow: [
-              BoxShadow(
-                color: Colors.black.withValues(alpha: 0.05),
-                blurRadius: 4,
-                offset: const Offset(0, 2),
-              ),
-            ],
-          ),
-          child: Center(
-            child: Text(
-              '${d.day}',
-              style: GoogleFonts.alegreyaSans(
-                fontSize: 18,
-                fontWeight: FontWeight.w700,
-                color: AppColors.textDark,
-              ),
-            ),
-          ),
-        ),
-      ],
-    );
-  }
-
-  /// Выбранная дата: оранжевая скруглённая таблетка, сверху подпись (для сегодня — «Сегодня»), внутри белый круг с числом.
-  Widget _selectedDatePill(DateTime d, bool isToday) {
-    return Container(
-      padding: const EdgeInsets.fromLTRB(14, 10, 14, 12),
       decoration: BoxDecoration(
-        color: _selectedDatePillOrange,
-        borderRadius: BorderRadius.circular(22),
+        color: AppColors.headerPeach,
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withValues(alpha: 0.1),
+            color: Colors.black.withValues(alpha: 0.07),
             blurRadius: 10,
             offset: const Offset(0, 3),
           ),
         ],
       ),
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          Text(
-            isToday ? 'Сегодня' : _weekdaysShort[d.weekday - 1],
-            style: GoogleFonts.alegreyaSans(
-              fontSize: 11,
-              fontWeight: FontWeight.w800,
-              letterSpacing: 0.3,
-              color: AppColors.white,
-            ),
-          ),
-          const SizedBox(height: 8),
-          Container(
-            width: 46,
-            height: 46,
-            decoration: const BoxDecoration(
-              shape: BoxShape.circle,
-              color: AppColors.white,
-            ),
-            child: Center(
-              child: Text(
-                '${d.day}',
-                style: GoogleFonts.alegreyaSans(
-                  fontSize: 20,
-                  fontWeight: FontWeight.w800,
-                  color: AppColors.textDark,
-                ),
-              ),
-            ),
-          ),
-        ],
+      padding: EdgeInsets.only(
+        top: topInset + 8,
+        bottom: kPeachHeaderStripBottomPadding,
       ),
-    );
-  }
-
-  /// Сегодня не выбран: та же композиция, но белая прямоугольная обводка вместо оранжевой таблетки.
-  Widget _todayUnselectedFrame(DateTime d) {
-    return Container(
-      padding: const EdgeInsets.fromLTRB(12, 9, 12, 10),
-      decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(20),
-        border: Border.all(color: AppColors.white, width: 2.5),
-        color: Colors.transparent,
-      ),
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          Text(
-            'Сегодня',
-            style: GoogleFonts.alegreyaSans(
-              fontSize: 11,
-              fontWeight: FontWeight.w800,
-              letterSpacing: 0.3,
-              color: AppColors.white,
-            ),
-          ),
-          const SizedBox(height: 8),
-          Container(
-            width: 46,
-            height: 46,
-            decoration: BoxDecoration(
-              shape: BoxShape.circle,
-              color: AppColors.white,
-              border: Border.all(color: const Color(0xFFFFE0C8), width: 1.8),
-              boxShadow: [
-                BoxShadow(
-                  color: Colors.black.withValues(alpha: 0.05),
-                  blurRadius: 4,
-                  offset: const Offset(0, 2),
-                ),
-              ],
-            ),
-            child: Center(
-              child: Text(
-                '${d.day}',
-                style: GoogleFonts.alegreyaSans(
-                  fontSize: 20,
-                  fontWeight: FontWeight.w800,
-                  color: AppColors.textDark,
-                ),
-              ),
-            ),
-          ),
-        ],
+      child: UnifiedHorizontalDateStrip(
+        days: days,
+        selectedDay: _selectedDay,
+        onDaySelected: (d) => setState(() => _selectedDay = d),
       ),
     );
   }

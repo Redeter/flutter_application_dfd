@@ -1,10 +1,12 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 import 'package:google_fonts/google_fonts.dart';
 
 import '../models/note_item.dart';
 import '../services/notes_storage.dart';
 import '../theme/app_colors.dart';
+import '../theme/peach_app_bar.dart';
 import '../widgets/app_bottom_nav.dart';
 import '../widgets/cream_background_decor.dart';
 import 'calendar_screen.dart';
@@ -249,19 +251,24 @@ class _NotesScreenState extends State<NotesScreen> {
       backgroundColor: AppColors.creamBg,
       appBar: AppBar(
         automaticallyImplyLeading: false,
-        backgroundColor: Colors.transparent,
+        backgroundColor: AppColors.headerPeach,
+        surfaceTintColor: Colors.transparent,
         elevation: 0,
+        scrolledUnderElevation: 0,
+        toolbarHeight: kPeachAppBarToolbarHeight,
+        actionsPadding: kPeachAppBarActionsPadding,
+        systemOverlayStyle: SystemUiOverlayStyle.dark.copyWith(
+          statusBarColor: Colors.transparent,
+          statusBarIconBrightness: Brightness.dark,
+        ),
         title: Text(
           'Заметки',
-          style: GoogleFonts.alegreyaSans(
-            fontSize: 22,
-            fontWeight: FontWeight.w800,
-            color: AppColors.textDark,
-          ),
+          style: peachAppBarTitleStyle(),
         ),
         actions: [
           IconButton(
-            icon: const Icon(Icons.person_outline_rounded, color: AppColors.orange),
+            style: peachAppBarCircleIconButtonStyle(),
+            icon: const Icon(Icons.person_outline_rounded),
             tooltip: 'Профиль',
             onPressed: () {
               Navigator.push<void>(
@@ -274,13 +281,17 @@ class _NotesScreenState extends State<NotesScreen> {
           ),
         ],
       ),
-      body: Stack(
-        fit: StackFit.expand,
-        children: [
-          const CreamBackgroundDecor(),
-          SafeArea(
-            bottom: false,
-            child: Column(
+      body: SafeArea(
+        top: false,
+        bottom: false,
+        child: Stack(
+          fit: StackFit.expand,
+          children: [
+            const CreamBackgroundDecor(),
+            SafeArea(
+              top: false,
+              bottom: false,
+              child: Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
                 Expanded(
@@ -338,7 +349,8 @@ class _NotesScreenState extends State<NotesScreen> {
               ],
             ),
           ),
-        ],
+          ],
+        ),
       ),
       floatingActionButton: Padding(
         padding: const EdgeInsets.only(bottom: 8),

@@ -63,10 +63,19 @@ class _CalendarFullScreenState extends State<CalendarFullScreen> {
         children: [
           Container(
             width: double.infinity,
-            color: AppColors.headerPeach,
+            decoration: BoxDecoration(
+              color: AppColors.headerPeach,
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black.withValues(alpha: 0.08),
+                  blurRadius: 12,
+                  offset: const Offset(0, 4),
+                ),
+              ],
+            ),
             padding: EdgeInsets.only(top: topInset),
             child: Padding(
-              padding: const EdgeInsets.fromLTRB(20, 16, 20, 20),
+              padding: const EdgeInsets.fromLTRB(18, 14, 18, 16),
               child: Row(
                 children: [
                   IconButton(
@@ -99,7 +108,7 @@ class _CalendarFullScreenState extends State<CalendarFullScreen> {
               top: false,
               child: Column(
                 children: [
-                  const SizedBox(height: 16),
+                  const SizedBox(height: 8),
                   Padding(
                     padding: const EdgeInsets.symmetric(horizontal: 20),
                     child: Row(

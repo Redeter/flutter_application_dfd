@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:google_fonts/google_fonts.dart';
 
 import '../models/aggregated_data.dart';
@@ -7,6 +8,7 @@ import '../models/user_profile.dart';
 import '../services/foundation_service.dart';
 import '../services/user_profile_service.dart';
 import '../theme/app_colors.dart';
+import '../theme/peach_app_bar.dart';
 import '../widgets/app_bottom_nav.dart';
 import 'calendar_screen.dart';
 import 'notes_screen.dart';
@@ -239,55 +241,48 @@ class _FoundationScreenState extends State<FoundationScreen> {
     return Scaffold(
       backgroundColor: AppColors.cream,
       appBar: AppBar(
-        backgroundColor: Colors.transparent,
+        backgroundColor: AppColors.headerPeach,
+        surfaceTintColor: Colors.transparent,
         elevation: 0,
+        scrolledUnderElevation: 0,
+        toolbarHeight: kPeachAppBarToolbarHeight,
+        leadingWidth: kPeachAppBarLeadingWidth,
+        actionsPadding: kPeachAppBarActionsPadding,
+        systemOverlayStyle: SystemUiOverlayStyle.dark.copyWith(
+          statusBarColor: Colors.transparent,
+          statusBarIconBrightness: Brightness.dark,
+        ),
         automaticallyImplyLeading: !widget.embeddedInShell,
         leading: widget.embeddedInShell
             ? null
             : IconButton(
-                icon: const Icon(Icons.arrow_back, color: AppColors.orange),
+                style: peachAppBarCircleIconButtonStyle(),
+                icon: const Icon(Icons.arrow_back_rounded),
                 onPressed: _goBack,
               ),
         title: Text(
           'Цели',
-          style: GoogleFonts.alegreyaSans(
-            fontSize: 22,
-            fontWeight: FontWeight.w800,
-            color: AppColors.textDark,
-          ),
+          style: peachAppBarTitleStyle(),
         ),
         actions: [
           IconButton(
+            style: peachAppBarCircleIconButtonStyle(),
             onPressed: _loading ? null : _editGoals,
-            icon: const Icon(Icons.tune_rounded, color: AppColors.orange),
+            icon: const Icon(Icons.tune_rounded),
           ),
         ],
       ),
-      body: _loading || _score == null
-          ? const Center(child: CircularProgressIndicator(color: AppColors.orange))
-          : SingleChildScrollView(
-              padding: const EdgeInsets.fromLTRB(16, 8, 16, 24),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  Container(
-                    padding: const EdgeInsets.all(12),
-                    decoration: BoxDecoration(
-                      color: AppColors.white,
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                    child: Text(
-                      _profile.hasConditions
-                          ? 'Режим: ${_profile.conditions.map((e) => e.label).join(', ')}. Фундамент учитывает эти особенности.'
-                          : 'Фундамент собирается из сна, настроения, энергии и регулярности. Каждый кирпич — шаг к вашей личной цели.',
-                      style: GoogleFonts.alegreyaSans(
-                        fontSize: 13,
-                        color: AppColors.textDark.withValues(alpha: 0.8),
-                      ),
-                    ),
-                  ),
-                  const SizedBox(height: 10),
-                  _FoundationHero(score: _score!),
+      body: SafeArea(
+        top: false,
+        bottom: false,
+        child: _loading || _score == null
+            ? const Center(child: CircularProgressIndicator(color: AppColors.orange))
+            : SingleChildScrollView(
+                padding: const EdgeInsets.fromLTRB(16, 4, 16, 20),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    _FoundationHero(score: _score!),
                   const SizedBox(height: 10),
                   _HistoryStrip(history: _score!.history30d),
                   const SizedBox(height: 12),
@@ -338,6 +333,7 @@ class _FoundationScreenState extends State<FoundationScreen> {
                 ],
               ),
             ),
+      ),
       bottomNavigationBar: widget.embeddedInShell
           ? null
           : AppBottomNavBar(
@@ -359,19 +355,19 @@ class _FoundationHero extends StatelessWidget {
     const rows = [12, 10, 8, 6, 4];
     var filledLeft = score.filledBricks;
     return Container(
-      padding: const EdgeInsets.all(16),
+      padding: const EdgeInsets.fromLTRB(14, 12, 14, 14),
       decoration: BoxDecoration(
         color: AppColors.white,
-        borderRadius: BorderRadius.circular(18),
-        border: Border.all(color: AppColors.orange.withValues(alpha: 0.3)),
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: AppColors.orange.withValues(alpha: 0.28)),
       ),
       child: Column(
         children: [
           Text(
             'Фундамент благосостояния',
-            style: GoogleFonts.alegreyaSans(fontSize: 16, fontWeight: FontWeight.w800),
+            style: GoogleFonts.alegreyaSans(fontSize: 15, fontWeight: FontWeight.w800),
           ),
-          const SizedBox(height: 6),
+          const SizedBox(height: 4),
           Text(
             '$pct% к вашей цели',
             style: GoogleFonts.alegreyaSans(
@@ -521,7 +517,7 @@ class _HistoryStrip extends StatelessWidget {
     if (history.isEmpty) return const SizedBox.shrink();
     final maxVal = history.reduce((a, b) => a > b ? a : b).toDouble().clamp(1.0, 40.0);
     return Container(
-      padding: const EdgeInsets.all(12),
+      padding: const EdgeInsets.fromLTRB(10, 8, 10, 10),
       decoration: BoxDecoration(
         color: AppColors.white,
         borderRadius: BorderRadius.circular(12),
@@ -532,14 +528,14 @@ class _HistoryStrip extends StatelessWidget {
           Text(
             'История фундамента (30 дней)',
             style: GoogleFonts.alegreyaSans(
-              fontSize: 13,
+              fontSize: 12,
               fontWeight: FontWeight.w700,
               color: AppColors.textDark,
             ),
           ),
-          const SizedBox(height: 8),
+          const SizedBox(height: 6),
           SizedBox(
-            height: 34,
+            height: 28,
             child: Row(
               crossAxisAlignment: CrossAxisAlignment.end,
               children: history
@@ -548,7 +544,7 @@ class _HistoryStrip extends StatelessWidget {
                       child: Padding(
                         padding: const EdgeInsets.symmetric(horizontal: 0.5),
                         child: Container(
-                          height: ((v / maxVal) * 30).clamp(2.0, 30.0),
+                          height: ((v / maxVal) * 26).clamp(2.0, 26.0),
                           decoration: BoxDecoration(
                             color: AppColors.orange.withValues(alpha: 0.75),
                             borderRadius: BorderRadius.circular(2),
