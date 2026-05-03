@@ -4,6 +4,7 @@ import 'package:google_fonts/google_fonts.dart';
 
 import '../models/aggregated_data.dart';
 import '../services/insights_service.dart';
+import '../services/stats_period_sync.dart';
 import '../theme/app_colors.dart';
 import '../theme/peach_app_bar.dart';
 import '../widgets/app_bottom_nav.dart';
@@ -20,34 +21,54 @@ class GoalsScreen extends StatefulWidget {
   final ValueChanged<BottomNavTab>? onNavigateTab;
 
   @override
-  State<GoalsScreen> createState() => _GoalsScreenState();
+  State<GoalsScreen> createState() => GoalsScreenState();
 }
 
-class _GoalsScreenState extends State<GoalsScreen> {
+class GoalsScreenState extends State<GoalsScreen> {
   AggregatedData? _data;
   String? _error;
   bool _loading = true;
+  int _loadSerial = 0;
+  String _periodCaption = 'Все сохранённые данные';
 
   @override
   void initState() {
     super.initState();
-    _load();
+    _load(showLoading: true);
   }
 
-  Future<void> _load() async {
-    setState(() {
-      _loading = true;
-      _error = null;
-    });
+  /// Подтянуть агрегаты с диска (например после сброса на другой вкладке в [AppShell]).
+  Future<void> reloadAggregatesFromShell() => _load(showLoading: false);
+
+  Future<void> _load({required bool showLoading}) async {
+    final serial = ++_loadSerial;
+    if (showLoading) {
+      setState(() {
+        _loading = true;
+        _error = null;
+      });
+    } else if (mounted) {
+      setState(() => _error = null);
+    }
     try {
-      final data = await InsightsService.instance.aggregateData();
-      if (!mounted) return;
+      final (rs, re) = await StatsPeriodSync.loadRange();
+      final data = await InsightsService.instance.aggregateData(
+        rangeStart: rs,
+        rangeEnd: re,
+      );
+      if (!mounted || serial != _loadSerial) return;
       setState(() {
         _data = data;
         _loading = false;
+        if (rs != null && re != null) {
+          _periodCaption =
+              'Период как в статистике: ${StatsPeriodSync.formatRangeRu(rs, re)}';
+        } else {
+          _periodCaption = 'Все сохранённые данные (неделя задаётся на «Статистике»)';
+        }
       });
     } catch (e) {
-      if (!mounted) return;
+      if (!mounted || serial != _loadSerial) return;
       setState(() {
         _error = '$e';
         _loading = false;
@@ -123,8 +144,10 @@ class _GoalsScreenState extends State<GoalsScreen> {
 
     return FoundationScreen(
       data: _data!,
+      periodCaption: _periodCaption,
       embeddedInShell: widget.embeddedInShell,
       onNavigateTab: widget.onNavigateTab,
+      onAggregateReload: () => _load(showLoading: false),
     );
   }
 }

@@ -15,6 +15,7 @@ import '../services/insights_service.dart';
 import '../services/notification_service.dart';
 import '../services/offline_validation_service.dart';
 import '../services/quality_metrics_service.dart';
+import '../services/stats_period_sync.dart';
 import '../theme/app_colors.dart';
 import '../theme/peach_app_bar.dart';
 import '../utils/stats_helpers.dart';
@@ -60,6 +61,7 @@ class _StatisticsScreenState extends State<StatisticsScreen> {
     _loadMode();
     _loadProfile();
     _load();
+    unawaited(StatsPeriodSync.persistWeekContaining(_selectedDate));
   }
 
   Future<void> _loadProfile() async {
@@ -74,8 +76,10 @@ class _StatisticsScreenState extends State<StatisticsScreen> {
     setState(() => _abMode = mode);
   }
 
-  Future<void> _load() async {
-    setState(() => _loading = true);
+  Future<void> _load({bool blocking = true}) async {
+    if (blocking && mounted) {
+      setState(() => _loading = true);
+    }
     try {
       final data = await InsightsService.instance.aggregateData();
       final result = await InsightsService.instance.getInsights(data);
@@ -88,6 +92,7 @@ class _StatisticsScreenState extends State<StatisticsScreen> {
           _qualityMetrics = metrics;
           _loading = false;
         });
+        unawaited(StatsPeriodSync.persistWeekContaining(_selectedDate));
       }
       unawaited(_refreshOfflineMetricsInBackground());
     } catch (e) {
@@ -98,6 +103,11 @@ class _StatisticsScreenState extends State<StatisticsScreen> {
         });
       }
     }
+  }
+
+  Future<void> _onPullToRefresh() async {
+    await _loadProfile();
+    await _load(blocking: false);
   }
 
   Future<void> _refreshOfflineMetricsInBackground() async {
@@ -204,13 +214,8 @@ class _StatisticsScreenState extends State<StatisticsScreen> {
                 MaterialPageRoute(builder: (_) => const UserProfileScreen()),
               );
               await _loadProfile();
-              await _load();
+              await _load(blocking: false);
             },
-          ),
-          IconButton(
-            style: peachAppBarCircleIconButtonStyle(),
-            icon: const Icon(Icons.refresh_rounded),
-            onPressed: _loading ? null : _load,
           ),
         ],
       ),
@@ -243,13 +248,22 @@ class _StatisticsScreenState extends State<StatisticsScreen> {
                     child: UnifiedHorizontalDateStrip(
                       days: _stripDays,
                       selectedDay: _selectedDate,
-                      onDaySelected: (d) => setState(() {
-                        _selectedDate = d;
-                        _viewWeek = true;
-                      }),
+                      onDaySelected: (d) {
+                        setState(() {
+                          _selectedDate = d;
+                          _viewWeek = true;
+                        });
+                        unawaited(StatsPeriodSync.persistWeekContaining(d));
+                      },
                     ),
                   ),
-                  Expanded(child: _buildContentBelowStrip()),
+                  Expanded(
+                    child: RefreshIndicator(
+                      color: AppColors.orange,
+                      onRefresh: _onPullToRefresh,
+                      child: _buildContentBelowStrip(),
+                    ),
+                  ),
                 ],
               ),
       ),
@@ -509,6 +523,7 @@ class _StatisticsScreenState extends State<StatisticsScreen> {
     if (_insight == null) return const SizedBox.shrink();
     if (_insight!.hasError) {
       return SingleChildScrollView(
+        physics: const AlwaysScrollableScrollPhysics(),
         padding: const EdgeInsets.fromLTRB(16, 16, 16, 100),
         child: _buildError(_insight!.error!),
       );
@@ -538,6 +553,7 @@ class _StatisticsScreenState extends State<StatisticsScreen> {
         .toList();
 
     return SingleChildScrollView(
+      physics: const AlwaysScrollableScrollPhysics(),
       padding: const EdgeInsets.fromLTRB(16, 16, 16, 100),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -648,21 +664,21 @@ class _StatisticsScreenState extends State<StatisticsScreen> {
             children: [
               Expanded(
                 child: _buildRing(
-                  value: stats.avgMood != null ? stats.avgMood! / 10 : 0,
+                  rawOutOf10: stats.avgMood,
                   label: 'Настроение',
                   color: AppColors.orange,
                 ),
               ),
               Expanded(
                 child: _buildRing(
-                  value: stats.avgSleep != null ? stats.avgSleep! / 10 : 0,
+                  rawOutOf10: stats.avgSleep,
                   label: 'Сон',
                   color: AppColors.lavender,
                 ),
               ),
               Expanded(
                 child: _buildRing(
-                  value: stats.avgEnergy != null ? stats.avgEnergy! / 10 : 0,
+                  rawOutOf10: stats.avgEnergy,
                   label: 'Энергия',
                   color: AppColors.lightGreen,
                 ),
@@ -678,30 +694,6 @@ class _StatisticsScreenState extends State<StatisticsScreen> {
               spacing: 8,
               runSpacing: 8,
               children: [
-                if (stats.avgMood != null)
-                  _buildMetricCard(
-                    cardWidth,
-                    'Настроение',
-                    '${stats.avgMood!.toStringAsFixed(1)}/10',
-                    Icons.mood_rounded,
-                    const [Color(0xFFFFAB6D), Color(0xFFFF8A65)],
-                  ),
-                if (stats.avgSleep != null)
-                  _buildMetricCard(
-                    cardWidth,
-                    'Качество сна',
-                    '${stats.avgSleep!.toStringAsFixed(1)}/10',
-                    Icons.bedtime_rounded,
-                    [AppColors.lavender, AppColors.purple],
-                  ),
-                if (stats.avgEnergy != null)
-                  _buildMetricCard(
-                    cardWidth,
-                    'Энергия',
-                    '${stats.avgEnergy!.toStringAsFixed(1)}/10',
-                    Icons.bolt_rounded,
-                    [AppColors.lightGreen, const Color(0xFF81C784)],
-                  ),
                 _buildMetricCard(
                   cardWidth,
                   'Заметок',
@@ -733,11 +725,12 @@ class _StatisticsScreenState extends State<StatisticsScreen> {
   }
 
   Widget _buildRing({
-    required double value,
+    required double? rawOutOf10,
     required String label,
     required Color color,
   }) {
-    final progress = value.clamp(0.0, 1.0);
+    final progress =
+        rawOutOf10 != null ? (rawOutOf10 / 10).clamp(0.0, 1.0) : 0.0;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.center,
       children: [
@@ -755,14 +748,42 @@ class _StatisticsScreenState extends State<StatisticsScreen> {
                   backgroundColor: Colors.white.withValues(alpha: 0.2),
                 ),
               ),
-              Text(
-                progress > 0 ? (progress * 10).toStringAsFixed(0) : '—',
-                style: GoogleFonts.alegreyaSans(
-                  fontSize: 14,
-                  fontWeight: FontWeight.w700,
-                  color: AppColors.white,
+              if (rawOutOf10 == null)
+                Text(
+                  '—',
+                  style: GoogleFonts.alegreyaSans(
+                    fontSize: 14,
+                    fontWeight: FontWeight.w700,
+                    color: AppColors.white,
+                  ),
+                )
+              else
+                FittedBox(
+                  fit: BoxFit.scaleDown,
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Text(
+                        rawOutOf10.toStringAsFixed(1),
+                        style: GoogleFonts.alegreyaSans(
+                          fontSize: 13,
+                          fontWeight: FontWeight.w800,
+                          height: 1.0,
+                          color: AppColors.white,
+                        ),
+                      ),
+                      Text(
+                        '/10',
+                        style: GoogleFonts.alegreyaSans(
+                          fontSize: 9,
+                          fontWeight: FontWeight.w600,
+                          height: 1.0,
+                          color: Colors.white.withValues(alpha: 0.75),
+                        ),
+                      ),
+                    ],
+                  ),
                 ),
-              ),
             ],
           ),
         ),

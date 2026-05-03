@@ -7,6 +7,7 @@ import '../models/calendar_entry.dart';
 import '../models/note_item.dart';
 import '../models/state_entries.dart';
 import 'calendar_storage.dart';
+import 'foundation_service.dart';
 import 'notes_storage.dart';
 import 'secure_kv_service.dart';
 import 'state_storage.dart';
@@ -381,11 +382,16 @@ class DevDataSeedService {
       'insights_ab_mode',
       'insights_ab_updated_at',
       'insights_ab_manual_mode',
+      'stats_foundation_sync_week_start_v1',
+      'stats_foundation_sync_week_end_v1',
+      'foundation_overall_display_smooth_v1',
+      'foundation_weight_survey_v1',
     ];
     final prefs = await SharedPreferences.getInstance();
     for (final key in keys) {
       await SecureKvService.instance.delete(key);
       await prefs.remove(key);
     }
+    await FoundationService.instance.clearQuestDoneDate();
   }
 }

@@ -19,13 +19,19 @@ class FoundationScreen extends StatefulWidget {
   const FoundationScreen({
     super.key,
     required this.data,
+    required this.periodCaption,
     this.embeddedInShell = false,
     this.onNavigateTab,
+    this.onAggregateReload,
   });
 
   final AggregatedData data;
+  final String periodCaption;
   final bool embeddedInShell;
   final ValueChanged<BottomNavTab>? onNavigateTab;
+
+  /// Перезагрузка агрегатов у родителя ([GoalsScreen]) перед пересчётом фундамента (pull-to-refresh).
+  final Future<void> Function()? onAggregateReload;
 
   @override
   State<FoundationScreen> createState() => _FoundationScreenState();
@@ -44,18 +50,51 @@ class _FoundationScreenState extends State<FoundationScreen> {
     _load();
   }
 
+  @override
+  void didUpdateWidget(covariant FoundationScreen oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if ((oldWidget.data != widget.data || oldWidget.periodCaption != widget.periodCaption) &&
+        !_loading) {
+      _recomputeScore();
+    }
+  }
+
+  Future<void> _recomputeScore() async {
+    final raw = FoundationService.instance.compute(
+      widget.data,
+      _goals,
+      statsPeriodCaption: widget.periodCaption,
+    );
+    final scored = await FoundationService.instance.applyDisplaySmoothing(raw);
+    if (!mounted) return;
+    setState(() => _score = scored);
+  }
+
   Future<void> _load() async {
     final goals = await FoundationService.instance.loadGoals();
     final done = await FoundationService.instance.isQuestDoneToday();
     final profile = await UserProfileService.instance.load();
+    final raw = FoundationService.instance.compute(
+      widget.data,
+      goals,
+      statsPeriodCaption: widget.periodCaption,
+    );
+    final scored = await FoundationService.instance.applyDisplaySmoothing(raw);
     if (!mounted) return;
     setState(() {
       _goals = goals;
       _profile = profile;
-      _score = FoundationService.instance.compute(widget.data, goals);
+      _score = scored;
       _questDone = done;
       _loading = false;
     });
+    if (!mounted) return;
+    final surveyDone = await FoundationService.instance.isWeightSurveyDone();
+    if (!surveyDone && mounted) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) _offerWeightSurvey();
+      });
+    }
   }
 
   Future<void> _editGoals() async {
@@ -169,9 +208,16 @@ class _FoundationScreenState extends State<FoundationScreen> {
     );
     await FoundationService.instance.saveGoals(next);
     if (!mounted) return;
+    final raw = FoundationService.instance.compute(
+      widget.data,
+      next,
+      statsPeriodCaption: widget.periodCaption,
+    );
+    final scored = await FoundationService.instance.applyDisplaySmoothing(raw);
+    if (!mounted) return;
     setState(() {
       _goals = next;
-      _score = FoundationService.instance.compute(widget.data, next);
+      _score = scored;
     });
   }
 
@@ -179,6 +225,253 @@ class _FoundationScreenState extends State<FoundationScreen> {
     await FoundationService.instance.setQuestDoneToday(value);
     if (!mounted) return;
     setState(() => _questDone = value);
+  }
+
+  Future<void> _onPullRefresh() async {
+    if (widget.onAggregateReload != null) {
+      await widget.onAggregateReload!();
+    }
+    await _load();
+  }
+
+  void _openStatistics() {
+    if (widget.embeddedInShell && widget.onNavigateTab != null) {
+      widget.onNavigateTab!(BottomNavTab.statistics);
+      return;
+    }
+    Navigator.pushReplacement(
+      context,
+      MaterialPageRoute<void>(builder: (_) => const StatisticsScreen()),
+    );
+  }
+
+  void _showPrivacyDialog() {
+    showDialog<void>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: Text(
+          'Конфиденциальность',
+          style: GoogleFonts.alegreyaSans(fontWeight: FontWeight.w800),
+        ),
+        content: SingleChildScrollView(
+          child: Text(
+            'Фундамент и статистика считаются только на этом устройстве. '
+            'Данные не отправляются на сервер, если вы сами не экспортируете их. '
+            'Сброс в разработчике удаляет локальные файлы и настройки.',
+            style: GoogleFonts.alegreyaSans(
+              fontSize: 14,
+              height: 1.35,
+              color: AppColors.textDark.withValues(alpha: 0.88),
+            ),
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('Понятно'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _showHistoryDayDetail(FoundationHistoryDayDetail d) {
+    final day = d.windowEndDay;
+    showDialog<void>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: Text(
+          '${day.day}.${day.month.toString().padLeft(2, '0')}.${day.year}',
+          style: GoogleFonts.alegreyaSans(fontWeight: FontWeight.w800),
+        ),
+        content: Text(
+          'Окно 14 дней, заканчивающееся в этот день: кирпичей ${d.bricks}.\n'
+          'В окне: заметок ${d.notesCount}, записей «+» ${d.stateCount}, '
+          'записей календаря ${d.calendarCount}.',
+          style: GoogleFonts.alegreyaSans(
+            fontSize: 14,
+            height: 1.35,
+            color: AppColors.textDark.withValues(alpha: 0.88),
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('Закрыть'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Future<void> _offerWeightSurvey() async {
+    final pick = await showModalBottomSheet<String>(
+      context: context,
+      backgroundColor: AppColors.white,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(18)),
+      ),
+      builder: (ctx) {
+        return SafeArea(
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(20, 16, 20, 24),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Text(
+                  'Что для вас сейчас важнее?',
+                  textAlign: TextAlign.center,
+                  style: GoogleFonts.alegreyaSans(
+                    fontSize: 18,
+                    fontWeight: FontWeight.w800,
+                  ),
+                ),
+                const SizedBox(height: 6),
+                Text(
+                  'Мы слегка сдвинем веса сфер; цели по цифрам можно настроить в шестерёнке.',
+                  textAlign: TextAlign.center,
+                  style: GoogleFonts.alegreyaSans(
+                    fontSize: 13,
+                    color: AppColors.textDark.withValues(alpha: 0.72),
+                  ),
+                ),
+                const SizedBox(height: 16),
+                FilledButton(
+                  onPressed: () => Navigator.pop(ctx, 'sleep'),
+                  style: FilledButton.styleFrom(backgroundColor: AppColors.orange),
+                  child: const Text('Сон'),
+                ),
+                const SizedBox(height: 8),
+                FilledButton(
+                  onPressed: () => Navigator.pop(ctx, 'mood'),
+                  style: FilledButton.styleFrom(backgroundColor: AppColors.orange),
+                  child: const Text('Настроение'),
+                ),
+                const SizedBox(height: 8),
+                FilledButton(
+                  onPressed: () => Navigator.pop(ctx, 'energy'),
+                  style: FilledButton.styleFrom(backgroundColor: AppColors.orange),
+                  child: const Text('Энергия'),
+                ),
+                const SizedBox(height: 8),
+                TextButton(
+                  onPressed: () => Navigator.pop(ctx, 'skip'),
+                  child: const Text('Пропустить'),
+                ),
+              ],
+            ),
+          ),
+        );
+      },
+    );
+    if (pick == null || !mounted) return;
+    if (pick == 'skip') {
+      await FoundationService.instance.markWeightSurveyDone();
+      return;
+    }
+    if (pick == 'sleep' || pick == 'mood' || pick == 'energy') {
+      await FoundationService.instance.applyPresetWeightsForPrimary(pick);
+      final goals = await FoundationService.instance.loadGoals();
+      if (!mounted) return;
+      setState(() => _goals = goals);
+      await _recomputeScore();
+    }
+  }
+
+  Widget _buildMissionAndLinks() {
+    final s = _score!;
+    return Container(
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: AppColors.white,
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: AppColors.orange.withValues(alpha: 0.22)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Text(
+            s.missionTitle,
+            style: GoogleFonts.alegreyaSans(fontSize: 15, fontWeight: FontWeight.w800),
+          ),
+          const SizedBox(height: 6),
+          Text(
+            s.missionBody,
+            style: GoogleFonts.alegreyaSans(
+              fontSize: 13,
+              height: 1.35,
+              color: AppColors.textDark.withValues(alpha: 0.82),
+            ),
+          ),
+          const SizedBox(height: 10),
+          Wrap(
+            spacing: 8,
+            runSpacing: 8,
+            children: [
+              TextButton.icon(
+                onPressed: _showPrivacyDialog,
+                icon: const Icon(Icons.lock_outline, size: 18),
+                label: const Text('Конфиденциальность'),
+              ),
+              FilledButton.tonalIcon(
+                onPressed: _openStatistics,
+                icon: const Icon(Icons.insights_outlined, size: 18),
+                label: const Text('Открыть статистику'),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildWeeklyCard() {
+    final s = _score!;
+    return Container(
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: AppColors.white,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: AppColors.lavender.withValues(alpha: 0.35)),
+      ),
+      child: Row(
+        children: [
+          Icon(Icons.flag_outlined, color: AppColors.orange.withValues(alpha: 0.9)),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  s.weeklyFocusTitle,
+                  style: GoogleFonts.alegreyaSans(fontSize: 14, fontWeight: FontWeight.w800),
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  s.weeklyFocusSubtitle,
+                  style: GoogleFonts.alegreyaSans(
+                    fontSize: 13,
+                    color: AppColors.textDark.withValues(alpha: 0.75),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildPeriodAndStatsRow() {
+    return Text(
+      _score!.statsPeriodCaption,
+      style: GoogleFonts.alegreyaSans(
+        fontSize: 12,
+        fontWeight: FontWeight.w600,
+        color: AppColors.textDark.withValues(alpha: 0.62),
+      ),
+    );
   }
 
   String _profileAdjustedNextStep(String base) {
@@ -277,16 +570,47 @@ class _FoundationScreenState extends State<FoundationScreen> {
         bottom: false,
         child: _loading || _score == null
             ? const Center(child: CircularProgressIndicator(color: AppColors.orange))
-            : SingleChildScrollView(
-                padding: const EdgeInsets.fromLTRB(16, 4, 16, 20),
-                child: Column(
+            : RefreshIndicator(
+                color: AppColors.orange,
+                onRefresh: _onPullRefresh,
+                child: SingleChildScrollView(
+                  physics: const AlwaysScrollableScrollPhysics(),
+                  padding: const EdgeInsets.fromLTRB(16, 4, 16, 20),
+                  child: Column(
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
                     _FoundationHero(score: _score!),
-                  const SizedBox(height: 10),
-                  _HistoryStrip(history: _score!.history30d),
-                  const SizedBox(height: 12),
-                  ..._score!.spheres.map((s) => _SphereTile(sphere: s)),
+                    const SizedBox(height: 10),
+                    _buildMissionAndLinks(),
+                    const SizedBox(height: 10),
+                    _buildWeeklyCard(),
+                    const SizedBox(height: 8),
+                    _buildPeriodAndStatsRow(),
+                    if (_score!.medicationAdherenceRate != null) ...[
+                      const SizedBox(height: 6),
+                      Text(
+                        _score!.medicationAdherenceCaption,
+                        style: GoogleFonts.alegreyaSans(
+                          fontSize: 12,
+                          color: AppColors.textDark.withValues(alpha: 0.72),
+                        ),
+                      ),
+                    ],
+                    if (_score!.spheres.any((s) => !s.hasMetricSamples && s.id != 'consistency')) ...[
+                      const SizedBox(height: 10),
+                      FilledButton.tonalIcon(
+                        onPressed: () => showStateCategoriesSheet(context),
+                        icon: const Icon(Icons.add_rounded),
+                        label: const Text('Добавить запись («+»)'),
+                      ),
+                    ],
+                    const SizedBox(height: 10),
+                    _HistoryStrip(
+                      score: _score!,
+                      onBarTap: _showHistoryDayDetail,
+                    ),
+                    const SizedBox(height: 12),
+                    ..._score!.spheres.map((s) => _SphereTile(sphere: s)),
                   const SizedBox(height: 12),
                   Container(
                     padding: const EdgeInsets.all(14),
@@ -331,6 +655,7 @@ class _FoundationScreenState extends State<FoundationScreen> {
                     ),
                   ),
                 ],
+                ),
               ),
             ),
       ),
@@ -375,6 +700,17 @@ class _FoundationHero extends StatelessWidget {
               color: AppColors.textDark.withValues(alpha: 0.75),
             ),
           ),
+          if ((score.overallProgress - score.rawOverallProgress).abs() > 0.02) ...[
+            const SizedBox(height: 4),
+            Text(
+              'Сырое значение: ${(score.rawOverallProgress * 100).round()}% (сглаживание снижает скачки от дня к дню).',
+              textAlign: TextAlign.center,
+              style: GoogleFonts.alegreyaSans(
+                fontSize: 11,
+                color: AppColors.textDark.withValues(alpha: 0.55),
+              ),
+            ),
+          ],
           const SizedBox(height: 14),
           Wrap(
             spacing: 8,
@@ -395,6 +731,17 @@ class _FoundationHero extends StatelessWidget {
               ),
             ],
           ),
+          if (score.riskCracks > 0 && score.riskCracksExplanation != null) ...[
+            const SizedBox(height: 6),
+            Text(
+              score.riskCracksExplanation!,
+              textAlign: TextAlign.center,
+              style: GoogleFonts.alegreyaSans(
+                fontSize: 11,
+                color: AppColors.textDark.withValues(alpha: 0.65),
+              ),
+            ),
+          ],
           const SizedBox(height: 10),
           ...rows.map((count) {
             return Padding(
@@ -417,17 +764,25 @@ class _FoundationHero extends StatelessWidget {
               ),
             );
           }),
-          if (score.confidenceCap) ...[
-            const SizedBox(height: 8),
-            Text(
-              score.userHint,
-              textAlign: TextAlign.center,
-              style: GoogleFonts.alegreyaSans(
-                fontSize: 12,
-                color: AppColors.textDark.withValues(alpha: 0.65),
-              ),
+          const SizedBox(height: 10),
+          Text(
+            score.dataSourcesSummary,
+            textAlign: TextAlign.center,
+            style: GoogleFonts.alegreyaSans(
+              fontSize: 11,
+              fontWeight: FontWeight.w600,
+              color: AppColors.textDark.withValues(alpha: 0.55),
             ),
-          ],
+          ),
+          const SizedBox(height: 6),
+          Text(
+            score.userHint,
+            textAlign: TextAlign.center,
+            style: GoogleFonts.alegreyaSans(
+              fontSize: 12,
+              color: AppColors.textDark.withValues(alpha: 0.65),
+            ),
+          ),
         ],
       ),
     );
@@ -495,8 +850,10 @@ class _SphereTile extends StatelessWidget {
           const SizedBox(height: 6),
           Text(
             sphere.id == 'consistency'
-                ? 'Регулярность: ${(sphere.current * 100).round()}% активных дней'
-                : 'Текущее: ${sphere.current.toStringAsFixed(1)} / Цель: ${sphere.target.toStringAsFixed(1)} • вес x${sphere.weight.toStringAsFixed(1)}',
+                ? 'Регулярность: ${(sphere.current * 100).round()}% активных дней (заметки, «+», календарь).'
+                : (!sphere.hasMetricSamples
+                    ? 'Нет записей этой метрики в «+» — шкала обновится после первых данных. Цель: ${sphere.target.toStringAsFixed(1)}.'
+                    : 'Текущее: ${sphere.current.toStringAsFixed(1)} / Цель: ${sphere.target.toStringAsFixed(1)} • вес x${sphere.weight.toStringAsFixed(1)}'),
             style: GoogleFonts.alegreyaSans(
               fontSize: 12,
               color: AppColors.textDark.withValues(alpha: 0.68),
@@ -509,13 +866,20 @@ class _SphereTile extends StatelessWidget {
 }
 
 class _HistoryStrip extends StatelessWidget {
-  const _HistoryStrip({required this.history});
-  final List<int> history;
+  const _HistoryStrip({
+    required this.score,
+    required this.onBarTap,
+  });
+
+  final FoundationScore score;
+  final void Function(FoundationHistoryDayDetail d) onBarTap;
 
   @override
   Widget build(BuildContext context) {
+    final history = score.history30d;
     if (history.isEmpty) return const SizedBox.shrink();
     final maxVal = history.reduce((a, b) => a > b ? a : b).toDouble().clamp(1.0, 40.0);
+    final details = score.historyDayDetails;
     return Container(
       padding: const EdgeInsets.fromLTRB(10, 8, 10, 10),
       decoration: BoxDecoration(
@@ -533,27 +897,38 @@ class _HistoryStrip extends StatelessWidget {
               color: AppColors.textDark,
             ),
           ),
+          Text(
+            'Нажмите на столбик — что вошло в окно.',
+            style: GoogleFonts.alegreyaSans(
+              fontSize: 11,
+              color: AppColors.textDark.withValues(alpha: 0.55),
+            ),
+          ),
           const SizedBox(height: 6),
           SizedBox(
             height: 28,
             child: Row(
               crossAxisAlignment: CrossAxisAlignment.end,
-              children: history
-                  .map(
-                    (v) => Expanded(
-                      child: Padding(
-                        padding: const EdgeInsets.symmetric(horizontal: 0.5),
-                        child: Container(
-                          height: ((v / maxVal) * 26).clamp(2.0, 26.0),
-                          decoration: BoxDecoration(
-                            color: AppColors.orange.withValues(alpha: 0.75),
-                            borderRadius: BorderRadius.circular(2),
-                          ),
+              children: List.generate(history.length, (i) {
+                final v = history[i];
+                final detail = i < details.length ? details[i] : null;
+                return Expanded(
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 0.5),
+                    child: GestureDetector(
+                      behavior: HitTestBehavior.opaque,
+                      onTap: detail == null ? null : () => onBarTap(detail),
+                      child: Container(
+                        height: ((v / maxVal) * 26).clamp(2.0, 26.0),
+                        decoration: BoxDecoration(
+                          color: AppColors.orange.withValues(alpha: 0.75),
+                          borderRadius: BorderRadius.circular(2),
                         ),
                       ),
                     ),
-                  )
-                  .toList(),
+                  ),
+                );
+              }),
             ),
           ),
         ],
