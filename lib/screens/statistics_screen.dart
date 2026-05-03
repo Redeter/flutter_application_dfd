@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 
@@ -22,7 +24,10 @@ import 'state_categories_sheet.dart';
 import 'user_profile_screen.dart';
 
 class StatisticsScreen extends StatefulWidget {
-  const StatisticsScreen({super.key});
+  const StatisticsScreen({super.key, this.embeddedInShell = false});
+
+  /// Внутри [AppShell]: без нижней панели и без повторной навигации по вкладкам.
+  final bool embeddedInShell;
 
   @override
   State<StatisticsScreen> createState() => _StatisticsScreenState();
@@ -72,13 +77,6 @@ class _StatisticsScreenState extends State<StatisticsScreen> {
       final data = await InsightsService.instance.aggregateData();
       final result = await InsightsService.instance.getInsights(data);
       await QualityMetricsService.instance.registerInsightShown(result, data);
-      final offline = await OfflineValidationService.instance.evaluate(
-        (sample) => InsightsService.instance.getInsights(sample),
-      );
-      await QualityMetricsService.instance.saveOfflineValidation(
-        score: offline.score,
-        cases: offline.totalCases,
-      );
       final metrics = await QualityMetricsService.instance.getMetrics();
       if (mounted) {
         setState(() {
@@ -88,6 +86,7 @@ class _StatisticsScreenState extends State<StatisticsScreen> {
           _loading = false;
         });
       }
+      unawaited(_refreshOfflineMetricsInBackground());
     } catch (e) {
       if (mounted) {
         setState(() {
@@ -95,6 +94,44 @@ class _StatisticsScreenState extends State<StatisticsScreen> {
           _loading = false;
         });
       }
+    }
+  }
+
+  Future<void> _refreshOfflineMetricsInBackground() async {
+    try {
+      final offline = await OfflineValidationService.instance.evaluate(
+        (sample) => InsightsService.instance.getInsights(sample),
+      );
+      await QualityMetricsService.instance.saveOfflineValidation(
+        score: offline.score,
+        cases: offline.totalCases,
+      );
+      final metrics = await QualityMetricsService.instance.getMetrics();
+      if (!mounted) return;
+      setState(() => _qualityMetrics = metrics);
+    } catch (_) {}
+  }
+
+  void _onBottomNavTab(BottomNavTab tab) {
+    if (widget.embeddedInShell) return;
+    switch (tab) {
+      case BottomNavTab.statistics:
+        return;
+      case BottomNavTab.notes:
+        Navigator.pushReplacement(
+          context,
+          MaterialPageRoute(builder: (_) => const NotesScreen()),
+        );
+      case BottomNavTab.calendar:
+        Navigator.pushReplacement(
+          context,
+          MaterialPageRoute(builder: (_) => const CalendarScreen()),
+        );
+      case BottomNavTab.articles:
+        Navigator.pushReplacement(
+          context,
+          MaterialPageRoute(builder: (_) => const GoalsScreen()),
+        );
     }
   }
 
@@ -120,10 +157,13 @@ class _StatisticsScreenState extends State<StatisticsScreen> {
       appBar: AppBar(
         backgroundColor: Colors.transparent,
         elevation: 0,
-        leading: IconButton(
-          icon: const Icon(Icons.arrow_back, color: AppColors.orange),
-          onPressed: () => Navigator.pop(context),
-        ),
+        automaticallyImplyLeading: !widget.embeddedInShell,
+        leading: widget.embeddedInShell
+            ? null
+            : IconButton(
+                icon: const Icon(Icons.arrow_back, color: AppColors.orange),
+                onPressed: () => Navigator.pop(context),
+              ),
         title: GestureDetector(
           onLongPress: _showHiddenDevActions,
           child: Text(
@@ -162,31 +202,13 @@ class _StatisticsScreenState extends State<StatisticsScreen> {
             ? const Center(child: CircularProgressIndicator(color: AppColors.orange))
             : _buildContent(),
       ),
-      bottomNavigationBar: AppBottomNavBar(
-        activeTab: BottomNavTab.statistics,
-        onTabSelected: (tab) {
-          switch (tab) {
-            case BottomNavTab.statistics:
-              return;
-            case BottomNavTab.notes:
-              Navigator.pushReplacement(
-                context,
-                MaterialPageRoute(builder: (_) => const NotesScreen()),
-              );
-            case BottomNavTab.calendar:
-              Navigator.pushReplacement(
-                context,
-                MaterialPageRoute(builder: (_) => const CalendarScreen()),
-              );
-            case BottomNavTab.articles:
-              Navigator.pushReplacement(
-                context,
-                MaterialPageRoute(builder: (_) => const GoalsScreen()),
-              );
-          }
-        },
-        onCenterTap: () => showStateCategoriesSheet(context),
-      ),
+      bottomNavigationBar: widget.embeddedInShell
+          ? null
+          : AppBottomNavBar(
+              activeTab: BottomNavTab.statistics,
+              onTabSelected: _onBottomNavTab,
+              onCenterTap: () => showStateCategoriesSheet(context),
+            ),
     );
   }
 

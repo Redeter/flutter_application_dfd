@@ -100,12 +100,13 @@ class _NoteEditScreenState extends State<NoteEditScreen> {
         fit: StackFit.expand,
         children: [
           const CreamBackgroundDecor(),
-          SafeArea(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                _buildDateStripSection(),
-                Expanded(
+          Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              _buildDateStripSection(),
+              Expanded(
+                child: SafeArea(
+                  top: false,
                   child: SingleChildScrollView(
                     padding: const EdgeInsets.fromLTRB(16, 14, 16, 32),
                     child: Column(
@@ -164,8 +165,8 @@ class _NoteEditScreenState extends State<NoteEditScreen> {
                     ),
                   ),
                 ),
-              ],
-            ),
+              ),
+            ],
           ),
         ],
       ),
@@ -174,17 +175,18 @@ class _NoteEditScreenState extends State<NoteEditScreen> {
 
   Widget _buildDateStripSection() {
     final days = _stripDays;
+    final topInset = MediaQuery.paddingOf(context).top;
     return Container(
       width: double.infinity,
       color: AppColors.headerPeach,
-      padding: const EdgeInsets.only(top: 6, bottom: 12),
+      padding: EdgeInsets.only(top: topInset + 6, bottom: 12),
       child: SizedBox(
         height: 118,
         child: ListView.separated(
           scrollDirection: Axis.horizontal,
           padding: const EdgeInsets.symmetric(horizontal: 12),
           itemCount: days.length,
-          separatorBuilder: (_, __) => const SizedBox(width: 8),
+          separatorBuilder: (_, __) => const SizedBox(width: 4),
           itemBuilder: (context, index) {
             final d = days[index];
             final today = DateTime.now();
@@ -322,7 +324,7 @@ class _NoteEditScreenState extends State<NoteEditScreen> {
               fontSize: 11,
               fontWeight: FontWeight.w800,
               letterSpacing: 0.3,
-              color: AppColors.orange,
+              color: AppColors.white,
             ),
           ),
           const SizedBox(height: 8),

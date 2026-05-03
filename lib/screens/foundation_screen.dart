@@ -17,9 +17,13 @@ class FoundationScreen extends StatefulWidget {
   const FoundationScreen({
     super.key,
     required this.data,
+    this.embeddedInShell = false,
+    this.onNavigateTab,
   });
 
   final AggregatedData data;
+  final bool embeddedInShell;
+  final ValueChanged<BottomNavTab>? onNavigateTab;
 
   @override
   State<FoundationScreen> createState() => _FoundationScreenState();
@@ -194,6 +198,10 @@ class _FoundationScreenState extends State<FoundationScreen> {
       Navigator.pop(context);
       return;
     }
+    if (widget.embeddedInShell && widget.onNavigateTab != null) {
+      widget.onNavigateTab!(BottomNavTab.statistics);
+      return;
+    }
     Navigator.pushReplacement(
       context,
       MaterialPageRoute(builder: (_) => const StatisticsScreen()),
@@ -201,6 +209,10 @@ class _FoundationScreenState extends State<FoundationScreen> {
   }
 
   void _onBottomTab(BottomNavTab tab) {
+    if (widget.embeddedInShell && widget.onNavigateTab != null) {
+      widget.onNavigateTab!(tab);
+      return;
+    }
     switch (tab) {
       case BottomNavTab.articles:
         return;
@@ -229,10 +241,13 @@ class _FoundationScreenState extends State<FoundationScreen> {
       appBar: AppBar(
         backgroundColor: Colors.transparent,
         elevation: 0,
-        leading: IconButton(
-          icon: const Icon(Icons.arrow_back, color: AppColors.orange),
-          onPressed: _goBack,
-        ),
+        automaticallyImplyLeading: !widget.embeddedInShell,
+        leading: widget.embeddedInShell
+            ? null
+            : IconButton(
+                icon: const Icon(Icons.arrow_back, color: AppColors.orange),
+                onPressed: _goBack,
+              ),
         title: Text(
           'Цели',
           style: GoogleFonts.alegreyaSans(
@@ -323,11 +338,13 @@ class _FoundationScreenState extends State<FoundationScreen> {
                 ],
               ),
             ),
-      bottomNavigationBar: AppBottomNavBar(
-        activeTab: BottomNavTab.articles,
-        onTabSelected: _onBottomTab,
-        onCenterTap: () => showStateCategoriesSheet(context),
-      ),
+      bottomNavigationBar: widget.embeddedInShell
+          ? null
+          : AppBottomNavBar(
+              activeTab: BottomNavTab.articles,
+              onTabSelected: _onBottomTab,
+              onCenterTap: () => showStateCategoriesSheet(context),
+            ),
     );
   }
 }

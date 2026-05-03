@@ -25,7 +25,9 @@ const _months = [
 String _formatDate(DateTime d) => '${d.day} ${_months[d.month - 1]}';
 
 class CalendarScreen extends StatefulWidget {
-  const CalendarScreen({super.key});
+  const CalendarScreen({super.key, this.embeddedInShell = false});
+
+  final bool embeddedInShell;
 
   @override
   State<CalendarScreen> createState() => _CalendarScreenState();
@@ -38,18 +40,22 @@ class _CalendarScreenState extends State<CalendarScreen> {
   @override
   void initState() {
     super.initState();
-    _load();
+    _loadEntries();
   }
 
-  Future<void> _load() async {
+  Future<void> _loadEntries() async {
     final date = _selectedDate;
     final list = await CalendarStorage.instance.loadForDate(date);
-    await NotificationService.instance.rescheduleCalendarNotifications();
     if (mounted && date.year == _selectedDate.year &&
         date.month == _selectedDate.month &&
         date.day == _selectedDate.day) {
       setState(() => _entries = list);
     }
+  }
+
+  Future<void> _reloadAfterCalendarMutation() async {
+    await NotificationService.instance.rescheduleCalendarNotifications();
+    await _loadEntries();
   }
 
   void _onDateChanged(DateTime d) {
@@ -60,7 +66,7 @@ class _CalendarScreenState extends State<CalendarScreen> {
     }
     setState(() => _selectedDate = d);
     Future<void>.delayed(const Duration(milliseconds: 50), () {
-      if (mounted) _load();
+      if (mounted) _loadEntries();
     });
   }
 
@@ -71,7 +77,7 @@ class _CalendarScreenState extends State<CalendarScreen> {
         builder: (_) => CalendarFullScreen(
           selectedDate: _selectedDate,
           onDateSelected: _onDateChanged,
-          onOpenDay: (_) => _load(),
+          onOpenDay: (_) => _loadEntries(),
           onAddAppointment: (d) async {
             Navigator.pop(context);
             _onDateChanged(d);
@@ -81,11 +87,11 @@ class _CalendarScreenState extends State<CalendarScreen> {
                 builder: (_) => AddAppointmentScreen(date: d),
               ),
             );
-            _load();
+            await _reloadAfterCalendarMutation();
           },
         ),
       ),
-    ).then((_) => _load());
+    ).then((_) => _loadEntries());
   }
 
   void _showAddChoice() {
@@ -135,7 +141,7 @@ class _CalendarScreenState extends State<CalendarScreen> {
         ),
       ),
     );
-    _load();
+    await _reloadAfterCalendarMutation();
   }
 
   Future<void> _openAddAppointment({Appointment? a}) async {
@@ -148,7 +154,7 @@ class _CalendarScreenState extends State<CalendarScreen> {
         ),
       ),
     );
-    _load();
+    await _reloadAfterCalendarMutation();
   }
 
   Future<void> _deleteEntry(CalendarEntry e) async {
@@ -162,7 +168,7 @@ class _CalendarScreenState extends State<CalendarScreen> {
     );
     if (ok == true) {
       await CalendarStorage.instance.delete(e.id);
-      _load();
+      await _reloadAfterCalendarMutation();
     }
   }
 
@@ -170,7 +176,7 @@ class _CalendarScreenState extends State<CalendarScreen> {
     await CalendarStorage.instance.save(
       m.copyWith(takenAt: DateTime.now()),
     );
-    _load();
+    await _reloadAfterCalendarMutation();
   }
 
   void _skipMedication(Medication m) {
@@ -191,6 +197,7 @@ class _CalendarScreenState extends State<CalendarScreen> {
   }
 
   void _onNavTab(BottomNavTab tab) {
+    if (widget.embeddedInShell) return;
     switch (tab) {
       case BottomNavTab.calendar:
         return;
@@ -214,15 +221,28 @@ class _CalendarScreenState extends State<CalendarScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final topInset = MediaQuery.paddingOf(context).top;
     return Scaffold(
       backgroundColor: AppColors.creamBg,
-      body: SafeArea(
-        bottom: false,
-        child: Column(
-          children: [
-            _buildHeader(),
-            _buildDateStrip(),
-            Expanded(
+      body: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Container(
+            width: double.infinity,
+            color: AppColors.headerPeach,
+            padding: EdgeInsets.only(top: topInset),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                _buildHeader(),
+                _buildDateStrip(),
+              ],
+            ),
+          ),
+          Expanded(
+            child: SafeArea(
+              top: false,
+              bottom: false,
               child: Stack(
                 children: [
                   const CreamBackgroundDecor(),
@@ -230,8 +250,8 @@ class _CalendarScreenState extends State<CalendarScreen> {
                 ],
               ),
             ),
-          ],
-        ),
+          ),
+        ],
       ),
       floatingActionButton: Padding(
         padding: const EdgeInsets.only(bottom: 8),
@@ -259,21 +279,19 @@ class _CalendarScreenState extends State<CalendarScreen> {
         ),
       ),
       floatingActionButtonLocation: FloatingActionButtonLocation.endFloat,
-      bottomNavigationBar: AppBottomNavBar(
-        activeTab: BottomNavTab.calendar,
-        onTabSelected: _onNavTab,
-        onCenterTap: () => showStateCategoriesSheet(context),
-      ),
+      bottomNavigationBar: widget.embeddedInShell
+          ? null
+          : AppBottomNavBar(
+              activeTab: BottomNavTab.calendar,
+              onTabSelected: _onNavTab,
+              onCenterTap: () => showStateCategoriesSheet(context),
+            ),
     );
   }
 
   Widget _buildHeader() {
-    return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.fromLTRB(20, 16, 20, 12),
-      decoration: const BoxDecoration(
-        color: AppColors.headerPeach,
-      ),
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(20, 16, 20, 8),
       child: Row(
         children: [
           IconButton(
@@ -325,7 +343,7 @@ class _CalendarScreenState extends State<CalendarScreen> {
               d.month == _selectedDate.month &&
               d.day == _selectedDate.day;
           return Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 6),
+            padding: const EdgeInsets.symmetric(horizontal: 4),
             child: Material(
               color: Colors.transparent,
               child: InkWell(
@@ -341,7 +359,7 @@ class _CalendarScreenState extends State<CalendarScreen> {
                         style: TextStyle(
                           fontSize: 11,
                           fontWeight: FontWeight.w600,
-                          color: selected
+                          color: selected || isToday
                               ? AppColors.white
                               : AppColors.textDark.withValues(alpha: 0.7),
                         ),

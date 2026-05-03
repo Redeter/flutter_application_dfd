@@ -4,10 +4,18 @@ import 'package:google_fonts/google_fonts.dart';
 import '../models/aggregated_data.dart';
 import '../services/insights_service.dart';
 import '../theme/app_colors.dart';
+import '../widgets/app_bottom_nav.dart';
 import 'foundation_screen.dart';
 
 class GoalsScreen extends StatefulWidget {
-  const GoalsScreen({super.key});
+  const GoalsScreen({
+    super.key,
+    this.embeddedInShell = false,
+    this.onNavigateTab,
+  });
+
+  final bool embeddedInShell;
+  final ValueChanged<BottomNavTab>? onNavigateTab;
 
   @override
   State<GoalsScreen> createState() => _GoalsScreenState();
@@ -85,6 +93,10 @@ class _GoalsScreenState extends State<GoalsScreen> {
       );
     }
 
-    return FoundationScreen(data: _data!);
+    return FoundationScreen(
+      data: _data!,
+      embeddedInShell: widget.embeddedInShell,
+      onNavigateTab: widget.onNavigateTab,
+    );
   }
 }

@@ -4,6 +4,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import 'neural/neural_insights_service.dart';
 import 'services/notification_service.dart';
+import 'screens/app_shell.dart';
 import 'screens/calendar_screen.dart';
 import 'screens/goals_screen.dart';
 import 'screens/notes_screen.dart';
@@ -38,7 +39,7 @@ class MyApp extends StatelessWidget {
         ),
         scaffoldBackgroundColor: AppColors.cream,
       ),
-      home: const StatisticsScreen(),
+      home: const AppShell(),
     );
   }
 }

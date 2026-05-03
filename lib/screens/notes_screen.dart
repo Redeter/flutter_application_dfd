@@ -33,7 +33,9 @@ String _dateHeaderRu(DateTime d) {
 }
 
 class NotesScreen extends StatefulWidget {
-  const NotesScreen({super.key});
+  const NotesScreen({super.key, this.embeddedInShell = false});
+
+  final bool embeddedInShell;
 
   @override
   State<NotesScreen> createState() => _NotesScreenState();
@@ -54,6 +56,7 @@ class _NotesScreenState extends State<NotesScreen> {
   }
 
   void _onBottomTab(BottomNavTab tab) {
+    if (widget.embeddedInShell) return;
     switch (tab) {
       case BottomNavTab.notes:
         return;
@@ -363,11 +366,13 @@ class _NotesScreenState extends State<NotesScreen> {
         ),
       ),
       floatingActionButtonLocation: FloatingActionButtonLocation.endFloat,
-      bottomNavigationBar: AppBottomNavBar(
-        activeTab: BottomNavTab.notes,
-        onTabSelected: _onBottomTab,
-        onCenterTap: () => showStateCategoriesSheet(context),
-      ),
+      bottomNavigationBar: widget.embeddedInShell
+          ? null
+          : AppBottomNavBar(
+              activeTab: BottomNavTab.notes,
+              onTabSelected: _onBottomTab,
+              onCenterTap: () => showStateCategoriesSheet(context),
+            ),
     );
   }
 }

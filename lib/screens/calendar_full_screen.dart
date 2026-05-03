@@ -55,146 +55,148 @@ class _CalendarFullScreenState extends State<CalendarFullScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final topInset = MediaQuery.paddingOf(context).top;
     return Scaffold(
       backgroundColor: AppColors.creamBg,
-      body: SafeArea(
-        child: Column(
-          children: [
-            _buildHeader(),
-            const SizedBox(height: 16),
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 20),
-              child: Row(
-                children: _weekdays.map((w) => Expanded(
-                  child: Center(
-                    child: Text(
-                      w,
-                      style: GoogleFonts.alegreyaSans(
-                        fontSize: 14,
-                        fontWeight: FontWeight.w600,
-                        color: AppColors.textDark.withValues(alpha: 0.6),
-                      ),
-                    ),
-                  ),
-                )).toList(),
-              ),
-            ),
-            const SizedBox(height: 12),
-            Expanded(
-              child: ListView.builder(
-                padding: const EdgeInsets.fromLTRB(20, 0, 20, 100),
-                itemCount: _visibleMonths.length,
-                itemBuilder: (context, i) {
-                  final m = _visibleMonths[i];
-                  return _MonthCard(
-                    month: m,
-                    selectedDate: _pickedDate,
-                    onDateTap: (d) {
-                      setState(() => _pickedDate = d);
-                      widget.onDateSelected(d);
-                      widget.onOpenDay(d);
-                      Navigator.pop(context);
-                    },
-                  );
-                },
-              ),
-            ),
-            Padding(
-              padding: const EdgeInsets.fromLTRB(20, 0, 20, 24),
+      body: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Container(
+            width: double.infinity,
+            color: AppColors.headerPeach,
+            padding: EdgeInsets.only(top: topInset),
+            child: Padding(
+              padding: const EdgeInsets.fromLTRB(20, 16, 20, 20),
               child: Row(
                 children: [
-                  if (widget.onAddAppointment != null)
-                    Expanded(
-                      child: Padding(
-                        padding: const EdgeInsets.only(right: 8),
-                        child: FilledButton(
-                          onPressed: () {
-                            widget.onAddAppointment!(_pickedDate);
-                          },
-                          style: FilledButton.styleFrom(
-                            backgroundColor: AppColors.orange,
-                            foregroundColor: AppColors.white,
-                            padding: const EdgeInsets.symmetric(vertical: 18),
-                            shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(24),
-                            ),
-                          ),
-                          child: Text(
-                            'Добавить запись',
-                            style: GoogleFonts.alegreyaSans(
-                              fontSize: 16,
-                              fontWeight: FontWeight.w700,
-                            ),
-                          ),
-                        ),
-                      ),
+                  IconButton(
+                    onPressed: () => Navigator.pop(context),
+                    icon: const Icon(Icons.close, color: AppColors.textDark),
+                  ),
+                  const Spacer(),
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 4),
+                    decoration: BoxDecoration(
+                      color: AppColors.white.withValues(alpha: 0.6),
+                      borderRadius: BorderRadius.circular(20),
                     ),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        _toggleChip('Месяц', _isMonthView),
+                        _toggleChip('Год', !_isMonthView),
+                      ],
+                    ),
+                  ),
+                  const Spacer(),
+                  const SizedBox(width: 48),
+                ],
+              ),
+            ),
+          ),
+          Expanded(
+            child: SafeArea(
+              top: false,
+              child: Column(
+                children: [
+                  const SizedBox(height: 16),
+                  Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 20),
+                    child: Row(
+                      children: _weekdays.map((w) => Expanded(
+                        child: Center(
+                          child: Text(
+                            w,
+                            style: GoogleFonts.alegreyaSans(
+                              fontSize: 14,
+                              fontWeight: FontWeight.w600,
+                              color: AppColors.textDark.withValues(alpha: 0.6),
+                            ),
+                          ),
+                        ),
+                      )).toList(),
+                    ),
+                  ),
+                  const SizedBox(height: 12),
                   Expanded(
-                    child: FilledButton(
-                      onPressed: () {
-                        widget.onDateSelected(_pickedDate);
-                        widget.onOpenDay(_pickedDate);
-                        Navigator.pop(context);
+                    child: ListView.builder(
+                      padding: const EdgeInsets.fromLTRB(20, 0, 20, 100),
+                      itemCount: _visibleMonths.length,
+                      itemBuilder: (context, i) {
+                        final m = _visibleMonths[i];
+                        return _MonthCard(
+                          month: m,
+                          selectedDate: _pickedDate,
+                          onDateTap: (d) {
+                            setState(() => _pickedDate = d);
+                            widget.onDateSelected(d);
+                            widget.onOpenDay(d);
+                            Navigator.pop(context);
+                          },
+                        );
                       },
-                      style: FilledButton.styleFrom(
-                        backgroundColor: AppColors.orange,
-                        foregroundColor: AppColors.white,
-                        padding: const EdgeInsets.symmetric(vertical: 18),
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(24),
+                    ),
+                  ),
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(20, 0, 20, 24),
+                    child: Row(
+                      children: [
+                        if (widget.onAddAppointment != null)
+                          Expanded(
+                            child: Padding(
+                              padding: const EdgeInsets.only(right: 8),
+                              child: FilledButton(
+                                onPressed: () {
+                                  widget.onAddAppointment!(_pickedDate);
+                                },
+                                style: FilledButton.styleFrom(
+                                  backgroundColor: AppColors.orange,
+                                  foregroundColor: AppColors.white,
+                                  padding: const EdgeInsets.symmetric(vertical: 18),
+                                  shape: RoundedRectangleBorder(
+                                    borderRadius: BorderRadius.circular(24),
+                                  ),
+                                ),
+                                child: Text(
+                                  'Добавить запись',
+                                  style: GoogleFonts.alegreyaSans(
+                                    fontSize: 16,
+                                    fontWeight: FontWeight.w700,
+                                  ),
+                                ),
+                              ),
+                            ),
+                          ),
+                        Expanded(
+                          child: FilledButton(
+                            onPressed: () {
+                              widget.onDateSelected(_pickedDate);
+                              widget.onOpenDay(_pickedDate);
+                              Navigator.pop(context);
+                            },
+                            style: FilledButton.styleFrom(
+                              backgroundColor: AppColors.orange,
+                              foregroundColor: AppColors.white,
+                              padding: const EdgeInsets.symmetric(vertical: 18),
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(24),
+                              ),
+                            ),
+                            child: Text(
+                              'Открыть этот день',
+                              style: GoogleFonts.alegreyaSans(
+                                fontSize: 16,
+                                fontWeight: FontWeight.w700,
+                              ),
+                            ),
+                          ),
                         ),
-                      ),
-                      child: Text(
-                        'Открыть этот день',
-                        style: GoogleFonts.alegreyaSans(
-                          fontSize: 16,
-                          fontWeight: FontWeight.w700,
-                        ),
-                      ),
+                      ],
                     ),
                   ),
                 ],
               ),
             ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _buildHeader() {
-    return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.fromLTRB(20, 16, 20, 20),
-      decoration: const BoxDecoration(
-        color: AppColors.headerPeach,
-      ),
-      child: Column(
-        children: [
-          Row(
-            children: [
-              IconButton(
-                onPressed: () => Navigator.pop(context),
-                icon: const Icon(Icons.close, color: AppColors.textDark),
-              ),
-              const Spacer(),
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 4),
-                decoration: BoxDecoration(
-                  color: AppColors.white.withValues(alpha: 0.6),
-                  borderRadius: BorderRadius.circular(20),
-                ),
-                child: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    _toggleChip('Месяц', _isMonthView),
-                    _toggleChip('Год', !_isMonthView),
-                  ],
-                ),
-              ),
-              const Spacer(),
-              const SizedBox(width: 48),
-            ],
           ),
         ],
       ),
