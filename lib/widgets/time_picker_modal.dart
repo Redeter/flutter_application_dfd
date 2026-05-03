@@ -31,9 +31,10 @@ class _TimePickerModalState extends State<_TimePickerModal> {
   @override
   Widget build(BuildContext context) {
     return Dialog(
+      insetPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 24),
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
       child: Container(
-        padding: const EdgeInsets.all(24),
+        padding: const EdgeInsets.fromLTRB(16, 18, 16, 16),
         decoration: BoxDecoration(
           color: AppColors.white,
           borderRadius: BorderRadius.circular(24),
@@ -44,15 +45,16 @@ class _TimePickerModalState extends State<_TimePickerModal> {
           children: [
             Text(
               'ВЫБЕРИТЕ ТОЧНОЕ ВРЕМЯ',
+              textAlign: TextAlign.center,
               style: TextStyle(
-                fontSize: 16,
+                fontSize: 14,
                 fontWeight: FontWeight.w700,
                 color: AppColors.textDark,
               ),
             ),
-            const SizedBox(height: 24),
+            const SizedBox(height: 16),
             SizedBox(
-              height: 180,
+              height: 168,
               child: CupertinoTheme(
                 data: CupertinoTheme.of(context).copyWith(
                   brightness: Brightness.light,
@@ -73,12 +75,16 @@ class _TimePickerModalState extends State<_TimePickerModal> {
                 ),
               ),
             ),
-            const SizedBox(height: 24),
+            const SizedBox(height: 16),
             Row(
-              mainAxisAlignment: MainAxisAlignment.spaceEvenly,
               children: [
-                _pillButton('Отмена', onPressed: () => Navigator.pop(context, null)),
-                _pillButton('Установить', onPressed: () => Navigator.pop(context, _time)),
+                Expanded(
+                  child: _pillButton('Отмена', onPressed: () => Navigator.pop(context, null)),
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: _pillButton('Установить', onPressed: () => Navigator.pop(context, _time)),
+                ),
               ],
             ),
           ],
@@ -90,18 +96,24 @@ class _TimePickerModalState extends State<_TimePickerModal> {
   Widget _pillButton(String label, {required VoidCallback onPressed}) {
     return Material(
       color: AppColors.orange,
-      borderRadius: BorderRadius.circular(24),
+      borderRadius: BorderRadius.circular(18),
       child: InkWell(
         onTap: onPressed,
-        borderRadius: BorderRadius.circular(24),
+        borderRadius: BorderRadius.circular(18),
         child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 28, vertical: 14),
-          child: Text(
-            label,
-            style: const TextStyle(
-              fontSize: 16,
-              fontWeight: FontWeight.w700,
-              color: AppColors.white,
+          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 10),
+          child: Center(
+            child: Text(
+              label,
+              textAlign: TextAlign.center,
+              maxLines: 2,
+              overflow: TextOverflow.ellipsis,
+              style: const TextStyle(
+                fontSize: 13,
+                fontWeight: FontWeight.w700,
+                color: AppColors.white,
+                height: 1.1,
+              ),
             ),
           ),
         ),

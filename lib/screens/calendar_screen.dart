@@ -1,3 +1,5 @@
+import 'dart:async' show unawaited;
+
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 
@@ -10,6 +12,7 @@ import '../widgets/app_bottom_nav.dart';
 import '../widgets/cream_background_decor.dart';
 import '../widgets/unified_horizontal_date_strip.dart';
 import '../widgets/delete_confirm_dialog.dart';
+import '../widgets/time_picker_modal.dart';
 import 'add_appointment_screen.dart';
 import 'add_medication_screen.dart';
 import 'calendar_full_screen.dart';
@@ -24,6 +27,59 @@ const _months = [
 ];
 
 String _formatDate(DateTime d) => '${d.day} ${_months[d.month - 1]}';
+
+/// Одна строка списка дня: приём врача или один слот препарата.
+sealed class _CalendarDayRow {
+  int get sortMinutes;
+}
+
+final class _MedDoseRow extends _CalendarDayRow {
+  _MedDoseRow(this.med, this.doseIndex);
+  final Medication med;
+  final int doseIndex;
+
+  @override
+  int get sortMinutes {
+    final TimeOfDay t;
+    if (med.schedule.isEmpty) {
+      t = med.time;
+    } else {
+      t = med.schedule[doseIndex.clamp(0, med.schedule.length - 1)].time;
+    }
+    return t.hour * 60 + t.minute;
+  }
+}
+
+final class _AppDayRow extends _CalendarDayRow {
+  _AppDayRow(this.appointment);
+  final Appointment appointment;
+
+  @override
+  int get sortMinutes {
+    final t = appointment.time;
+    return t.hour * 60 + t.minute;
+  }
+}
+
+List<_CalendarDayRow> _sortedDayRows(List<CalendarEntry> entries) {
+  final out = <_CalendarDayRow>[];
+  for (final e in entries) {
+    switch (e) {
+      case Medication m:
+        if (m.schedule.isEmpty) {
+          out.add(_MedDoseRow(m, 0));
+        } else {
+          for (var i = 0; i < m.schedule.length; i++) {
+            out.add(_MedDoseRow(m, i));
+          }
+        }
+      case Appointment a:
+        out.add(_AppDayRow(a));
+    }
+  }
+  out.sort((a, b) => a.sortMinutes.compareTo(b.sortMinutes));
+  return out;
+}
 
 class CalendarScreen extends StatefulWidget {
   const CalendarScreen({super.key, this.embeddedInShell = false});
@@ -44,19 +100,20 @@ class _CalendarScreenState extends State<CalendarScreen> {
     _loadEntries();
   }
 
+  DateTime _dayOnly(DateTime d) => DateTime(d.year, d.month, d.day);
+
   Future<void> _loadEntries() async {
-    final date = _selectedDate;
-    final list = await CalendarStorage.instance.loadForDate(date);
-    if (mounted && date.year == _selectedDate.year &&
-        date.month == _selectedDate.month &&
-        date.day == _selectedDate.day) {
-      setState(() => _entries = list);
-    }
+    final day = _dayOnly(_selectedDate);
+    final list = await CalendarStorage.instance.loadForDate(day);
+    if (!mounted) return;
+    if (_dayOnly(_selectedDate) != day) return;
+    setState(() => _entries = list);
   }
 
+  /// Сначала обновляем список на экране, затем пересчитываем пуши в фоне — карточка меняется сразу.
   Future<void> _reloadAfterCalendarMutation() async {
-    await NotificationService.instance.rescheduleCalendarNotifications();
     await _loadEntries();
+    unawaited(NotificationService.instance.rescheduleCalendarNotifications());
   }
 
   void _onDateChanged(DateTime d) {
@@ -95,43 +152,6 @@ class _CalendarScreenState extends State<CalendarScreen> {
     ).then((_) => _loadEntries());
   }
 
-  void _showAddChoice() {
-    showModalBottomSheet<void>(
-      context: context,
-      backgroundColor: Colors.transparent,
-      builder: (ctx) => Container(
-        padding: const EdgeInsets.all(20),
-        decoration: const BoxDecoration(
-          color: AppColors.cream,
-          borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
-        ),
-        child: SafeArea(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              ListTile(
-                leading: const Icon(Icons.medication_outlined, color: AppColors.orange),
-                title: const Text('Добавить препарат'),
-                onTap: () {
-                  Navigator.pop(ctx);
-                  _openAddMedication();
-                },
-              ),
-              ListTile(
-                leading: const Icon(Icons.event_note_outlined, color: AppColors.orange),
-                title: const Text('Добавить запись на приём'),
-                onTap: () {
-                  Navigator.pop(ctx);
-                  _openAddAppointment();
-                },
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-
   Future<void> _openAddMedication({Medication? m}) async {
     await Navigator.push(
       context,
@@ -168,33 +188,68 @@ class _CalendarScreenState extends State<CalendarScreen> {
       title: 'ВЫ ТОЧНО ХОТИТЕ УДАЛИТЬ $name?',
     );
     if (ok == true) {
-      await CalendarStorage.instance.delete(e.id);
+      switch (e) {
+        case Medication m:
+          await CalendarStorage.instance.deleteMedication(m);
+        case Appointment a:
+          await CalendarStorage.instance.delete(a.id);
+      }
       await _reloadAfterCalendarMutation();
     }
   }
 
-  Future<void> _markTaken(Medication m) async {
+  Future<void> _markDoseTaken(Medication m, int doseIndex) async {
+    if (m.schedule.isEmpty) return;
+    final list = List<DateTime?>.from(m.takenAtPerDose);
+    while (list.length < m.schedule.length) {
+      list.add(null);
+    }
+    if (doseIndex < 0 || doseIndex >= m.schedule.length) return;
+    list[doseIndex] = DateTime.now();
+    final skipped = List<bool>.from(m.skippedPerDose);
+    while (skipped.length < m.schedule.length) {
+      skipped.add(false);
+    }
+    skipped[doseIndex] = false;
     await CalendarStorage.instance.save(
-      m.copyWith(takenAt: DateTime.now()),
+      m.copyWith(takenAtPerDose: list, skippedPerDose: skipped),
     );
     await _reloadAfterCalendarMutation();
   }
 
-  void _skipMedication(Medication m) {
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text('Прием "${m.name}" отмечен как пропущенный.')),
-    );
+  Future<void> _skipMedication(Medication m, int doseIndex) async {
+    if (m.schedule.isEmpty || doseIndex < 0 || doseIndex >= m.schedule.length) return;
+    if (doseIndex < m.takenAtPerDose.length && m.takenAtPerDose[doseIndex] != null) return;
+    final skipped = List<bool>.from(m.skippedPerDose);
+    while (skipped.length < m.schedule.length) {
+      skipped.add(false);
+    }
+    skipped[doseIndex] = true;
+    await CalendarStorage.instance.save(m.copyWith(skippedPerDose: skipped));
+    await _reloadAfterCalendarMutation();
   }
 
-  Future<void> _snoozeMedication(Medication m) async {
-    await NotificationService.instance.scheduleSnooze(
-      title: 'Отложенный прием',
-      body: '${m.name} ${m.dosage}',
+  Future<void> _markDoseTakenAtChosenTime(Medication m, int doseIndex) async {
+    if (m.schedule.isEmpty || doseIndex < 0 || doseIndex >= m.schedule.length) return;
+    final scheduled = m.schedule[doseIndex].time;
+    final picked = await showTimePickerModal(context, initial: scheduled);
+    if (picked == null || !mounted) return;
+    final day = DateTime(m.date.year, m.date.month, m.date.day);
+    final when = DateTime(day.year, day.month, day.day, picked.hour, picked.minute);
+    final list = List<DateTime?>.from(m.takenAtPerDose);
+    while (list.length < m.schedule.length) {
+      list.add(null);
+    }
+    list[doseIndex] = when;
+    final skipped = List<bool>.from(m.skippedPerDose);
+    while (skipped.length < m.schedule.length) {
+      skipped.add(false);
+    }
+    skipped[doseIndex] = false;
+    await CalendarStorage.instance.save(
+      m.copyWith(takenAtPerDose: list, skippedPerDose: skipped),
     );
-    if (!mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text('Напоминание для "${m.name}" перенесено на 30 минут.')),
-    );
+    await _reloadAfterCalendarMutation();
   }
 
   void _onNavTab(BottomNavTab tab) {
@@ -282,7 +337,7 @@ class _CalendarScreenState extends State<CalendarScreen> {
           shape: const CircleBorder(),
           child: InkWell(
             customBorder: const CircleBorder(),
-            onTap: _showAddChoice,
+            onTap: () => _openAddMedication(),
             child: Ink(
               width: 64,
               height: 64,
@@ -371,26 +426,28 @@ class _CalendarScreenState extends State<CalendarScreen> {
   }
 
   Widget _buildList() {
+    final rows = _sortedDayRows(_entries);
     return ListView.builder(
       padding: const EdgeInsets.fromLTRB(20, 12, 20, 100),
-      itemCount: _entries.length,
+      itemCount: rows.length,
       itemBuilder: (context, i) {
-        final e = _entries[i];
+        final row = rows[i];
         return Padding(
           padding: const EdgeInsets.only(bottom: 14),
-          child: switch (e) {
-            Medication() => _MedicationCard(
-                medication: e,
-                onEdit: () => _openAddMedication(m: e),
-                onDelete: () => _deleteEntry(e),
-                onMarkTaken: () => _markTaken(e),
-                onSkip: () => _skipMedication(e),
-                onSnooze: () => _snoozeMedication(e),
+          child: switch (row) {
+            _MedDoseRow r => _MedicationDoseCard(
+                medication: r.med,
+                doseIndex: r.doseIndex,
+                onEdit: () => _openAddMedication(m: r.med),
+                onDelete: () => _deleteEntry(r.med),
+                onMarkTaken: () => _markDoseTaken(r.med, r.doseIndex),
+                onSkip: () => _skipMedication(r.med, r.doseIndex),
+                onMarkAtChosenTime: () => _markDoseTakenAtChosenTime(r.med, r.doseIndex),
               ),
-            Appointment() => _AppointmentCard(
-                appointment: e,
-                onEdit: () => _openAddAppointment(a: e),
-                onDelete: () => _deleteEntry(e),
+            _AppDayRow r => _AppointmentCard(
+                appointment: r.appointment,
+                onEdit: () => _openAddAppointment(a: r.appointment),
+                onDelete: () => _deleteEntry(r.appointment),
               ),
           },
         );
@@ -399,44 +456,298 @@ class _CalendarScreenState extends State<CalendarScreen> {
   }
 }
 
-class _MedicationCard extends StatelessWidget {
-  const _MedicationCard({
+class _MedicationDoseCard extends StatelessWidget {
+  const _MedicationDoseCard({
     required this.medication,
+    required this.doseIndex,
     required this.onEdit,
     required this.onDelete,
     required this.onMarkTaken,
     required this.onSkip,
-    required this.onSnooze,
+    required this.onMarkAtChosenTime,
   });
 
   final Medication medication;
+  final int doseIndex;
   final VoidCallback onEdit;
   final VoidCallback onDelete;
   final VoidCallback onMarkTaken;
   final VoidCallback onSkip;
-  final VoidCallback onSnooze;
+  final VoidCallback onMarkAtChosenTime;
 
   @override
   Widget build(BuildContext context) {
-    final taken = medication.takenAt != null;
-    final timeStr = medication.schedule.isNotEmpty
-        ? '${medication.schedule.first.time.hour.toString().padLeft(2, '0')}:${medication.schedule.first.time.minute.toString().padLeft(2, '0')}'
-        : '--:--';
-    final takeText = medication.schedule.map((s) => s.amount).join(' + ');
+    final MedicationDose dose;
+    if (medication.schedule.isNotEmpty) {
+      dose = medication.schedule[doseIndex.clamp(0, medication.schedule.length - 1)];
+    } else {
+      dose = MedicationDose(
+        time: medication.time,
+        amount: medication.dosage.isEmpty ? '—' : medication.dosage,
+      );
+    }
+    final takenList = medication.takenAtPerDose;
+    final idx = medication.schedule.isNotEmpty ? doseIndex : 0;
+    final taken = idx < takenList.length && takenList[idx] != null;
+    final takenAt = taken ? takenList[idx]! : null;
+    final skippedList = medication.skippedPerDose;
+    final skipped = idx < skippedList.length && skippedList[idx];
+    final timeStr =
+        '${dose.time.hour.toString().padLeft(2, '0')}:${dose.time.minute.toString().padLeft(2, '0')}';
+    final takeText = dose.amount;
+
+    final decoration = BoxDecoration(
+      color: AppColors.white,
+      borderRadius: BorderRadius.circular(taken ? 16 : 24),
+      border: Border.all(color: AppColors.orange, width: 3),
+      boxShadow: [
+        BoxShadow(
+          color: AppColors.orange.withValues(alpha: 0.15),
+          blurRadius: 12,
+          offset: const Offset(0, 4),
+        ),
+      ],
+    );
+
+    final skippedDecoration = BoxDecoration(
+      color: AppColors.greyMuted.withValues(alpha: 0.35),
+      borderRadius: BorderRadius.circular(16),
+      border: Border.all(color: AppColors.greyMuted, width: 2),
+    );
+
+    if (taken && takenAt != null) {
+      final takenStr =
+          '${takenAt.hour.toString().padLeft(2, '0')}:${takenAt.minute.toString().padLeft(2, '0')}';
+      return Container(
+        decoration: decoration,
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Padding(
+              padding: const EdgeInsets.fromLTRB(4, 4, 4, 0),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.end,
+                children: [
+                  IconButton(
+                    onPressed: onDelete,
+                    icon: const Icon(Icons.delete_outline, color: AppColors.textDark, size: 22),
+                  ),
+                  IconButton(
+                    onPressed: onEdit,
+                    icon: const Icon(Icons.edit_outlined, color: AppColors.textDark, size: 22),
+                  ),
+                ],
+              ),
+            ),
+            Padding(
+              padding: const EdgeInsets.fromLTRB(12, 0, 12, 14),
+              child: IntrinsicHeight(
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    Padding(
+                      padding: const EdgeInsets.symmetric(vertical: 8),
+                      child: Icon(Icons.medication_outlined, color: AppColors.orange, size: 36),
+                    ),
+                    const SizedBox(width: 10),
+                    Container(width: 1, color: AppColors.textDark.withValues(alpha: 0.35)),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Row(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Expanded(
+                                child: RichText(
+                                  text: TextSpan(
+                                    style: GoogleFonts.alegreyaSans(
+                                      fontSize: 17,
+                                      fontWeight: FontWeight.w800,
+                                      color: AppColors.textDark,
+                                    ),
+                                    children: [
+                                      TextSpan(text: '${medication.name.toUpperCase()} '),
+                                      TextSpan(
+                                        text: medication.dosage,
+                                        style: GoogleFonts.alegreyaSans(
+                                          fontSize: 14,
+                                          fontWeight: FontWeight.w500,
+                                          color: AppColors.textDark,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              ),
+                              Text(
+                                timeStr,
+                                style: GoogleFonts.alegreyaSans(
+                                  fontSize: 16,
+                                  fontWeight: FontWeight.w600,
+                                  color: AppColors.textDark.withValues(alpha: 0.45),
+                                ),
+                              ),
+                            ],
+                          ),
+                          const SizedBox(height: 6),
+                          Text(
+                            takeText.toUpperCase(),
+                            style: GoogleFonts.alegreyaSans(
+                              fontSize: 12,
+                              fontWeight: FontWeight.w700,
+                              letterSpacing: 0.3,
+                              color: AppColors.textDark,
+                            ),
+                          ),
+                          const SizedBox(height: 10),
+                          Row(
+                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                            children: [
+                              Text(
+                                'Принято в',
+                                style: GoogleFonts.alegreyaSans(
+                                  fontSize: 14,
+                                  fontWeight: FontWeight.w600,
+                                  color: AppColors.takeGreen,
+                                ),
+                              ),
+                              Text(
+                                takenStr,
+                                style: GoogleFonts.alegreyaSans(
+                                  fontSize: 14,
+                                  fontWeight: FontWeight.w700,
+                                  color: AppColors.takeGreen,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ],
+        ),
+      );
+    }
+
+    if (!taken && skipped) {
+      return Container(
+        decoration: skippedDecoration,
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Padding(
+              padding: const EdgeInsets.fromLTRB(4, 4, 4, 0),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.end,
+                children: [
+                  IconButton(
+                    onPressed: onDelete,
+                    icon: const Icon(Icons.delete_outline, color: AppColors.textDark, size: 22),
+                  ),
+                  IconButton(
+                    onPressed: onEdit,
+                    icon: const Icon(Icons.edit_outlined, color: AppColors.textDark, size: 22),
+                  ),
+                ],
+              ),
+            ),
+            Padding(
+              padding: const EdgeInsets.fromLTRB(12, 0, 12, 14),
+              child: IntrinsicHeight(
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    Padding(
+                      padding: const EdgeInsets.symmetric(vertical: 8),
+                      child: Icon(
+                        Icons.medication_outlined,
+                        color: AppColors.textDark.withValues(alpha: 0.35),
+                        size: 36,
+                      ),
+                    ),
+                    const SizedBox(width: 10),
+                    Container(width: 1, color: AppColors.textDark.withValues(alpha: 0.2)),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Row(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Expanded(
+                                child: RichText(
+                                  text: TextSpan(
+                                    style: GoogleFonts.alegreyaSans(
+                                      fontSize: 17,
+                                      fontWeight: FontWeight.w800,
+                                      color: AppColors.textDark.withValues(alpha: 0.55),
+                                    ),
+                                    children: [
+                                      TextSpan(text: '${medication.name.toUpperCase()} '),
+                                      TextSpan(
+                                        text: medication.dosage,
+                                        style: GoogleFonts.alegreyaSans(
+                                          fontSize: 14,
+                                          fontWeight: FontWeight.w500,
+                                          color: AppColors.textDark.withValues(alpha: 0.45),
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              ),
+                              Text(
+                                timeStr,
+                                style: GoogleFonts.alegreyaSans(
+                                  fontSize: 16,
+                                  fontWeight: FontWeight.w600,
+                                  color: AppColors.textDark.withValues(alpha: 0.35),
+                                ),
+                              ),
+                            ],
+                          ),
+                          const SizedBox(height: 6),
+                          Text(
+                            takeText.toUpperCase(),
+                            style: GoogleFonts.alegreyaSans(
+                              fontSize: 12,
+                              fontWeight: FontWeight.w700,
+                              letterSpacing: 0.3,
+                              color: AppColors.textDark.withValues(alpha: 0.45),
+                            ),
+                          ),
+                          const SizedBox(height: 10),
+                          Text(
+                            'Приём пропущен',
+                            style: GoogleFonts.alegreyaSans(
+                              fontSize: 15,
+                              fontWeight: FontWeight.w700,
+                              color: AppColors.textDark.withValues(alpha: 0.5),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ],
+        ),
+      );
+    }
 
     return Container(
-      decoration: BoxDecoration(
-        color: AppColors.white,
-        borderRadius: BorderRadius.circular(24),
-        border: Border.all(color: AppColors.orange, width: 3),
-        boxShadow: [
-          BoxShadow(
-            color: AppColors.orange.withValues(alpha: 0.15),
-            blurRadius: 12,
-            offset: const Offset(0, 4),
-          ),
-        ],
-      ),
+      decoration: decoration,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
@@ -481,13 +792,11 @@ class _MedicationCard extends StatelessWidget {
                       ),
                       const SizedBox(height: 4),
                       Text(
-                        taken
-                            ? 'Принято в ${medication.takenAt!.hour.toString().padLeft(2, '0')}:${medication.takenAt!.minute.toString().padLeft(2, '0')}'
-                            : 'Принять $takeText',
+                        'Принять $takeText',
                         style: GoogleFonts.alegreyaSans(
                           fontSize: 14,
                           fontWeight: FontWeight.w600,
-                          color: taken ? AppColors.takeGreen : AppColors.textDark.withValues(alpha: 0.8),
+                          color: AppColors.textDark.withValues(alpha: 0.8),
                         ),
                       ),
                     ],
@@ -498,38 +807,41 @@ class _MedicationCard extends StatelessWidget {
                   style: GoogleFonts.alegreyaSans(
                     fontSize: 24,
                     fontWeight: FontWeight.w700,
-                    color: taken ? AppColors.takeGreen : AppColors.textDark,
+                    color: AppColors.textDark,
                   ),
                 ),
               ],
             ),
           ),
-          if (!taken) ...[
-            Padding(
-              padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
-              child: Row(
-                children: [
-                  Expanded(
-                    child: _actionBtn('Пропустить', AppColors.skipRed, onSkip),
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+            child: Row(
+              children: [
+                Expanded(
+                  child: _actionBtn('Пропустить', AppColors.skipRed, onSkip),
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: _actionBtn('Принять сейчас', AppColors.takeGreen, onMarkTaken),
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: _actionBtn(
+                    'Принять в выбранное время',
+                    AppColors.orange.withValues(alpha: 0.22),
+                    onMarkAtChosenTime,
+                    fontSize: 11,
                   ),
-                  const SizedBox(width: 8),
-                  Expanded(
-                    child: _actionBtn('Принять сейчас', AppColors.takeGreen, onMarkTaken),
-                  ),
-                  const SizedBox(width: 8),
-                  Expanded(
-                    child: _actionBtn('Отложить 30м', AppColors.takeYellow, onSnooze),
-                  ),
-                ],
-              ),
+                ),
+              ],
             ),
-          ],
+          ),
         ],
       ),
     );
   }
 
-  Widget _actionBtn(String label, Color bg, VoidCallback onTap) {
+  Widget _actionBtn(String label, Color bg, VoidCallback onTap, {double fontSize = 12}) {
     return Material(
       color: bg,
       borderRadius: BorderRadius.circular(16),
@@ -537,14 +849,18 @@ class _MedicationCard extends StatelessWidget {
         onTap: onTap,
         borderRadius: BorderRadius.circular(16),
         child: Padding(
-          padding: const EdgeInsets.symmetric(vertical: 12),
+          padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 4),
           child: Text(
             label,
             textAlign: TextAlign.center,
+            maxLines: 3,
+            overflow: TextOverflow.fade,
+            softWrap: true,
             style: GoogleFonts.alegreyaSans(
-              fontSize: 12,
+              fontSize: fontSize,
               fontWeight: FontWeight.w700,
               color: AppColors.textDark,
+              height: 1.15,
             ),
           ),
         ),

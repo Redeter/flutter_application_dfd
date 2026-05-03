@@ -50,9 +50,36 @@ class CalendarStorage {
     await _write(all);
   }
 
+  /// Одна запись на диск вместо многократного [save] (например серия ежедневных приёмов).
+  Future<void> saveMany(List<CalendarEntry> entries) async {
+    if (entries.isEmpty) return;
+    final all = await loadAll();
+    for (final entry in entries) {
+      final idx = all.indexWhere((e) => e.id == entry.id);
+      if (idx >= 0) {
+        all[idx] = entry;
+      } else {
+        all.add(entry);
+      }
+    }
+    await _write(all);
+  }
+
   Future<void> delete(String id) async {
     final all = await loadAll();
     all.removeWhere((e) => e.id == id);
+    await _write(all);
+  }
+
+  /// Удаляет препарат: если у записи есть [Medication.seriesId], убираются все дни этой серии.
+  Future<void> deleteMedication(Medication m) async {
+    final all = await loadAll();
+    final sid = m.seriesId;
+    if (sid != null && sid.isNotEmpty) {
+      all.removeWhere((e) => e is Medication && e.seriesId == sid);
+    } else {
+      all.removeWhere((e) => e.id == m.id);
+    }
     await _write(all);
   }
 

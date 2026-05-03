@@ -53,15 +53,57 @@ class Medication extends CalendarEntry {
     this.frequency = 'Ежедневно',
     this.dailyDosage,
     required this.schedule,
-    this.takenAt,
-  });
+    this.seriesId,
+    List<DateTime?>? takenAtPerDose,
+    List<bool>? skippedPerDose,
+  })  : takenAtPerDose = takenAtPerDose ??
+            Medication._normalizeTakenAtPerDose(
+              schedule,
+              null,
+            ),
+        skippedPerDose = Medication._normalizeSkippedPerDose(schedule, skippedPerDose);
 
   final String name;
   final String dosage; // "200мг"
   final String frequency;
   final String? dailyDosage;
   final List<MedicationDose> schedule;
-  final DateTime? takenAt;
+  /// Общий id серии ежедневных приёмов (для пакетного создания с одной формы).
+  final String? seriesId;
+  /// Отметка «принято» по каждому слоту [schedule] (тот же индекс).
+  final List<DateTime?> takenAtPerDose;
+  /// «Пропущено» по каждому слоту (не сохраняется, если уже принято).
+  final List<bool> skippedPerDose;
+
+  static List<DateTime?> _normalizeTakenAtPerDose(
+    List<MedicationDose> schedule,
+    List<DateTime?>? raw,
+  ) {
+    final n = schedule.length;
+    if (n == 0) return [];
+    if (raw != null && raw.length >= n) {
+      return List<DateTime?>.generate(n, (i) => raw[i]);
+    }
+    if (raw != null && raw.isNotEmpty) {
+      return List<DateTime?>.generate(n, (i) => i < raw.length ? raw[i] : null);
+    }
+    return List<DateTime?>.filled(n, null);
+  }
+
+  static List<bool> _normalizeSkippedPerDose(
+    List<MedicationDose> schedule,
+    List<bool>? raw,
+  ) {
+    final n = schedule.length;
+    if (n == 0) return [];
+    if (raw != null && raw.length >= n) {
+      return List<bool>.generate(n, (i) => raw[i]);
+    }
+    if (raw != null && raw.isNotEmpty) {
+      return List<bool>.generate(n, (i) => i < raw.length ? raw[i] : false);
+    }
+    return List<bool>.filled(n, false);
+  }
 
   @override
   Map<String, dynamic> toJson() => {
@@ -75,10 +117,34 @@ class Medication extends CalendarEntry {
         'frequency': frequency,
         'dailyDosage': dailyDosage,
         'schedule': schedule.map((e) => e.toJson()).toList(),
-        'takenAt': takenAt?.toIso8601String(),
+        if (seriesId != null) 'seriesId': seriesId,
+        'takenAtPerDose': takenAtPerDose.map((e) => e?.toIso8601String()).toList(),
+        'skippedPerDose': skippedPerDose,
       };
 
   static Medication fromJson(Map<String, dynamic> json) {
+    final schedule = (json['schedule'] as List<dynamic>?)
+            ?.map((e) => MedicationDose.fromJson(e as Map<String, dynamic>))
+            .toList() ??
+        [];
+    final legacyTaken =
+        json['takenAt'] != null ? DateTime.tryParse(json['takenAt'] as String) : null;
+    final rawList = json['takenAtPerDose'] as List<dynamic>?;
+    List<DateTime?>? parsed;
+    if (rawList != null) {
+      parsed = rawList
+          .map((e) => e == null ? null : DateTime.tryParse(e as String))
+          .toList();
+    } else if (legacyTaken != null && schedule.isNotEmpty) {
+      parsed = List<DateTime?>.filled(schedule.length, legacyTaken);
+    }
+
+    final rawSkipped = json['skippedPerDose'] as List<dynamic>?;
+    List<bool>? parsedSkipped;
+    if (rawSkipped != null) {
+      parsedSkipped = rawSkipped.map((e) => e == true).toList();
+    }
+
     return Medication(
       id: json['id'] as String? ?? '',
       date: DateTime.tryParse(json['date'] as String? ?? '') ?? DateTime.now(),
@@ -90,11 +156,10 @@ class Medication extends CalendarEntry {
       dosage: json['dosage'] as String? ?? '',
       frequency: json['frequency'] as String? ?? 'Ежедневно',
       dailyDosage: json['dailyDosage'] as String?,
-      schedule: (json['schedule'] as List<dynamic>?)
-              ?.map((e) => MedicationDose.fromJson(e as Map<String, dynamic>))
-              .toList() ??
-          [],
-      takenAt: json['takenAt'] != null ? DateTime.tryParse(json['takenAt'] as String) : null,
+      schedule: schedule,
+      seriesId: json['seriesId'] as String?,
+      takenAtPerDose: _normalizeTakenAtPerDose(schedule, parsed),
+      skippedPerDose: _normalizeSkippedPerDose(schedule, parsedSkipped),
     );
   }
 
@@ -107,19 +172,29 @@ class Medication extends CalendarEntry {
     String? frequency,
     String? dailyDosage,
     List<MedicationDose>? schedule,
-    DateTime? takenAt,
-  }) =>
-      Medication(
-        id: id ?? this.id,
-        date: date ?? this.date,
-        time: time ?? this.time,
-        name: name ?? this.name,
-        dosage: dosage ?? this.dosage,
-        frequency: frequency ?? this.frequency,
-        dailyDosage: dailyDosage ?? this.dailyDosage,
-        schedule: schedule ?? this.schedule,
-        takenAt: takenAt ?? this.takenAt,
-      );
+    String? seriesId,
+    List<DateTime?>? takenAtPerDose,
+    List<bool>? skippedPerDose,
+  }) {
+    final nextSchedule = schedule ?? this.schedule;
+    final nextTaken = takenAtPerDose ??
+        Medication._normalizeTakenAtPerDose(nextSchedule, this.takenAtPerDose);
+    final nextSkipped = skippedPerDose ??
+        Medication._normalizeSkippedPerDose(nextSchedule, this.skippedPerDose);
+    return Medication(
+      id: id ?? this.id,
+      date: date ?? this.date,
+      time: time ?? this.time,
+      name: name ?? this.name,
+      dosage: dosage ?? this.dosage,
+      frequency: frequency ?? this.frequency,
+      dailyDosage: dailyDosage ?? this.dailyDosage,
+      schedule: nextSchedule,
+      seriesId: seriesId ?? this.seriesId,
+      takenAtPerDose: nextTaken,
+      skippedPerDose: nextSkipped,
+    );
+  }
 }
 
 /// Приём (врача и т.д.).

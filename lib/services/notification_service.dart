@@ -72,6 +72,7 @@ class NotificationService {
               ? e.schedule.map((d) => d.time).toList()
               : [e.time];
           for (var i = 0; i < times.length; i++) {
+            if (i < e.skippedPerDose.length && e.skippedPerDose[i]) continue;
             final dt = DateTime(
               e.date.year,
               e.date.month,
