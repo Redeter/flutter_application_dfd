@@ -266,7 +266,7 @@ class _CalendarScreenState extends State<CalendarScreen> {
                     child: const CreamBackgroundDecor(),
                   ),
                   Positioned.fill(
-                    child: _entries.isEmpty ? _buildEmpty() : _buildList(),
+                    child: _buildRefreshableBody(),
                   ),
                 ],
               ),
@@ -370,8 +370,30 @@ class _CalendarScreenState extends State<CalendarScreen> {
     );
   }
 
+  Widget _buildRefreshableBody() {
+    return RefreshIndicator(
+      color: AppColors.orange,
+      onRefresh: _loadEntries,
+      child: LayoutBuilder(
+        builder: (context, constraints) {
+          if (_entries.isEmpty) {
+            return SingleChildScrollView(
+              physics: const AlwaysScrollableScrollPhysics(),
+              child: ConstrainedBox(
+                constraints: BoxConstraints(minHeight: constraints.maxHeight),
+                child: _buildEmpty(),
+              ),
+            );
+          }
+          return _buildList();
+        },
+      ),
+    );
+  }
+
   Widget _buildList() {
     return ListView.builder(
+      physics: const AlwaysScrollableScrollPhysics(),
       padding: const EdgeInsets.fromLTRB(20, 12, 20, 100),
       itemCount: _entries.length,
       itemBuilder: (context, i) {

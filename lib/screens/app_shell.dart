@@ -20,6 +20,8 @@ class AppShell extends StatefulWidget {
 class _AppShellState extends State<AppShell> {
   int _index = 0;
 
+  final GlobalKey<GoalsScreenState> _goalsScreenKey = GlobalKey<GoalsScreenState>();
+
   final List<Widget?> _pages = List<Widget?>.filled(4, null);
 
   BottomNavTab get _tab => switch (_index) {
@@ -35,6 +37,7 @@ class _AppShellState extends State<AppShell> {
       1 => const NotesScreen(embeddedInShell: true),
       2 => const CalendarScreen(embeddedInShell: true),
       _ => GoalsScreen(
+          key: _goalsScreenKey,
           embeddedInShell: true,
           onNavigateTab: _onTab,
         ),
@@ -42,6 +45,7 @@ class _AppShellState extends State<AppShell> {
   }
 
   void _onTab(BottomNavTab tab) {
+    final prevIndex = _index;
     final next = switch (tab) {
       BottomNavTab.statistics => 0,
       BottomNavTab.notes => 1,
@@ -49,6 +53,11 @@ class _AppShellState extends State<AppShell> {
       BottomNavTab.articles => 3,
     };
     if (_index != next) setState(() => _index = next);
+    if (next == 3 && prevIndex != 3) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        _goalsScreenKey.currentState?.reloadAggregatesFromShell();
+      });
+    }
   }
 
   @override

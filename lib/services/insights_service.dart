@@ -29,17 +29,24 @@ class InsightsService {
   static InsightsService get instance => _instance;
   static final _instance = InsightsService._();
 
-  Future<AggregatedData> aggregateData() async {
+  Future<AggregatedData> aggregateData({
+    DateTime? rangeStart,
+    DateTime? rangeEnd,
+  }) async {
     final notes = _dedupeNotesNoise(await NotesStorage.instance.loadAll());
     final stateEntries = await StateStorage.instance.loadAll();
     final calendarEntries = await CalendarStorage.instance.loadAll();
 
-    return AggregatedData(
+    var data = AggregatedData(
       notes: notes,
       stateEntries: stateEntries,
       medications: calendarEntries.whereType<Medication>().toList(),
       appointments: calendarEntries.whereType<Appointment>().toList(),
     );
+    if (rangeStart != null && rangeEnd != null) {
+      data = data.filterByInclusiveDayRange(rangeStart, rangeEnd);
+    }
+    return data;
   }
 
   /// Локальный анализ нейросетью: ключевые слова, резюме, выводы, рекомендации.

@@ -295,9 +295,13 @@ class _NotesScreenState extends State<NotesScreen> {
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
                 Expanded(
-                  child: ListView.builder(
-                    padding: const EdgeInsets.fromLTRB(20, 8, 20, 100),
-                    itemCount: keys.length,
+                  child: RefreshIndicator(
+                    color: AppColors.orange,
+                    onRefresh: _load,
+                    child: ListView.builder(
+                      physics: const AlwaysScrollableScrollPhysics(),
+                      padding: const EdgeInsets.fromLTRB(20, 8, 20, 100),
+                      itemCount: keys.length,
                     itemBuilder: (context, sectionIndex) {
                       final day = keys[sectionIndex];
                       final items = _grouped[day]!;
@@ -344,6 +348,7 @@ class _NotesScreenState extends State<NotesScreen> {
                         ],
                       );
                     },
+                    ),
                   ),
                 ),
               ],
