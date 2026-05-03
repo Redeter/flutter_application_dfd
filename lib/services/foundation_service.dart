@@ -411,8 +411,16 @@ class FoundationService {
     for (final m in d.medications) {
       final slots = m.schedule.isEmpty ? 1 : m.schedule.length;
       expected += slots;
-      if (m.takenAt != null) {
-        taken += slots;
+      if (m.schedule.isEmpty) {
+        if (m.takenAtPerDose.isNotEmpty && m.takenAtPerDose[0] != null) {
+          taken += 1;
+        }
+      } else {
+        for (var i = 0; i < m.schedule.length; i++) {
+          if (i < m.takenAtPerDose.length && m.takenAtPerDose[i] != null) {
+            taken++;
+          }
+        }
       }
     }
     if (expected == 0) {
