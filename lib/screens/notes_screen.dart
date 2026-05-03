@@ -1,15 +1,18 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_svg/flutter_svg.dart';
 import 'package:google_fonts/google_fonts.dart';
 
 import '../models/note_item.dart';
 import '../services/notes_storage.dart';
 import '../theme/app_colors.dart';
 import '../widgets/app_bottom_nav.dart';
+import '../widgets/cream_background_decor.dart';
 import 'calendar_screen.dart';
 import 'goals_screen.dart';
 import 'note_edit_screen.dart';
 import 'state_categories_sheet.dart';
 import 'statistics_screen.dart';
+import 'user_profile_screen.dart';
 
 String _dateHeaderRu(DateTime d) {
   const months = [
@@ -87,15 +90,32 @@ class _NotesScreenState extends State<NotesScreen> {
           initialBody: note?.preview,
           initialTags: note?.tags.map((e) => '#$e').join(' '),
           selectedDate: note?.date,
+          initialSticker: note?.sticker,
+          allowDelete: note != null && index != null,
         ),
       ),
     );
     if (!mounted || result == null) return;
 
+    if (result['deleted'] == true) {
+      if (index != null && index >= 0 && index < _notes.length) {
+        setState(() => _notes.removeAt(index));
+        await NotesStorage.instance.saveAll(_notes);
+        if (!mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Заметка удалена')),
+        );
+      }
+      return;
+    }
+
     final title = (result['title'] as String?)?.trim();
     final body = (result['body'] as String?)?.trim();
     final tagsRaw = (result['tags'] as String?)?.trim() ?? '';
     final date = result['date'] as DateTime? ?? DateTime.now();
+    final sticker = result['sticker'] is NoteStickerKind
+        ? result['sticker'] as NoteStickerKind
+        : NoteStickerKind.sun;
 
     final manualTags = tagsRaw
         .split(RegExp(r'\s+'))
@@ -117,6 +137,7 @@ class _NotesScreenState extends State<NotesScreen> {
       title: normalizedTitle,
       tags: tagList,
       preview: normalizedBody,
+      sticker: sticker,
     );
     setState(() {
       if (index != null && index >= 0 && index < _notes.length) {
@@ -222,73 +243,99 @@ class _NotesScreenState extends State<NotesScreen> {
       ..sort((a, b) => b.compareTo(a));
 
     return Scaffold(
-      backgroundColor: AppColors.peachBackground,
-      body: SafeArea(
-        bottom: false,
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            Padding(
-              padding: const EdgeInsets.fromLTRB(20, 12, 20, 8),
-              child: Align(
-                alignment: Alignment.centerRight,
-                child: _profileAvatar(),
-              ),
-            ),
-            Expanded(
-              child: ListView.builder(
-                padding: const EdgeInsets.fromLTRB(20, 8, 20, 100),
-                itemCount: keys.length,
-                itemBuilder: (context, sectionIndex) {
-                  final day = keys[sectionIndex];
-                  final items = _grouped[day]!;
-                  return Column(
-                    crossAxisAlignment: CrossAxisAlignment.stretch,
-                    children: [
-                      _DateDivider(label: _dateHeaderRu(day)),
-                      const SizedBox(height: 14),
-                      ...items.asMap().entries.map((e) {
-                        final globalIndex = _notes.indexOf(e.value);
-                        return Padding(
-                          padding: const EdgeInsets.only(bottom: 14),
-                          child: Dismissible(
-                            key: ValueKey('${e.value.date.toIso8601String()}-${e.value.title}-$globalIndex'),
-                            direction: DismissDirection.endToStart,
-                            background: Container(
-                              alignment: Alignment.centerRight,
-                              padding: const EdgeInsets.only(right: 16),
-                              decoration: BoxDecoration(
-                                color: Colors.redAccent.withValues(alpha: 0.85),
-                                borderRadius: BorderRadius.circular(22),
-                              ),
-                              child: const Icon(
-                                Icons.delete_outline_rounded,
-                                color: Colors.white,
-                                size: 24,
-                              ),
-                            ),
-                            confirmDismiss: (_) async {
-                              await _deleteNote(globalIndex);
-                              return false;
-                            },
-                            child: _NoteCard(
-                              note: e.value,
-                              onEdit: () => _openEditor(
-                                note: e.value,
-                                index: globalIndex,
-                              ),
-                              onDelete: () => _deleteNote(globalIndex),
-                            ),
-                          ),
-                        );
-                      }),
-                    ],
-                  );
-                },
-              ),
-            ),
-          ],
+      backgroundColor: AppColors.creamBg,
+      appBar: AppBar(
+        automaticallyImplyLeading: false,
+        backgroundColor: Colors.transparent,
+        elevation: 0,
+        title: Text(
+          'Заметки',
+          style: GoogleFonts.alegreyaSans(
+            fontSize: 22,
+            fontWeight: FontWeight.w800,
+            color: AppColors.textDark,
+          ),
         ),
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.person_outline_rounded, color: AppColors.orange),
+            tooltip: 'Профиль',
+            onPressed: () {
+              Navigator.push<void>(
+                context,
+                MaterialPageRoute<void>(
+                  builder: (_) => const UserProfileScreen(),
+                ),
+              );
+            },
+          ),
+        ],
+      ),
+      body: Stack(
+        fit: StackFit.expand,
+        children: [
+          const CreamBackgroundDecor(),
+          SafeArea(
+            bottom: false,
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Expanded(
+                  child: ListView.builder(
+                    padding: const EdgeInsets.fromLTRB(20, 8, 20, 100),
+                    itemCount: keys.length,
+                    itemBuilder: (context, sectionIndex) {
+                      final day = keys[sectionIndex];
+                      final items = _grouped[day]!;
+                      return Column(
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
+                        children: [
+                          _DateDivider(label: _dateHeaderRu(day)),
+                          const SizedBox(height: 14),
+                          ...items.asMap().entries.map((e) {
+                            final globalIndex = _notes.indexOf(e.value);
+                            return Padding(
+                              padding: const EdgeInsets.only(bottom: 14),
+                              child: Dismissible(
+                                key: ValueKey('${e.value.date.toIso8601String()}-${e.value.title}-$globalIndex'),
+                                direction: DismissDirection.endToStart,
+                                background: Container(
+                                  alignment: Alignment.centerRight,
+                                  padding: const EdgeInsets.only(right: 16),
+                                  decoration: BoxDecoration(
+                                    color: Colors.redAccent.withValues(alpha: 0.85),
+                                    borderRadius: BorderRadius.circular(22),
+                                  ),
+                                  child: const Icon(
+                                    Icons.delete_outline_rounded,
+                                    color: Colors.white,
+                                    size: 24,
+                                  ),
+                                ),
+                                confirmDismiss: (_) async {
+                                  await _deleteNote(globalIndex);
+                                  return false;
+                                },
+                                child: _NoteCard(
+                                  note: e.value,
+                                  onEdit: () => _openEditor(
+                                    note: e.value,
+                                    index: globalIndex,
+                                  ),
+                                  onDelete: () => _deleteNote(globalIndex),
+                                ),
+                              ),
+                            );
+                          }),
+                        ],
+                      );
+                    },
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
       ),
       floatingActionButton: Padding(
         padding: const EdgeInsets.only(bottom: 8),
@@ -320,49 +367,6 @@ class _NotesScreenState extends State<NotesScreen> {
         activeTab: BottomNavTab.notes,
         onTabSelected: _onBottomTab,
         onCenterTap: () => showStateCategoriesSheet(context),
-      ),
-    );
-  }
-
-  Widget _profileAvatar() {
-    return Container(
-      width: 52,
-      height: 52,
-      decoration: BoxDecoration(
-        shape: BoxShape.circle,
-        border: Border.all(color: AppColors.orange, width: 4),
-      ),
-      child: Center(
-        child: Container(
-          width: 26,
-          height: 26,
-          decoration: BoxDecoration(
-            color: AppColors.orange,
-            borderRadius: BorderRadius.circular(8),
-          ),
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              Container(
-                width: 8,
-                height: 8,
-                decoration: const BoxDecoration(
-                  color: AppColors.peachBackground,
-                  shape: BoxShape.circle,
-                ),
-              ),
-              const SizedBox(height: 3),
-              Container(
-                width: 16,
-                height: 8,
-                decoration: BoxDecoration(
-                  color: AppColors.peachBackground,
-                  borderRadius: BorderRadius.circular(4),
-                ),
-              ),
-            ],
-          ),
-        ),
       ),
     );
   }
@@ -405,6 +409,20 @@ class _DateDivider extends StatelessWidget {
         ),
       ],
     );
+  }
+}
+
+class _NoteStickerGlyph extends StatelessWidget {
+  const _NoteStickerGlyph({required this.kind});
+
+  final NoteStickerKind kind;
+
+  @override
+  Widget build(BuildContext context) {
+    final svg = SvgPicture.asset(kind.assetPath, fit: BoxFit.contain);
+    final s = kind.glyphVisualScale;
+    if (s == 1.0) return svg;
+    return Transform.scale(scale: s, alignment: Alignment.center, child: svg);
   }
 }
 
@@ -456,30 +474,30 @@ class _NoteCard extends StatelessWidget {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Row(
-                        children: List.generate(
-                          3,
-                          (_) => Container(
-                            width: 16,
-                            height: 16,
-                            margin: const EdgeInsets.only(right: 6),
-                            decoration: const BoxDecoration(
-                              shape: BoxShape.circle,
-                              color: Color(0xFFD1D1D6), // стикеры (placeholder)
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Padding(
+                            padding: const EdgeInsets.only(right: 12, top: 1),
+                            child: SizedBox(
+                              width: 44,
+                              height: 44,
+                              child: _NoteStickerGlyph(kind: note.sticker),
                             ),
                           ),
-                        ),
-                      ),
-                      const SizedBox(height: 8),
-                      Text(
-                        note.title,
-                        maxLines: 2,
-                        overflow: TextOverflow.ellipsis,
-                        style: GoogleFonts.alegreyaSans(
-                          fontSize: 22,
-                          height: 1.15,
-                          fontWeight: FontWeight.w800,
-                          color: AppColors.textDark,
-                        ),
+                          Expanded(
+                            child: Text(
+                              note.title,
+                              maxLines: 2,
+                              overflow: TextOverflow.ellipsis,
+                              style: GoogleFonts.alegreyaSans(
+                                fontSize: 22,
+                                height: 1.15,
+                                fontWeight: FontWeight.w800,
+                                color: AppColors.textDark,
+                              ),
+                            ),
+                          ),
+                        ],
                       ),
                       const SizedBox(height: 6),
                       Wrap(

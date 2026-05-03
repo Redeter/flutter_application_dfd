@@ -66,6 +66,7 @@ flutter:
   assets:
     - assets/icons/
     - assets/icons/emotions/
+    - assets/icons/notes_stickers/
 
   # To add assets to your application, add an assets section, like this:
   # assets:

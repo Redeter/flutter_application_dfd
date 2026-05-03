@@ -4,6 +4,7 @@ import 'package:google_fonts/google_fonts.dart';
 import '../models/state_entries.dart';
 import '../services/state_storage.dart';
 import '../theme/app_colors.dart';
+import '../widgets/asset_scale_slider.dart';
 
 void showMoodEntrySheet(BuildContext context) {
   showModalBottomSheet<void>(
@@ -169,43 +170,22 @@ class _MoodEntrySheetState extends State<_MoodEntrySheet> {
               color: AppColors.textDark.withValues(alpha: 0.85),
             ),
           ),
-          const SizedBox(height: 20),
+          const SizedBox(height: 16),
           Center(
             child: Text(
               _value.round().toString(),
-              style: GoogleFonts.alegreyaSans(
+              style: GoogleFonts.alegreyaSansSc(
                 fontSize: 64,
-                fontWeight: FontWeight.w800,
+                fontWeight: FontWeight.w400,
                 color: AppColors.textDark,
               ),
             ),
           ),
           const SizedBox(height: 16),
-          SliderTheme(
-            data: SliderTheme.of(context).copyWith(
-              activeTrackColor: Colors.transparent,
-              inactiveTrackColor: Colors.transparent,
-              overlayColor: Colors.transparent,
-              thumbShape: const RoundSliderThumbShape(enabledThumbRadius: 18),
-            ),
-            child: Slider(
-              value: _value,
-              min: 1,
-              max: 10,
-              divisions: 9,
-              thumbColor: AppColors.orangeHandle,
-              activeColor: Colors.transparent,
-              onChanged: (v) => setState(() => _value = v),
-            ),
-          ),
-          Container(
-            height: 8,
-            decoration: BoxDecoration(
-              borderRadius: BorderRadius.circular(4),
-              gradient: const LinearGradient(
-                colors: [AppColors.purple, AppColors.orangeHandle],
-              ),
-            ),
+          AssetScaleSlider(
+            value: _value,
+            onChanged: (v) => setState(() => _value = v),
+            scaleAssetPath: 'assets/icons/mood scale.svg',
           ),
         ],
       ),

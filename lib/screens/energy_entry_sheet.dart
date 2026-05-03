@@ -4,6 +4,7 @@ import 'package:google_fonts/google_fonts.dart';
 import '../models/state_entries.dart';
 import '../services/state_storage.dart';
 import '../theme/app_colors.dart';
+import '../widgets/asset_scale_slider.dart';
 
 void showEnergyEntrySheet(BuildContext context) {
   showModalBottomSheet<void>(
@@ -171,41 +172,22 @@ class _EnergyEntrySheetState extends State<_EnergyEntrySheet> {
               color: AppColors.textDark.withValues(alpha: 0.85),
             ),
           ),
-          const SizedBox(height: 20),
+          const SizedBox(height: 16),
           Center(
             child: Text(
               _level.round().toString(),
-              style: GoogleFonts.alegreyaSans(
+              style: GoogleFonts.alegreyaSansSc(
                 fontSize: 64,
-                fontWeight: FontWeight.w800,
+                fontWeight: FontWeight.w400,
                 color: AppColors.textDark,
               ),
             ),
           ),
           const SizedBox(height: 16),
-          SliderTheme(
-            data: SliderTheme.of(context).copyWith(
-              activeTrackColor: Colors.transparent,
-              inactiveTrackColor: Colors.transparent,
-              thumbShape: const RoundSliderThumbShape(enabledThumbRadius: 18),
-            ),
-            child: Slider(
-              value: _level,
-              min: 1,
-              max: 10,
-              divisions: 9,
-              thumbColor: AppColors.orangeHandle,
-              onChanged: (v) => setState(() => _level = v),
-            ),
-          ),
-          Container(
-            height: 8,
-            decoration: BoxDecoration(
-              borderRadius: BorderRadius.circular(4),
-              gradient: const LinearGradient(
-                colors: [Color(0xFF5D4037), AppColors.lightYellow],
-              ),
-            ),
+          AssetScaleSlider(
+            value: _level,
+            onChanged: (v) => setState(() => _level = v),
+            scaleAssetPath: 'assets/icons/energy scale.svg',
           ),
         ],
       ),

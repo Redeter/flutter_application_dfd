@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_svg/flutter_svg.dart';
 import 'package:google_fonts/google_fonts.dart';
 
 import '../models/state_entries.dart';
@@ -44,6 +45,8 @@ class _NutritionEntrySheet extends StatefulWidget {
 
 class _NutritionEntrySheetState extends State<_NutritionEntrySheet> {
   int _mealIndex = 0;
+  /// Отметки завтрак / обед / ужин по индексу `_mealIndex`.
+  final List<bool> _mealMarked = [false, false, false];
   int _snackCount = 0;
   final _sensationsSel = <String>{};
   final _emotionalSel = <String>{};
@@ -172,54 +175,92 @@ class _NutritionEntrySheetState extends State<_NutritionEntrySheet> {
           ),
           const SizedBox(height: 16),
           Container(
-            padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
+            padding: const EdgeInsets.fromLTRB(16, 20, 16, 24),
             decoration: BoxDecoration(
               color: _mealColors[_mealIndex],
               borderRadius: BorderRadius.circular(20),
               border: Border.all(color: AppColors.orangeHandle.withValues(alpha: 0.4)),
             ),
-            child: Row(
+            child: Column(
               children: [
-                Container(
-                  width: 48,
-                  height: 48,
-                  decoration: BoxDecoration(
-                    color: AppColors.greyPlaceholder.withValues(alpha: 0.5),
-                    borderRadius: BorderRadius.circular(12),
+                Text(
+                  _meals[_mealIndex],
+                  textAlign: TextAlign.center,
+                  style: GoogleFonts.alegreyaSans(
+                    fontSize: 20,
+                    fontWeight: FontWeight.w700,
+                    color: AppColors.textDark,
                   ),
                 ),
-                const SizedBox(width: 16),
-                Expanded(
-                  child: Text(
-                    _meals[_mealIndex],
-                    style: GoogleFonts.alegreyaSans(
-                      fontSize: 20,
-                      fontWeight: FontWeight.w700,
-                      color: AppColors.textDark,
+                const SizedBox(height: 20),
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  crossAxisAlignment: CrossAxisAlignment.center,
+                  children: [
+                    IconButton(
+                      visualDensity: VisualDensity.compact,
+                      constraints: const BoxConstraints(minWidth: 44, minHeight: 44),
+                      padding: EdgeInsets.zero,
+                      onPressed: _mealIndex > 0
+                          ? () => setState(() => _mealIndex--)
+                          : null,
+                      icon: Icon(
+                        Icons.arrow_back_ios_new_rounded,
+                        color: _mealIndex > 0 ? AppColors.orangeHandle : AppColors.greyMuted,
+                        size: 22,
+                      ),
                     ),
-                  ),
-                ),
-                IconButton(
-                  onPressed: _mealIndex > 0
-                      ? () => setState(() => _mealIndex--)
-                      : null,
-                  icon: Icon(
-                    Icons.arrow_back_ios_new_rounded,
-                    color: _mealIndex > 0 ? AppColors.orangeHandle : AppColors.greyMuted,
-                    size: 20,
-                  ),
-                ),
-                IconButton(
-                  onPressed: _mealIndex < _meals.length - 1
-                      ? () => setState(() => _mealIndex++)
-                      : null,
-                  icon: Icon(
-                    Icons.arrow_forward_ios_rounded,
-                    color: _mealIndex < _meals.length - 1
-                        ? AppColors.orangeHandle
-                        : AppColors.greyMuted,
-                    size: 20,
-                  ),
+                    const SizedBox(width: 4),
+                    Material(
+                      color: Colors.transparent,
+                      child: InkWell(
+                        onTap: () => setState(() {
+                          _mealMarked[_mealIndex] = !_mealMarked[_mealIndex];
+                        }),
+                        borderRadius: BorderRadius.circular(14),
+                        child: Ink(
+                          width: 70,
+                          height: 70,
+                          decoration: BoxDecoration(
+                            color: AppColors.white.withValues(alpha: 0.92),
+                            borderRadius: BorderRadius.circular(14),
+                            border: Border.all(
+                              color: _mealMarked[_mealIndex]
+                                  ? AppColors.orangeHandle
+                                  : AppColors.greyMuted.withValues(alpha: 0.65),
+                              width: _mealMarked[_mealIndex] ? 2.5 : 1.5,
+                            ),
+                          ),
+                          child: Center(
+                            child: _mealMarked[_mealIndex]
+                                ? SvgPicture.asset(
+                                    'assets/icons/hand1.svg',
+                                    width: 50,
+                                    height: 50,
+                                    fit: BoxFit.contain,
+                                  )
+                                : const SizedBox.shrink(),
+                          ),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 4),
+                    IconButton(
+                      visualDensity: VisualDensity.compact,
+                      constraints: const BoxConstraints(minWidth: 44, minHeight: 44),
+                      padding: EdgeInsets.zero,
+                      onPressed: _mealIndex < _meals.length - 1
+                          ? () => setState(() => _mealIndex++)
+                          : null,
+                      icon: Icon(
+                        Icons.arrow_forward_ios_rounded,
+                        color: _mealIndex < _meals.length - 1
+                            ? AppColors.orangeHandle
+                            : AppColors.greyMuted,
+                        size: 22,
+                      ),
+                    ),
+                  ],
                 ),
               ],
             ),
@@ -369,9 +410,13 @@ class _NutritionEntrySheetState extends State<_NutritionEntrySheet> {
   }
 
   Future<void> _save() async {
+    final mealsSaved = <String>[];
+    for (var i = 0; i < _meals.length; i++) {
+      if (_mealMarked[i]) mealsSaved.add(_meals[i]);
+    }
     final entry = NutritionEntry(
       createdAt: DateTime.now(),
-      meals: [_meals[_mealIndex]],
+      meals: mealsSaved,
       snackCount: _snackCount,
       sensations: _sensationsSel.toList(),
       emotionalConnection: _emotionalSel.toList(),

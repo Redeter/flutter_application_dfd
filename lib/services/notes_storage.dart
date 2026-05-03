@@ -29,6 +29,7 @@ class NotesStorage {
               title: m['title'] as String? ?? '',
               tags: (m['tags'] as List<dynamic>?)?.map((e) => e.toString()).toList() ?? [],
               preview: m['preview'] as String? ?? '',
+              sticker: NoteStickerKind.fromStorage(m['sticker'] as String?),
             );
           })
           .whereType<NoteItem>()
@@ -45,6 +46,7 @@ class NotesStorage {
           'title': n.title,
           'tags': n.tags,
           'preview': n.preview,
+          'sticker': n.sticker.storageKey,
         }).toList());
     await SecureKvService.instance.writeString(_keyNotes, encoded);
   }

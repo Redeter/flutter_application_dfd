@@ -110,7 +110,6 @@ packages:
       url: "https://pub.dev"
     source: hosted
     version: "5.0.0"
-<<<<<<< DFDDanya
   flutter_local_notifications:
     dependency: "direct main"
     description:
@@ -183,7 +182,6 @@ packages:
       url: "https://pub.dev"
     source: hosted
     version: "3.1.2"
-=======
   flutter_svg:
     dependency: "direct main"
     description:
@@ -192,7 +190,6 @@ packages:
       url: "https://pub.dev"
     source: hosted
     version: "2.2.2"
->>>>>>> main
   flutter_test:
     dependency: "direct dev"
     description: flutter

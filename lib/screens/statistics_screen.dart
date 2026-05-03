@@ -128,6 +128,8 @@ class _StatisticsScreenState extends State<StatisticsScreen> {
           onLongPress: _showHiddenDevActions,
           child: Text(
             'Статистика',
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
             style: GoogleFonts.alegreyaSans(
               fontSize: 22,
               fontWeight: FontWeight.w800,
@@ -643,22 +645,27 @@ class _StatisticsScreenState extends State<StatisticsScreen> {
             ],
           ),
           child: Row(
-            mainAxisAlignment: MainAxisAlignment.spaceAround,
             children: [
-              _buildRing(
-                value: stats.avgMood != null ? stats.avgMood! / 10 : 0,
-                label: 'Настроение',
-                color: AppColors.orange,
+              Expanded(
+                child: _buildRing(
+                  value: stats.avgMood != null ? stats.avgMood! / 10 : 0,
+                  label: 'Настроение',
+                  color: AppColors.orange,
+                ),
               ),
-              _buildRing(
-                value: stats.avgSleep != null ? stats.avgSleep! / 10 : 0,
-                label: 'Сон',
-                color: AppColors.lavender,
+              Expanded(
+                child: _buildRing(
+                  value: stats.avgSleep != null ? stats.avgSleep! / 10 : 0,
+                  label: 'Сон',
+                  color: AppColors.lavender,
+                ),
               ),
-              _buildRing(
-                value: stats.avgEnergy != null ? stats.avgEnergy! / 10 : 0,
-                label: 'Энергия',
-                color: AppColors.lightGreen,
+              Expanded(
+                child: _buildRing(
+                  value: stats.avgEnergy != null ? stats.avgEnergy! / 10 : 0,
+                  label: 'Энергия',
+                  color: AppColors.lightGreen,
+                ),
               ),
             ],
           ),
@@ -732,6 +739,7 @@ class _StatisticsScreenState extends State<StatisticsScreen> {
   }) {
     final progress = value.clamp(0.0, 1.0);
     return Column(
+      crossAxisAlignment: CrossAxisAlignment.center,
       children: [
         SizedBox(
           width: 56,
@@ -761,6 +769,9 @@ class _StatisticsScreenState extends State<StatisticsScreen> {
         const SizedBox(height: 6),
         Text(
           label,
+          textAlign: TextAlign.center,
+          maxLines: 2,
+          overflow: TextOverflow.ellipsis,
           style: GoogleFonts.alegreyaSans(
             fontSize: 12,
             color: Colors.white.withValues(alpha: 0.9),
@@ -1216,16 +1227,23 @@ class _StatisticsScreenState extends State<StatisticsScreen> {
             children: [
               const Icon(Icons.fact_check_outlined, color: AppColors.orange, size: 20),
               const SizedBox(width: 8),
-              Text(
-                'Карточка точности анализа',
-                style: GoogleFonts.alegreyaSans(
-                  fontSize: 15,
-                  fontWeight: FontWeight.w800,
-                  color: AppColors.textDark,
+              Expanded(
+                child: Text(
+                  'Карточка точности анализа',
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                  style: GoogleFonts.alegreyaSans(
+                    fontSize: 15,
+                    fontWeight: FontWeight.w800,
+                    color: AppColors.textDark,
+                  ),
                 ),
               ),
-              const Spacer(),
               TextButton.icon(
+                style: TextButton.styleFrom(
+                  padding: const EdgeInsets.symmetric(horizontal: 8),
+                  tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                ),
                 onPressed: _showDecisionTreeDialog,
                 icon: const Icon(Icons.account_tree_outlined, size: 16),
                 label: const Text('Как решили'),

@@ -6,6 +6,7 @@ import '../services/calendar_storage.dart';
 import '../services/notification_service.dart';
 import '../theme/app_colors.dart';
 import '../widgets/app_bottom_nav.dart';
+import '../widgets/cream_background_decor.dart';
 import '../widgets/delete_confirm_dialog.dart';
 import 'add_appointment_screen.dart';
 import 'add_medication_screen.dart';
@@ -224,7 +225,7 @@ class _CalendarScreenState extends State<CalendarScreen> {
             Expanded(
               child: Stack(
                 children: [
-                  _buildBackgroundShapes(),
+                  const CreamBackgroundDecor(),
                   _entries.isEmpty ? _buildEmpty() : _buildList(),
                 ],
               ),
@@ -379,37 +380,6 @@ class _CalendarScreenState extends State<CalendarScreen> {
           );
         }).toList(),
       ),
-    );
-  }
-
-  Widget _buildBackgroundShapes() {
-    return Stack(
-      children: [
-        Positioned(
-          top: -80,
-          right: -80,
-          child: Container(
-            width: 200,
-            height: 200,
-            decoration: BoxDecoration(
-              color: AppColors.orange.withValues(alpha: 0.12),
-              shape: BoxShape.circle,
-            ),
-          ),
-        ),
-        Positioned(
-          bottom: 100,
-          left: -60,
-          child: Container(
-            width: 160,
-            height: 160,
-            decoration: BoxDecoration(
-              color: AppColors.orange.withValues(alpha: 0.1),
-              shape: BoxShape.circle,
-            ),
-          ),
-        ),
-      ],
     );
   }
 

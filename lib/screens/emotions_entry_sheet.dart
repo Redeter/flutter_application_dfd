@@ -1,5 +1,5 @@
-
 import 'package:flutter/material.dart';
+import 'package:flutter_svg/flutter_svg.dart';
 import 'package:google_fonts/google_fonts.dart';
 
 import '../models/state_entries.dart';
@@ -17,18 +17,18 @@ void showEmotionsEntrySheet(BuildContext context) {
 }
 
 const _emotions = [
-  ('Спокойствие', 'assets/icons/emotions/chill.png', [Color(0xFFE8E4E0), Color(0xFFFFD8B1)]),
-  ('Радость', 'assets/icons/emotions/joy.png', [Color(0xFFFFE082), Color(0xFFFFAB6D)]),
-  ('Отвращение', 'assets/icons/emotions/disgust.png', [Color(0xFF558B2F), Color(0xFFD4A574)]),
-  ('Злость', 'assets/icons/emotions/anger.png', [Color(0xFFE53935), Color(0xFFFFAB6D)]),
-  ('Тревога', 'assets/icons/emotions/anxiety.png', [Color(0xFFD4A574), Color(0xFFE8DCC8)]),
-  ('Страх', 'assets/icons/emotions/fear.png', [Color(0xFF7E57C2), Color(0xFFFFAB9E)]),
-  ('Грусть', 'assets/icons/emotions/sadness.png', [Color(0xFF42A5F5), Color(0xFFFFD8B1)]),
-  ('Стыд', 'assets/icons/emotions/shame.png', [Color(0xFFF48FB1), Color(0xFFFFD8B1)]),
-  ('Раздражение', 'assets/icons/emotions/irritation.png', [Color(0xFFC62828), Color(0xFFFFAB6D)]),
-  ('Беспокойство', 'assets/icons/emotions/worry.png', [Color(0xFF66BB6A), Color(0xFFA5D6A7)]),
-  ('Напряжение', 'assets/icons/emotions/voltage.png', [Color(0xFF424242), Color(0xFFBCAAA4)]),
-  ('Вдохновение', 'assets/icons/emotions/inspiration.png', [Color(0xFFFFF59D), Color(0xFFFFD8B1)]),
+  ('Спокойствие', 'assets/icons/emotions/chill.svg'),
+  ('Радость', 'assets/icons/emotions/joy.svg'),
+  ('Отвращение', 'assets/icons/emotions/disgust.svg'),
+  ('Злость', 'assets/icons/emotions/anger.svg'),
+  ('Тревога', 'assets/icons/emotions/anxiety.svg'),
+  ('Страх', 'assets/icons/emotions/fear.svg'),
+  ('Грусть', 'assets/icons/emotions/sadness.svg'),
+  ('Стыд', 'assets/icons/emotions/shame.svg'),
+  ('Раздражение', 'assets/icons/emotions/irritation.svg'),
+  ('Беспокойство', 'assets/icons/emotions/worry.svg'),
+  ('Напряжение', 'assets/icons/emotions/voltage.svg'),
+  ('Вдохновение', 'assets/icons/emotions/inspiration.svg'),
 ];
 
 class _EmotionsEntrySheet extends StatefulWidget {
@@ -111,11 +111,11 @@ class _EmotionsEntrySheetState extends State<_EmotionsEntrySheet> {
                       shrinkWrap: true,
                       physics: const NeverScrollableScrollPhysics(),
                       crossAxisCount: 3,
-                      mainAxisSpacing: 12,
-                      crossAxisSpacing: 12,
-                      childAspectRatio: 0.78,
+                      mainAxisSpacing: 10,
+                      crossAxisSpacing: 10,
+                      childAspectRatio: 1,
                       children: _emotions.asMap().entries.map((e) {
-                        final (label, iconPath, _) = e.value;
+                        final (label, iconPath) = e.value;
                         final selected = _selected.contains(label);
                         return GestureDetector(
                           onTap: () {
@@ -129,26 +129,18 @@ class _EmotionsEntrySheetState extends State<_EmotionsEntrySheet> {
                           },
                           child: AnimatedContainer(
                             duration: const Duration(milliseconds: 120),
-                            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 6),
+                            clipBehavior: Clip.antiAlias,
                             decoration: BoxDecoration(
                               borderRadius: BorderRadius.circular(16),
-                              color: AppColors.white.withValues(alpha: 0.55),
                               border: selected
                                   ? Border.all(color: AppColors.orangeHandle, width: 4)
                                   : null,
                             ),
-                            child: Column(
-                              mainAxisAlignment: MainAxisAlignment.center,
-                              children: [
-                                SizedBox(
-                                  height: 68,
-                                  width: double.infinity,
-                                  child: Image.asset(
-                                    iconPath,
-                                    fit: BoxFit.contain,
-                                  ),
-                                ),
-                              ],
+                            child: SvgPicture.asset(
+                              iconPath,
+                              fit: BoxFit.cover,
+                              width: double.infinity,
+                              height: double.infinity,
                             ),
                           ),
                         );
