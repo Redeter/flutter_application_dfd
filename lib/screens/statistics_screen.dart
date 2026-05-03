@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:google_fonts/google_fonts.dart';
 
 import '../models/aggregated_data.dart';
@@ -15,8 +16,10 @@ import '../services/notification_service.dart';
 import '../services/offline_validation_service.dart';
 import '../services/quality_metrics_service.dart';
 import '../theme/app_colors.dart';
+import '../theme/peach_app_bar.dart';
 import '../utils/stats_helpers.dart';
 import '../widgets/app_bottom_nav.dart';
+import '../widgets/unified_horizontal_date_strip.dart';
 import 'calendar_screen.dart';
 import 'goals_screen.dart';
 import 'notes_screen.dart';
@@ -150,18 +153,35 @@ class _StatisticsScreenState extends State<StatisticsScreen> {
     return computeLocalStats(_data!, start: start, end: end);
   }
 
+  /// Тот же диапазон дней, что и в календаре (−5 … +8 от сегодня).
+  List<DateTime> get _stripDays {
+    final n = DateTime.now();
+    final norm = DateTime(n.year, n.month, n.day);
+    return List.generate(14, (i) => norm.add(Duration(days: i - 5)));
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: AppColors.cream,
       appBar: AppBar(
-        backgroundColor: Colors.transparent,
+        backgroundColor: AppColors.headerPeach,
+        surfaceTintColor: Colors.transparent,
         elevation: 0,
+        scrolledUnderElevation: 0,
+        toolbarHeight: kPeachAppBarToolbarHeight,
+        leadingWidth: kPeachAppBarLeadingWidth,
+        actionsPadding: kPeachAppBarActionsPadding,
+        systemOverlayStyle: SystemUiOverlayStyle.dark.copyWith(
+          statusBarColor: Colors.transparent,
+          statusBarIconBrightness: Brightness.dark,
+        ),
         automaticallyImplyLeading: !widget.embeddedInShell,
         leading: widget.embeddedInShell
             ? null
             : IconButton(
-                icon: const Icon(Icons.arrow_back, color: AppColors.orange),
+                style: peachAppBarCircleIconButtonStyle(),
+                icon: const Icon(Icons.arrow_back_rounded),
                 onPressed: () => Navigator.pop(context),
               ),
         title: GestureDetector(
@@ -170,16 +190,13 @@ class _StatisticsScreenState extends State<StatisticsScreen> {
             'Статистика',
             maxLines: 1,
             overflow: TextOverflow.ellipsis,
-            style: GoogleFonts.alegreyaSans(
-              fontSize: 22,
-              fontWeight: FontWeight.w800,
-              color: AppColors.textDark,
-            ),
+            style: peachAppBarTitleStyle(),
           ),
         ),
         actions: [
           IconButton(
-            icon: const Icon(Icons.person_outline_rounded, color: AppColors.orange),
+            style: peachAppBarCircleIconButtonStyle(),
+            icon: const Icon(Icons.person_outline_rounded),
             tooltip: 'Профиль',
             onPressed: () async {
               await Navigator.push(
@@ -191,16 +208,50 @@ class _StatisticsScreenState extends State<StatisticsScreen> {
             },
           ),
           IconButton(
-            icon: const Icon(Icons.refresh_rounded, color: AppColors.orange),
+            style: peachAppBarCircleIconButtonStyle(),
+            icon: const Icon(Icons.refresh_rounded),
             onPressed: _loading ? null : _load,
           ),
         ],
       ),
       body: SafeArea(
+        top: false,
         bottom: false,
         child: _loading
             ? const Center(child: CircularProgressIndicator(color: AppColors.orange))
-            : _buildContent(),
+            : Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  Container(
+                    width: double.infinity,
+                    decoration: BoxDecoration(
+                      color: AppColors.headerPeach,
+                      boxShadow: [
+                        BoxShadow(
+                          color: Colors.black.withValues(alpha: 0.08),
+                          blurRadius: 12,
+                          offset: const Offset(0, 4),
+                        ),
+                      ],
+                    ),
+                    padding: const EdgeInsets.fromLTRB(
+                      0,
+                      kPeachHeaderStripTopGap,
+                      0,
+                      kPeachHeaderStripBottomPadding,
+                    ),
+                    child: UnifiedHorizontalDateStrip(
+                      days: _stripDays,
+                      selectedDay: _selectedDate,
+                      onDaySelected: (d) => setState(() {
+                        _selectedDate = d;
+                        _viewWeek = true;
+                      }),
+                    ),
+                  ),
+                  Expanded(child: _buildContentBelowStrip()),
+                ],
+              ),
       ),
       bottomNavigationBar: widget.embeddedInShell
           ? null
@@ -454,10 +505,13 @@ class _StatisticsScreenState extends State<StatisticsScreen> {
     }
   }
 
-  Widget _buildContent() {
+  Widget _buildContentBelowStrip() {
     if (_insight == null) return const SizedBox.shrink();
     if (_insight!.hasError) {
-      return _buildError(_insight!.error!);
+      return SingleChildScrollView(
+        padding: const EdgeInsets.fromLTRB(16, 16, 16, 100),
+        child: _buildError(_insight!.error!),
+      );
     }
     final blocks = <String, Widget>{};
     if (_data != null && _hasAnyData) {
@@ -484,12 +538,10 @@ class _StatisticsScreenState extends State<StatisticsScreen> {
         .toList();
 
     return SingleChildScrollView(
-      padding: const EdgeInsets.fromLTRB(16, 0, 16, 100),
+      padding: const EdgeInsets.fromLTRB(16, 16, 16, 100),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          _buildDateStrip(),
-          const SizedBox(height: 16),
           ...ordered,
           if (_insight!.insufficientData) _buildInsufficientDataCard(),
           if (!_localStats.hasAny &&
@@ -561,80 +613,6 @@ class _StatisticsScreenState extends State<StatisticsScreen> {
         );
       },
     );
-  }
-
-  Widget _buildDateStrip() {
-    final today = DateTime.now();
-    final days = List.generate(
-      14,
-      (i) => today.subtract(const Duration(days: 6)).add(Duration(days: i)),
-    );
-    const weekdayNames = ['Пн', 'Вт', 'Ср', 'Чт', 'Пт', 'Сб', 'Вс'];
-    return SizedBox(
-      height: 72,
-      child: ListView.builder(
-        scrollDirection: Axis.horizontal,
-        itemCount: days.length,
-        itemBuilder: (_, i) {
-          final d = days[i];
-          final isSelected = _viewWeek
-              ? _isSameWeek(d, _selectedDate)
-              : _isSameDay(d, _selectedDate);
-          return GestureDetector(
-            onTap: () => setState(() {
-              _selectedDate = d;
-              _viewWeek = true;
-            }),
-            child: Container(
-              width: 44,
-              margin: const EdgeInsets.only(right: 8),
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  Text(
-                    weekdayNames[d.weekday - 1],
-                    style: GoogleFonts.alegreyaSans(
-                      fontSize: 12,
-                      color: AppColors.textDark.withValues(alpha: 0.6),
-                    ),
-                  ),
-                  const SizedBox(height: 4),
-                  Container(
-                    width: 36,
-                    height: 36,
-                    decoration: BoxDecoration(
-                      shape: BoxShape.circle,
-                      color: isSelected ? AppColors.orange : Colors.transparent,
-                      border: Border.all(
-                        color: isSelected ? AppColors.orange : AppColors.greyMuted,
-                        width: 1.5,
-                      ),
-                    ),
-                    alignment: Alignment.center,
-                    child: Text(
-                      '${d.day}',
-                      style: GoogleFonts.alegreyaSans(
-                        fontSize: 14,
-                        fontWeight: FontWeight.w700,
-                        color: isSelected ? AppColors.white : AppColors.textDark,
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          );
-        },
-      ),
-    );
-  }
-
-  bool _isSameDay(DateTime a, DateTime b) =>
-      a.year == b.year && a.month == b.month && a.day == b.day;
-  bool _isSameWeek(DateTime a, DateTime b) {
-    final aStart = a.subtract(Duration(days: a.weekday - 1));
-    final bStart = b.subtract(Duration(days: b.weekday - 1));
-    return _isSameDay(aStart, bStart);
   }
 
   Widget _buildRingsAndCards() {

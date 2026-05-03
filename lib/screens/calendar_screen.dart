@@ -5,8 +5,10 @@ import '../models/calendar_entry.dart';
 import '../services/calendar_storage.dart';
 import '../services/notification_service.dart';
 import '../theme/app_colors.dart';
+import '../theme/peach_app_bar.dart';
 import '../widgets/app_bottom_nav.dart';
 import '../widgets/cream_background_decor.dart';
+import '../widgets/unified_horizontal_date_strip.dart';
 import '../widgets/delete_confirm_dialog.dart';
 import 'add_appointment_screen.dart';
 import 'add_medication_screen.dart';
@@ -16,7 +18,6 @@ import 'notes_screen.dart';
 import 'state_categories_sheet.dart';
 import 'statistics_screen.dart';
 
-const _weekdaysShort = ['Пн', 'Вт', 'Ср', 'Чт', 'Пт', 'Сб', 'Вс'];
 const _months = [
   'ЯНВАРЯ', 'ФЕВРАЛЯ', 'МАРТА', 'АПРЕЛЯ', 'МАЯ', 'ИЮНЯ',
   'ИЮЛЯ', 'АВГУСТА', 'СЕНТЯБРЯ', 'ОКТЯБРЯ', 'НОЯБРЯ', 'ДЕКАБРЯ',
@@ -229,13 +230,27 @@ class _CalendarScreenState extends State<CalendarScreen> {
         children: [
           Container(
             width: double.infinity,
-            color: AppColors.headerPeach,
+            decoration: BoxDecoration(
+              color: AppColors.headerPeach,
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black.withValues(alpha: 0.08),
+                  blurRadius: 12,
+                  offset: const Offset(0, 4),
+                ),
+              ],
+            ),
             padding: EdgeInsets.only(top: topInset),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
                 _buildHeader(),
-                _buildDateStrip(),
+                Padding(
+                  padding: const EdgeInsets.only(
+                    bottom: kPeachHeaderStripBottomPadding,
+                  ),
+                  child: _buildDateStripInner(),
+                ),
               ],
             ),
           ),
@@ -244,9 +259,15 @@ class _CalendarScreenState extends State<CalendarScreen> {
               top: false,
               bottom: false,
               child: Stack(
+                fit: StackFit.expand,
+                clipBehavior: Clip.hardEdge,
                 children: [
-                  const CreamBackgroundDecor(),
-                  _entries.isEmpty ? _buildEmpty() : _buildList(),
+                  Positioned.fill(
+                    child: const CreamBackgroundDecor(),
+                  ),
+                  Positioned.fill(
+                    child: _entries.isEmpty ? _buildEmpty() : _buildList(),
+                  ),
                 ],
               ),
             ),
@@ -290,114 +311,49 @@ class _CalendarScreenState extends State<CalendarScreen> {
   }
 
   Widget _buildHeader() {
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(20, 16, 20, 8),
-      child: Row(
-        children: [
-          IconButton(
-            onPressed: () {},
-            style: IconButton.styleFrom(
-              backgroundColor: AppColors.orange,
-              foregroundColor: AppColors.white,
+    return SizedBox(
+      height: kPeachAppBarToolbarHeight,
+      child: Padding(
+        padding: const EdgeInsets.symmetric(
+          horizontal: kPeachAppBarHorizontalInset,
+        ),
+        child: Row(
+          children: [
+            IconButton(
+              style: peachAppBarCircleIconButtonStyle(),
+              onPressed: () {},
+              icon: const Icon(Icons.person_outline_rounded),
             ),
-            icon: const Icon(Icons.person_outline_rounded),
-          ),
-          Expanded(
-            child: Center(
-              child: Text(
-                _formatDate(_selectedDate).toUpperCase(),
-                style: GoogleFonts.alegreyaSans(
-                  fontSize: 20,
-                  fontWeight: FontWeight.w800,
-                  color: AppColors.white,
+            Expanded(
+              child: Center(
+                child: Text(
+                  _formatDate(_selectedDate).toUpperCase(),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  textAlign: TextAlign.center,
+                  style: peachAppBarTitleStyle(),
                 ),
               ),
             ),
-          ),
-          IconButton(
-            onPressed: _openFullCalendar,
-            style: IconButton.styleFrom(
-              backgroundColor: AppColors.orange,
-              foregroundColor: AppColors.white,
+            IconButton(
+              style: peachAppBarCircleIconButtonStyle(),
+              onPressed: _openFullCalendar,
+              icon: const Icon(Icons.calendar_month_rounded),
             ),
-            icon: const Icon(Icons.calendar_month_rounded),
-          ),
-        ],
+          ],
+        ),
       ),
     );
   }
 
-  Widget _buildDateStrip() {
+  Widget _buildDateStripInner() {
     final today = DateTime.now();
     final base = DateTime(today.year, today.month, today.day);
     final days = List.generate(14, (i) => base.add(Duration(days: i - 5)));
-    return SingleChildScrollView(
-      scrollDirection: Axis.horizontal,
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-      child: Row(
-        children: days.map((d) {
-          final isToday = d.year == today.year &&
-              d.month == today.month &&
-              d.day == today.day;
-          final selected = d.year == _selectedDate.year &&
-              d.month == _selectedDate.month &&
-              d.day == _selectedDate.day;
-          return Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 4),
-            child: Material(
-              color: Colors.transparent,
-              child: InkWell(
-                onTap: () => _onDateChanged(d),
-                borderRadius: BorderRadius.circular(24),
-                child: Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 4),
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Text(
-                        isToday ? 'Сегодня' : _weekdaysShort[d.weekday - 1],
-                        style: TextStyle(
-                          fontSize: 11,
-                          fontWeight: FontWeight.w600,
-                          color: selected || isToday
-                              ? AppColors.white
-                              : AppColors.textDark.withValues(alpha: 0.7),
-                        ),
-                      ),
-                      const SizedBox(height: 6),
-                      Container(
-                        width: 44,
-                        height: 44,
-                        alignment: Alignment.center,
-                        decoration: BoxDecoration(
-                          color: selected ? AppColors.orange : AppColors.white,
-                          shape: BoxShape.circle,
-                          border: Border.all(
-                            color: selected
-                                ? AppColors.orange
-                                : AppColors.orange.withValues(alpha: 0.3),
-                            width: 1.5,
-                          ),
-                        ),
-                        child: Text(
-                          '${d.day}',
-                          style: TextStyle(
-                            fontSize: 18,
-                            fontWeight: FontWeight.w700,
-                            color: selected
-                                ? AppColors.white
-                                : AppColors.textDark,
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              ),
-            ),
-          );
-        }).toList(),
-      ),
+    return UnifiedHorizontalDateStrip(
+      days: days,
+      selectedDay: _selectedDate,
+      onDaySelected: _onDateChanged,
     );
   }
 

@@ -1,9 +1,11 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:google_fonts/google_fonts.dart';
 
 import '../models/aggregated_data.dart';
 import '../services/insights_service.dart';
 import '../theme/app_colors.dart';
+import '../theme/peach_app_bar.dart';
 import '../widgets/app_bottom_nav.dart';
 import 'foundation_screen.dart';
 
@@ -56,9 +58,28 @@ class _GoalsScreenState extends State<GoalsScreen> {
   @override
   Widget build(BuildContext context) {
     if (_loading) {
-      return const Scaffold(
+      return Scaffold(
         backgroundColor: AppColors.cream,
-        body: Center(child: CircularProgressIndicator(color: AppColors.orange)),
+        appBar: AppBar(
+          backgroundColor: AppColors.headerPeach,
+          surfaceTintColor: Colors.transparent,
+          elevation: 0,
+          scrolledUnderElevation: 0,
+          toolbarHeight: kPeachAppBarToolbarHeight,
+          systemOverlayStyle: SystemUiOverlayStyle.dark.copyWith(
+            statusBarColor: Colors.transparent,
+            statusBarIconBrightness: Brightness.dark,
+          ),
+          title: Text(
+            'Цели',
+            style: peachAppBarTitleStyle(),
+          ),
+        ),
+        body: SafeArea(
+          top: false,
+          bottom: false,
+          child: Center(child: CircularProgressIndicator(color: AppColors.orange)),
+        ),
       );
     }
 
@@ -66,26 +87,33 @@ class _GoalsScreenState extends State<GoalsScreen> {
       return Scaffold(
         backgroundColor: AppColors.cream,
         appBar: AppBar(
-          backgroundColor: Colors.transparent,
+          backgroundColor: AppColors.headerPeach,
+          surfaceTintColor: Colors.transparent,
           elevation: 0,
+          scrolledUnderElevation: 0,
+          toolbarHeight: kPeachAppBarToolbarHeight,
+          systemOverlayStyle: SystemUiOverlayStyle.dark.copyWith(
+            statusBarColor: Colors.transparent,
+            statusBarIconBrightness: Brightness.dark,
+          ),
           title: Text(
             'Цели',
-            style: GoogleFonts.alegreyaSans(
-              fontSize: 22,
-              fontWeight: FontWeight.w800,
-              color: AppColors.textDark,
-            ),
+            style: peachAppBarTitleStyle(),
           ),
         ),
-        body: Center(
-          child: Padding(
-            padding: const EdgeInsets.all(24),
-            child: Text(
-              'Не удалось загрузить данные для целей.\n$_error',
-              textAlign: TextAlign.center,
-              style: GoogleFonts.alegreyaSans(
-                fontSize: 15,
-                color: AppColors.textDark.withValues(alpha: 0.8),
+        body: SafeArea(
+          top: false,
+          bottom: false,
+          child: Center(
+            child: Padding(
+              padding: const EdgeInsets.all(24),
+              child: Text(
+                'Не удалось загрузить данные для целей.\n$_error',
+                textAlign: TextAlign.center,
+                style: GoogleFonts.alegreyaSans(
+                  fontSize: 15,
+                  color: AppColors.textDark.withValues(alpha: 0.8),
+                ),
               ),
             ),
           ),
