@@ -3,14 +3,18 @@ import 'package:flutter_svg/flutter_svg.dart';
 
 import '../theme/app_colors.dart';
 
-/// Зона иконки фиксированной высоты; контент прижат к низу — нижний край не прыгает при 40↔60.
-const double _kBottomNavIconSlotHeight = 60;
+/// Зона иконки фиксированной высоты (чуть выше базовых 60 — под увеличенную иконку статистики).
+const double _kBottomNavIconSlotHeight = 62;
 /// Высота блока подписи не меняется; текст скрывают через opacity, чтобы не дергалась верстка.
 const double _kBottomNavLabelSlotHeight = 20;
 /// Обычные иконки + подпись чуть выше (отрицательное dy — вверх).
 const double _kBottomNavInactiveLift = 10;
 /// Highlight-иконки активной вкладки чуть ниже.
 const double _kBottomNavActiveDrop = 10;
+/// Сдвиг только иконки «Статистика» (вверх).
+const double _kStatisticsIconNudgeY = -2;
+/// Сдвиг только иконки «Календарь» (вниз).
+const double _kCalendarIconNudgeY = 1;
 
 /// Вкладки нижней панели (без центральной «+»).
 enum BottomNavTab { statistics, notes, calendar, articles }
@@ -180,13 +184,16 @@ class StatisticsNavIcon extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final size = active ? 60.0 : 40.0;
-    return SvgPicture.asset(
-      active
-          ? 'assets/icons/highlighted diagram.svg'
-          : 'assets/icons/Diagram.svg',
-      width: size,
-      height: size,
+    final size = active ? 61.0 : 42.0;
+    return Transform.translate(
+      offset: const Offset(0, _kStatisticsIconNudgeY),
+      child: SvgPicture.asset(
+        active
+            ? 'assets/icons/highlighted diagram.svg'
+            : 'assets/icons/Diagram.svg',
+        width: size,
+        height: size,
+      ),
     );
   }
 }
@@ -217,12 +224,15 @@ class CalendarNavIcon extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final size = active ? 60.0 : 40.0;
-    return SvgPicture.asset(
-      active
-          ? 'assets/icons/highlighted calendar.svg'
-          : 'assets/icons/calendar.svg',
-      width: size,
-      height: size,
+    return Transform.translate(
+      offset: const Offset(0, _kCalendarIconNudgeY),
+      child: SvgPicture.asset(
+        active
+            ? 'assets/icons/highlighted calendar.svg'
+            : 'assets/icons/calendar.svg',
+        width: size,
+        height: size,
+      ),
     );
   }
 }
