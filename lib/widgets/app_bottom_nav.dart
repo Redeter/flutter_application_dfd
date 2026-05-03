@@ -1,7 +1,16 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_svg/flutter_svg.dart';
 
 import '../theme/app_colors.dart';
-import 'package:flutter_svg/flutter_svg.dart';
+
+/// Зона иконки фиксированной высоты; контент прижат к низу — нижний край не прыгает при 40↔60.
+const double _kBottomNavIconSlotHeight = 60;
+/// Высота блока подписи не меняется; текст скрывают через opacity, чтобы не дергалась верстка.
+const double _kBottomNavLabelSlotHeight = 20;
+/// Обычные иконки + подпись чуть выше (отрицательное dy — вверх).
+const double _kBottomNavInactiveLift = 10;
+/// Highlight-иконки активной вкладки чуть ниже.
+const double _kBottomNavActiveDrop = 10;
 
 /// Вкладки нижней панели (без центральной «+»).
 enum BottomNavTab { statistics, notes, calendar, articles }
@@ -24,53 +33,62 @@ class AppBottomNavBar extends StatelessWidget {
     return Container(
       height: 96,
       color: AppColors.orange,
-      padding: const EdgeInsets.symmetric(horizontal: 24),
+      padding: const EdgeInsets.fromLTRB(12, 0, 12, 0),
       child: Stack(
         alignment: Alignment.center,
+        clipBehavior: Clip.none,
         children: [
           Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            crossAxisAlignment: CrossAxisAlignment.end,
             children: [
-              _BottomNavItem(
-                label: 'СТАТИСТИКА',
-                isActive: activeTab == BottomNavTab.statistics,
-                iconBuilder: (a) => StatisticsNavIcon(active: a),
-                onTap: () => onTabSelected(BottomNavTab.statistics),
+              Expanded(
+                child: _BottomNavItem(
+                  label: 'СТАТИСТИКА',
+                  isActive: activeTab == BottomNavTab.statistics,
+                  iconBuilder: (a) => StatisticsNavIcon(active: a),
+                  onTap: () => onTabSelected(BottomNavTab.statistics),
+                ),
               ),
-              _BottomNavItem(
-                label: 'ЗАМЕТКИ',
-                isActive: activeTab == BottomNavTab.notes,
-                iconBuilder: (a) => NotesNavIcon(active: a),
-                onTap: () => onTabSelected(BottomNavTab.notes),
+              Expanded(
+                child: _BottomNavItem(
+                  label: 'ЗАМЕТКИ',
+                  isActive: activeTab == BottomNavTab.notes,
+                  iconBuilder: (a) => NotesNavIcon(active: a),
+                  onTap: () => onTabSelected(BottomNavTab.notes),
+                ),
               ),
               const SizedBox(width: 72),
-              _BottomNavItem(
-                label: 'КАЛЕНДАРЬ',
-                isActive: activeTab == BottomNavTab.calendar,
-                iconBuilder: (a) => CalendarNavIcon(active: a),
-                onTap: () => onTabSelected(BottomNavTab.calendar),
+              Expanded(
+                child: _BottomNavItem(
+                  label: 'КАЛЕНДАРЬ',
+                  isActive: activeTab == BottomNavTab.calendar,
+                  iconBuilder: (a) => CalendarNavIcon(active: a),
+                  onTap: () => onTabSelected(BottomNavTab.calendar),
+                ),
               ),
-              _BottomNavItem(
-                label: 'ЦЕЛИ',
-                isActive: activeTab == BottomNavTab.articles,
-                iconBuilder: (a) => ArticlesNavIcon(active: a),
-                onTap: () => onTabSelected(BottomNavTab.articles),
+              Expanded(
+                child: _BottomNavItem(
+                  label: 'ЦЕЛИ',
+                  isActive: activeTab == BottomNavTab.articles,
+                  iconBuilder: (a) => ArticlesNavIcon(active: a),
+                  onTap: () => onTabSelected(BottomNavTab.articles),
+                ),
               ),
             ],
           ),
           Positioned(
             child: GestureDetector(
               onTap: onCenterTap,
-              child: Container(
+              child: SizedBox(
                 width: 72,
                 height: 72,
                 child: Center(
                   child: Transform.translate(
-                    offset: const Offset(6, -8),
+                    offset: const Offset(0, -8),
                     child: SvgPicture.asset(
                       'assets/icons/plus.svg',
-                      width: 48,
-                      height: 48,
+                      width: 60,
+                      height: 60,
                     ),
                   ),
                 ),
@@ -101,22 +119,55 @@ class _BottomNavItem extends StatelessWidget {
     return GestureDetector(
       onTap: onTap,
       behavior: HitTestBehavior.opaque,
-      child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          iconBuilder(isActive),
-          if (!isActive) ...[
-            const SizedBox(height: 4),
-            Text(
-              label.toUpperCase(),
-              style: const TextStyle(
-                fontSize: 11,
-                fontWeight: FontWeight.w500,
-                color: AppColors.white,
+      child: Transform.translate(
+        offset: Offset(
+          0,
+          isActive ? _kBottomNavActiveDrop : -_kBottomNavInactiveLift,
+        ),
+        child: SizedBox(
+          width: double.infinity,
+          height: _kBottomNavIconSlotHeight + _kBottomNavLabelSlotHeight,
+          child: Column(
+            mainAxisSize: MainAxisSize.max,
+            children: [
+              SizedBox(
+                height: _kBottomNavIconSlotHeight,
+                width: double.infinity,
+                child: Align(
+                  alignment: Alignment.bottomCenter,
+                  child: iconBuilder(isActive),
+                ),
               ),
-            ),
-          ],
-        ],
+              SizedBox(
+                height: _kBottomNavLabelSlotHeight,
+                width: double.infinity,
+                child: Align(
+                  alignment: Alignment.topCenter,
+                  child: Padding(
+                    padding: const EdgeInsets.only(top: 2),
+                    child: ExcludeSemantics(
+                      excluding: isActive,
+                      child: Opacity(
+                        opacity: isActive ? 0 : 1,
+                        child: Text(
+                          label.toUpperCase(),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          textAlign: TextAlign.center,
+                          style: const TextStyle(
+                            fontSize: 10,
+                            fontWeight: FontWeight.w500,
+                            color: AppColors.white,
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
       ),
     );
   }
@@ -129,16 +180,13 @@ class StatisticsNavIcon extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final size = active ? 74.0 : 43.0;
-    return Transform.translate(
-      offset: const Offset(0, -2),
-      child: SvgPicture.asset(
-        active
-            ? 'assets/icons/highlighted diagram.svg'
-            : 'assets/icons/Diagram.svg',
-        width: size,
-        height: size,
-      ),
+    final size = active ? 60.0 : 40.0;
+    return SvgPicture.asset(
+      active
+          ? 'assets/icons/highlighted diagram.svg'
+          : 'assets/icons/Diagram.svg',
+      width: size,
+      height: size,
     );
   }
 }
@@ -150,7 +198,7 @@ class NotesNavIcon extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final size = active ? 67.0 : 43.0;
+    final size = active ? 60.0 : 40.0;
     return SvgPicture.asset(
       active
           ? 'assets/icons/highlighted notebook.svg'
@@ -168,7 +216,7 @@ class CalendarNavIcon extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final size = active ? 66.0 : 43.0;
+    final size = active ? 60.0 : 40.0;
     return SvgPicture.asset(
       active
           ? 'assets/icons/highlighted calendar.svg'
@@ -186,7 +234,7 @@ class ArticlesNavIcon extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final size = active ? 66.0 : 43.0;
+    final size = active ? 60.0 : 40.0;
     return SvgPicture.asset(
       active
           ? 'assets/icons/highlighted megaphone.svg'
