@@ -31,11 +31,11 @@ const EdgeInsetsDirectional kPeachAppBarActionsPadding =
 const double kPeachHeaderStripTopGap = 6;
 const double kPeachHeaderStripBottomPadding = 14;
 
-/// Чуть насыщеннее [AppColors.headerPeach] — круги кнопок как в финальном макете.
+/// Диск кнопки: ярче персиковой шапки — сильнее тянем к [AppColors.orange], чтобы читалось контрастнее.
 Color peachAppBarCircleFill() =>
-    Color.lerp(AppColors.headerPeach, const Color(0xFFF5A261), 0.45)!;
+    Color.lerp(AppColors.headerPeach, AppColors.orange, 0.72)!;
 
-/// Круглая кнопка на персиковой шапке: тёплый диск + белая outline-иконка.
+/// Круглая кнопка на персиковой шапке: более сочный диск + белая иконка + лёгкая тень.
 ButtonStyle peachAppBarCircleIconButtonStyle({
   double diameter = kPeachAppBarActionDiameter,
   double iconSize = kPeachAppBarActionIconSize,
@@ -43,7 +43,10 @@ ButtonStyle peachAppBarCircleIconButtonStyle({
   return IconButton.styleFrom(
     backgroundColor: peachAppBarCircleFill(),
     foregroundColor: AppColors.white,
-    overlayColor: AppColors.white.withValues(alpha: 0.14),
+    overlayColor: AppColors.white.withValues(alpha: 0.22),
+    shadowColor: AppColors.orange.withValues(alpha: 0.45),
+    elevation: 2,
+    surfaceTintColor: Colors.transparent,
     shape: const CircleBorder(),
     padding: EdgeInsets.zero,
     minimumSize: Size(diameter, diameter),
