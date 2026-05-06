@@ -20,6 +20,8 @@ abstract final class AppColors {
   static const Color purple = Color(0xFF9B51E0);
 
   // Календарь
+  /// Рамка карточек приёма врача и препаратов.
+  static const Color appointmentCardFrame = Color(0xFFEEC09D);
   static const Color headerPeach = Color(0xFFFBC490);
   static const Color creamBg = Color(0xFFFDF1E6);
   static const Color skipRed = Color(0xFFFFCDD2);

@@ -1,12 +1,25 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_svg/flutter_svg.dart';
 import 'package:google_fonts/google_fonts.dart';
 
+import '../constants/calendar_reminders.dart';
 import '../models/calendar_entry.dart';
 import '../services/calendar_storage.dart';
 import '../theme/app_colors.dart';
 import '../widgets/time_picker_modal.dart';
 
+<<<<<<< Updated upstream
 const _frequencies = ['Ежедневно', 'Через день', 'Раз в неделю', 'По необходимости'];
+=======
+/// Сколько дней вперёд создавать записи при «Ежедневно».
+const int _kDailySeriesDays = 365;
+
+void _disposeTextControllerNextFrame(TextEditingController c) {
+  WidgetsBinding.instance.addPostFrameCallback((_) {
+    c.dispose();
+  });
+}
+>>>>>>> Stashed changes
 
 class AddMedicationScreen extends StatefulWidget {
   const AddMedicationScreen({
@@ -26,7 +39,7 @@ class _AddMedicationScreenState extends State<AddMedicationScreen> {
   late final TextEditingController _nameController;
   late final TextEditingController _dosageController;
   late final TextEditingController _dailyDosageController;
-  late String _frequency;
+  late String _reminder;
   late List<MedicationDose> _schedule;
 
   @override
@@ -34,9 +47,16 @@ class _AddMedicationScreenState extends State<AddMedicationScreen> {
     super.initState();
     final m = widget.medication;
     _nameController = TextEditingController(text: m?.name ?? '');
+<<<<<<< Updated upstream
     _dosageController = TextEditingController(text: m?.dosage ?? '');
     _dailyDosageController = TextEditingController(text: m?.dailyDosage ?? '');
     _frequency = m?.frequency ?? _frequencies[0];
+=======
+    _dailyDosageController = TextEditingController(
+      text: m?.dailyDosage ?? m?.dosage ?? '',
+    );
+    _reminder = m?.reminder ?? kCalendarReminderOptions[0];
+>>>>>>> Stashed changes
     _schedule = m != null ? List.from(m.schedule) : [];
     if (_schedule.isEmpty) {
       _schedule.add(const MedicationDose(time: TimeOfDay(hour: 8, minute: 0), amount: '1 таблетка'));
@@ -63,11 +83,68 @@ class _AddMedicationScreenState extends State<AddMedicationScreen> {
 
   Future<void> _editScheduleItem(int index) async {
     final item = _schedule[index];
+<<<<<<< Updated upstream
     final t = await showTimePickerModal(context, initial: item.time);
     if (t != null && mounted) {
       setState(() {
         _schedule[index] = MedicationDose(time: t, amount: item.amount);
       });
+=======
+    final amountCtrl = TextEditingController(text: item.amount);
+    var time = item.time;
+
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setDlg) {
+          return AlertDialog(
+            title: Text(
+              'Время и количество',
+              style: GoogleFonts.alegreyaSans(fontWeight: FontWeight.w700),
+            ),
+            content: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                OutlinedButton.icon(
+                  onPressed: () async {
+                    final picked = await showTimePickerModal(ctx, initial: time);
+                    if (picked != null) setDlg(() => time = picked);
+                  },
+                  icon: SvgPicture.asset(
+                    'assets/icons/add/clock.svg',
+                    width: 20,
+                    height: 20,
+                  ),
+                  label: Text(
+                    '${time.hour.toString().padLeft(2, '0')}:${time.minute.toString().padLeft(2, '0')}',
+                    style: GoogleFonts.alegreyaSans(fontWeight: FontWeight.w700),
+                  ),
+                ),
+                const SizedBox(height: 12),
+                TextField(
+                  controller: amountCtrl,
+                  decoration: _inputDecoration(hint: 'количество таблеток'),
+                ),
+              ],
+            ),
+            actions: [
+              TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Отмена')),
+              FilledButton(
+                onPressed: () => Navigator.pop(ctx, true),
+                style: FilledButton.styleFrom(backgroundColor: AppColors.orange),
+                child: const Text('Сохранить'),
+              ),
+            ],
+          );
+        },
+      ),
+    );
+    final amt = amountCtrl.text.trim();
+    _disposeTextControllerNextFrame(amountCtrl);
+    if (ok != true || !mounted) {
+      return;
+>>>>>>> Stashed changes
     }
   }
 
@@ -76,6 +153,7 @@ class _AddMedicationScreenState extends State<AddMedicationScreen> {
     if (name.isEmpty) return;
 
     final m = widget.medication;
+<<<<<<< Updated upstream
     final entry = Medication(
       id: m?.id ?? DateTime.now().millisecondsSinceEpoch.toString(),
       date: widget.date,
@@ -89,6 +167,57 @@ class _AddMedicationScreenState extends State<AddMedicationScreen> {
       schedule: _schedule,
     );
     await CalendarStorage.instance.save(entry);
+=======
+    if (m != null) {
+      final nextSchedule = List<MedicationDose>.from(_schedule);
+      final mergedTaken = List<DateTime?>.generate(
+        nextSchedule.length,
+        (i) => i < m.takenAtPerDose.length ? m.takenAtPerDose[i] : null,
+      );
+      final mergedSkipped = List<bool>.generate(
+        nextSchedule.length,
+        (i) => i < m.skippedPerDose.length && m.skippedPerDose[i],
+      );
+      final entry = Medication(
+        id: m.id,
+        date: DateTime(m.date.year, m.date.month, m.date.day),
+        time: _schedule.first.time,
+        name: name,
+        dosage: dosage,
+        frequency: m.frequency,
+        dailyDosage: dailyDosage,
+        reminder: _reminder,
+        schedule: nextSchedule,
+        seriesId: m.seriesId,
+        takenAtPerDose: mergedTaken,
+        skippedPerDose: mergedSkipped,
+      );
+      await CalendarStorage.instance.save(entry);
+    } else {
+      final baseMillis = DateTime.now().millisecondsSinceEpoch;
+      final start = DateTime(widget.date.year, widget.date.month, widget.date.day);
+      final seriesId = 'series_$baseMillis';
+      final batch = <Medication>[];
+      for (var i = 0; i < _kDailySeriesDays; i++) {
+        final d = start.add(Duration(days: i));
+        batch.add(
+          Medication(
+            id: 'med_${baseMillis}_$i',
+            date: d,
+            time: _schedule.first.time,
+            name: name,
+            dosage: dosage,
+            frequency: 'Ежедневно',
+            dailyDosage: dailyDosage,
+            reminder: _reminder,
+            schedule: List<MedicationDose>.from(_schedule),
+            seriesId: seriesId,
+          ),
+        );
+      }
+      await CalendarStorage.instance.saveMany(batch);
+    }
+>>>>>>> Stashed changes
     if (mounted) {
       Navigator.pop(context, true);
       ScaffoldMessenger.of(context).showSnackBar(
@@ -123,7 +252,7 @@ class _AddMedicationScreenState extends State<AddMedicationScreen> {
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
             _card(
-              icon: Icons.medication_outlined,
+              iconAsset: 'assets/icons/add/blister.svg',
               label: 'КАКОЕ ЛЕКАРСТВО ВЫ ХОТИТЕ ДОБАВИТЬ?',
               child: TextField(
                 controller: _nameController,
@@ -132,6 +261,7 @@ class _AddMedicationScreenState extends State<AddMedicationScreen> {
             ),
             const SizedBox(height: 16),
             _card(
+<<<<<<< Updated upstream
               icon: Icons.medical_information_outlined,
               label: 'ДОЗИРОВКА (мг, мл)',
               child: TextField(
@@ -143,16 +273,32 @@ class _AddMedicationScreenState extends State<AddMedicationScreen> {
             _card(
               icon: Icons.schedule_outlined,
               label: 'КАК ЧАСТО ВЫ ЕГО ПРИНИМАЕТЕ?',
+=======
+              iconAsset: 'assets/icons/add/bell.svg',
+              label: 'КОГДА ВЫ ХОТИТЕ, ЧТОБЫ ВАМ НАПОМНИЛИ О ПРИЁМЕ?',
+>>>>>>> Stashed changes
               child: DropdownButtonFormField<String>(
-                value: _frequency,
+                value: _reminder,
                 decoration: _inputDecoration(),
+<<<<<<< Updated upstream
                 items: _frequencies.map((f) => DropdownMenuItem(value: f, child: Text(f))).toList(),
                 onChanged: (v) => setState(() => _frequency = v ?? _frequency),
+=======
+                iconEnabledColor: AppColors.textDark,
+                items: kCalendarReminderOptions
+                    .map((r) => DropdownMenuItem(value: r, child: Text(r)))
+                    .toList(),
+                onChanged: (v) => setState(() => _reminder = v ?? _reminder),
+>>>>>>> Stashed changes
               ),
             ),
             const SizedBox(height: 16),
             _card(
+<<<<<<< Updated upstream
               icon: Icons.medical_services_outlined,
+=======
+              iconAsset: 'assets/icons/add/pills dose.svg',
+>>>>>>> Stashed changes
               label: 'УСТАНОВИТЕ СУТОЧНУЮ ДОЗИРОВКУ',
               child: TextField(
                 controller: _dailyDosageController,
@@ -161,7 +307,11 @@ class _AddMedicationScreenState extends State<AddMedicationScreen> {
             ),
             const SizedBox(height: 16),
             _card(
+<<<<<<< Updated upstream
               icon: Icons.notifications_outlined,
+=======
+              iconAsset: 'assets/icons/add/clock.svg',
+>>>>>>> Stashed changes
               label: 'УСТАНОВИТЕ ВРЕМЯ ПРИЕМА И КОЛИЧЕСТВО ТАБЛЕТОК',
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -237,7 +387,7 @@ class _AddMedicationScreenState extends State<AddMedicationScreen> {
   }
 
   Widget _card({
-    required IconData icon,
+    required String iconAsset,
     required String label,
     required Widget child,
   }) {
@@ -253,7 +403,11 @@ class _AddMedicationScreenState extends State<AddMedicationScreen> {
         children: [
           Row(
             children: [
-              Icon(icon, color: AppColors.orange, size: 28),
+              SvgPicture.asset(
+                iconAsset,
+                width: 28,
+                height: 28,
+              ),
               const SizedBox(width: 12),
               Expanded(
                 child: Text(

@@ -52,6 +52,7 @@ class Medication extends CalendarEntry {
     required this.dosage,
     this.frequency = 'Ежедневно',
     this.dailyDosage,
+    this.reminder,
     required this.schedule,
     this.takenAt,
   });
@@ -60,6 +61,8 @@ class Medication extends CalendarEntry {
   final String dosage; // "200мг"
   final String frequency;
   final String? dailyDosage;
+  /// «За 15 мин» / «За 1 час» / «За день» / «Не напоминать» — доп. напоминание до приёма.
+  final String? reminder;
   final List<MedicationDose> schedule;
   final DateTime? takenAt;
 
@@ -74,6 +77,7 @@ class Medication extends CalendarEntry {
         'dosage': dosage,
         'frequency': frequency,
         'dailyDosage': dailyDosage,
+        if (reminder != null) 'reminder': reminder,
         'schedule': schedule.map((e) => e.toJson()).toList(),
         'takenAt': takenAt?.toIso8601String(),
       };
@@ -90,11 +94,19 @@ class Medication extends CalendarEntry {
       dosage: json['dosage'] as String? ?? '',
       frequency: json['frequency'] as String? ?? 'Ежедневно',
       dailyDosage: json['dailyDosage'] as String?,
+<<<<<<< Updated upstream
       schedule: (json['schedule'] as List<dynamic>?)
               ?.map((e) => MedicationDose.fromJson(e as Map<String, dynamic>))
               .toList() ??
           [],
       takenAt: json['takenAt'] != null ? DateTime.tryParse(json['takenAt'] as String) : null,
+=======
+      reminder: json['reminder'] as String?,
+      schedule: schedule,
+      seriesId: json['seriesId'] as String?,
+      takenAtPerDose: _normalizeTakenAtPerDose(schedule, parsed),
+      skippedPerDose: _normalizeSkippedPerDose(schedule, parsedSkipped),
+>>>>>>> Stashed changes
     );
   }
 
@@ -106,7 +118,9 @@ class Medication extends CalendarEntry {
     String? dosage,
     String? frequency,
     String? dailyDosage,
+    String? reminder,
     List<MedicationDose>? schedule,
+<<<<<<< Updated upstream
     DateTime? takenAt,
   }) =>
       Medication(
@@ -120,6 +134,32 @@ class Medication extends CalendarEntry {
         schedule: schedule ?? this.schedule,
         takenAt: takenAt ?? this.takenAt,
       );
+=======
+    String? seriesId,
+    List<DateTime?>? takenAtPerDose,
+    List<bool>? skippedPerDose,
+  }) {
+    final nextSchedule = schedule ?? this.schedule;
+    final nextTaken = takenAtPerDose ??
+        Medication._normalizeTakenAtPerDose(nextSchedule, this.takenAtPerDose);
+    final nextSkipped = skippedPerDose ??
+        Medication._normalizeSkippedPerDose(nextSchedule, this.skippedPerDose);
+    return Medication(
+      id: id ?? this.id,
+      date: date ?? this.date,
+      time: time ?? this.time,
+      name: name ?? this.name,
+      dosage: dosage ?? this.dosage,
+      frequency: frequency ?? this.frequency,
+      dailyDosage: dailyDosage ?? this.dailyDosage,
+      reminder: reminder ?? this.reminder,
+      schedule: nextSchedule,
+      seriesId: seriesId ?? this.seriesId,
+      takenAtPerDose: nextTaken,
+      skippedPerDose: nextSkipped,
+    );
+  }
+>>>>>>> Stashed changes
 }
 
 /// Приём (врача и т.д.).

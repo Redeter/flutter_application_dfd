@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_svg/flutter_svg.dart';
 import 'package:google_fonts/google_fonts.dart';
 
 import '../models/calendar_entry.dart';
@@ -22,6 +23,65 @@ const _months = [
 
 String _formatDate(DateTime d) => '${d.day} ${_months[d.month - 1]}';
 
+<<<<<<< Updated upstream
+=======
+/// Единый размер иллюстрации слева от вертикальной линии в карточках календаря (приём / препарат).
+const double _kCalendarCardLeadingIconExtent = 44;
+
+/// Одна строка списка дня: приём врача или один слот препарата.
+sealed class _CalendarDayRow {
+  int get sortMinutes;
+}
+
+final class _MedDoseRow extends _CalendarDayRow {
+  _MedDoseRow(this.med, this.doseIndex);
+  final Medication med;
+  final int doseIndex;
+
+  @override
+  int get sortMinutes {
+    final TimeOfDay t;
+    if (med.schedule.isEmpty) {
+      t = med.time;
+    } else {
+      t = med.schedule[doseIndex.clamp(0, med.schedule.length - 1)].time;
+    }
+    return t.hour * 60 + t.minute;
+  }
+}
+
+final class _AppDayRow extends _CalendarDayRow {
+  _AppDayRow(this.appointment);
+  final Appointment appointment;
+
+  @override
+  int get sortMinutes {
+    final t = appointment.time;
+    return t.hour * 60 + t.minute;
+  }
+}
+
+List<_CalendarDayRow> _sortedDayRows(List<CalendarEntry> entries) {
+  final out = <_CalendarDayRow>[];
+  for (final e in entries) {
+    switch (e) {
+      case Medication m:
+        if (m.schedule.isEmpty) {
+          out.add(_MedDoseRow(m, 0));
+        } else {
+          for (var i = 0; i < m.schedule.length; i++) {
+            out.add(_MedDoseRow(m, i));
+          }
+        }
+      case Appointment a:
+        out.add(_AppDayRow(a));
+    }
+  }
+  out.sort((a, b) => a.sortMinutes.compareTo(b.sortMinutes));
+  return out;
+}
+
+>>>>>>> Stashed changes
 class CalendarScreen extends StatefulWidget {
   const CalendarScreen({super.key});
 
@@ -229,10 +289,15 @@ class _CalendarScreenState extends State<CalendarScreen> {
                 shape: BoxShape.circle,
                 color: AppColors.orange,
               ),
-              child: const Icon(
-                Icons.medication_outlined,
-                color: AppColors.white,
-                size: 32,
+              child: Center(
+                child: SizedBox(
+                  width: 60,
+                  height: 60,
+                  child: SvgPicture.asset(
+                    'assets/icons/new pill button.svg',
+                    fit: BoxFit.contain,
+                  ),
+                ),
               ),
             ),
           ),
@@ -292,6 +357,7 @@ class _CalendarScreenState extends State<CalendarScreen> {
   Widget _buildDateStrip() {
     final today = DateTime.now();
     final base = DateTime(today.year, today.month, today.day);
+<<<<<<< Updated upstream
     final days = List.generate(14, (i) => base.add(Duration(days: i - 5)));
     return SingleChildScrollView(
       scrollDirection: Axis.horizontal,
@@ -391,6 +457,17 @@ class _CalendarScreenState extends State<CalendarScreen> {
           ),
         ),
       ],
+=======
+    var days = List.generate(14, (i) => base.add(Duration(days: i - 5)));
+    final sel = _dayOnly(_selectedDate);
+    if (sel.isBefore(days.first) || sel.isAfter(days.last)) {
+      days = List.generate(14, (i) => sel.add(Duration(days: i - 5)));
+    }
+    return UnifiedHorizontalDateStrip(
+      days: days,
+      selectedDay: _selectedDate,
+      onDaySelected: _onDateChanged,
+>>>>>>> Stashed changes
     );
   }
 
@@ -434,8 +511,18 @@ class _CalendarScreenState extends State<CalendarScreen> {
   }
 }
 
+<<<<<<< Updated upstream
 class _MedicationCard extends StatelessWidget {
   const _MedicationCard({
+=======
+/// Кнопки действия в макете: пастельный фон + тёмный текст (белый на таких фонах нечитаем).
+const Color _medBtnSkipBg = Color(0xFFFFCDD2);
+const Color _medBtnTakeBg = Color(0xFFC8E6C9);
+const Color _medBtnTimeBg = Color(0xFFFFF9C4);
+
+class _MedicationDoseCard extends StatelessWidget {
+  const _MedicationDoseCard({
+>>>>>>> Stashed changes
     required this.medication,
     required this.onEdit,
     required this.onDelete,
@@ -447,8 +534,154 @@ class _MedicationCard extends StatelessWidget {
   final VoidCallback onDelete;
   final VoidCallback onMarkTaken;
 
+  Widget _pillLeadingIcon() {
+    return SizedBox(
+      width: _kCalendarCardLeadingIconExtent,
+      height: _kCalendarCardLeadingIconExtent,
+      child: SvgPicture.asset(
+        'assets/icons/pill.svg',
+        fit: BoxFit.contain,
+      ),
+    );
+  }
+
+  Widget _orangeFrameShell({required Widget whiteBody}) {
+    return Container(
+      decoration: BoxDecoration(
+        color: AppColors.appointmentCardFrame,
+        borderRadius: BorderRadius.circular(22),
+        boxShadow: [
+          BoxShadow(
+            color: AppColors.appointmentCardFrame.withValues(alpha: 0.35),
+            blurRadius: 14,
+            offset: const Offset(0, 5),
+          ),
+        ],
+      ),
+      padding: const EdgeInsets.fromLTRB(5, 5, 5, 5),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Padding(
+            padding: const EdgeInsets.fromLTRB(4, 2, 0, 8),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.end,
+              children: [
+                IconButton(
+                  onPressed: onDelete,
+                  visualDensity: VisualDensity.compact,
+                  icon: const Icon(Icons.delete_outline, color: AppColors.white, size: 24),
+                ),
+                IconButton(
+                  onPressed: onEdit,
+                  visualDensity: VisualDensity.compact,
+                  icon: const Icon(Icons.edit_outlined, color: AppColors.white, size: 24),
+                ),
+              ],
+            ),
+          ),
+          Container(
+            decoration: BoxDecoration(
+              color: AppColors.white,
+              borderRadius: BorderRadius.circular(18),
+            ),
+            child: whiteBody,
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _infoRow({
+    required String timeStr,
+    required String takeText,
+    bool muted = false,
+    Widget? footer,
+  }) {
+    final m = medication;
+    final opacity = muted ? 0.5 : 1.0;
+    return IntrinsicHeight(
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Padding(
+            padding: const EdgeInsets.only(top: 2),
+            child: Opacity(
+              opacity: opacity,
+              child: _pillLeadingIcon(),
+            ),
+          ),
+          const SizedBox(width: 10),
+          Container(
+            width: 1,
+            color: AppColors.textDark.withValues(alpha: muted ? 0.2 : 0.35),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Expanded(
+                      child: RichText(
+                        text: TextSpan(
+                          style: GoogleFonts.alegreyaSans(
+                            fontSize: 17,
+                            fontWeight: FontWeight.w800,
+                            color: AppColors.textDark.withValues(alpha: muted ? 0.55 : 1),
+                          ),
+                          children: [
+                            TextSpan(text: '${m.name.toUpperCase()} '),
+                            TextSpan(
+                              text: m.dosage,
+                              style: GoogleFonts.alegreyaSans(
+                                fontSize: 14,
+                                fontWeight: FontWeight.w500,
+                                color: AppColors.textDark.withValues(alpha: muted ? 0.45 : 1),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                    Text(
+                      timeStr,
+                      style: GoogleFonts.alegreyaSans(
+                        fontSize: 26,
+                        fontWeight: FontWeight.w800,
+                        color: AppColors.textDark.withValues(alpha: muted ? 0.35 : 1),
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 6),
+                Text(
+                  takeText.toUpperCase(),
+                  style: GoogleFonts.alegreyaSans(
+                    fontSize: 12,
+                    fontWeight: FontWeight.w700,
+                    letterSpacing: 0.3,
+                    color: AppColors.textDark.withValues(alpha: muted ? 0.45 : 0.95),
+                  ),
+                ),
+                if (footer != null) ...[
+                  const SizedBox(height: 10),
+                  footer,
+                ],
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
+<<<<<<< Updated upstream
     final taken = medication.takenAt != null;
     final timeStr = medication.schedule.isNotEmpty
         ? '${medication.schedule.first.time.hour.toString().padLeft(2, '0')}:${medication.schedule.first.time.minute.toString().padLeft(2, '0')}'
@@ -530,10 +763,152 @@ class _MedicationCard extends StatelessWidget {
                     fontSize: 24,
                     fontWeight: FontWeight.w700,
                     color: taken ? AppColors.takeGreen : AppColors.textDark,
+=======
+    final MedicationDose dose;
+    if (medication.schedule.isNotEmpty) {
+      dose = medication.schedule[doseIndex.clamp(0, medication.schedule.length - 1)];
+    } else {
+      dose = MedicationDose(
+        time: medication.time,
+        amount: medication.dosage.isEmpty ? '—' : medication.dosage,
+      );
+    }
+    final takenList = medication.takenAtPerDose;
+    final idx = medication.schedule.isNotEmpty ? doseIndex : 0;
+    final taken = idx < takenList.length && takenList[idx] != null;
+    final takenAt = taken ? takenList[idx]! : null;
+    final skippedList = medication.skippedPerDose;
+    final skipped = idx < skippedList.length && skippedList[idx];
+    final timeStr =
+        '${dose.time.hour.toString().padLeft(2, '0')}:${dose.time.minute.toString().padLeft(2, '0')}';
+    final takeText = dose.amount;
+    final instruction = 'Принять $takeText';
+
+    if (taken && takenAt != null) {
+      final takenStr =
+          '${takenAt.hour.toString().padLeft(2, '0')}:${takenAt.minute.toString().padLeft(2, '0')}';
+      return _orangeFrameShell(
+        whiteBody: Padding(
+          padding: const EdgeInsets.fromLTRB(14, 16, 14, 16),
+          child: _infoRow(
+            timeStr: timeStr,
+            takeText: takeText,
+            footer: Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Text(
+                  'Принято в',
+                  style: GoogleFonts.alegreyaSans(
+                    fontSize: 18,
+                    fontWeight: FontWeight.w600,
+                    color: AppColors.takeGreen,
+                  ),
+                ),
+                Text(
+                  takenStr,
+                  style: GoogleFonts.alegreyaSans(
+                    fontSize: 18,
+                    fontWeight: FontWeight.w700,
+                    color: AppColors.takeGreen,
                   ),
                 ),
               ],
             ),
+          ),
+        ),
+      );
+    }
+
+    if (!taken && skipped) {
+      return _orangeFrameShell(
+        whiteBody: Padding(
+          padding: const EdgeInsets.fromLTRB(14, 16, 14, 16),
+          child: _infoRow(
+            timeStr: timeStr,
+            takeText: takeText,
+            muted: true,
+            footer: Text(
+              'Приём пропущен',
+              style: GoogleFonts.alegreyaSans(
+                fontSize: 15,
+                fontWeight: FontWeight.w700,
+                color: AppColors.textDark.withValues(alpha: 0.5),
+              ),
+            ),
+          ),
+        ),
+      );
+    }
+
+    return _orangeFrameShell(
+      whiteBody: Padding(
+        padding: const EdgeInsets.fromLTRB(14, 16, 14, 14),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            IntrinsicHeight(
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  Padding(
+                    padding: const EdgeInsets.only(top: 2),
+                    child: _pillLeadingIcon(),
+                  ),
+                  const SizedBox(width: 10),
+                  Container(width: 1, color: AppColors.textDark.withValues(alpha: 0.35)),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        RichText(
+                          text: TextSpan(
+                            style: GoogleFonts.alegreyaSans(
+                              fontSize: 17,
+                              fontWeight: FontWeight.w800,
+                              color: AppColors.textDark,
+                              letterSpacing: 0.2,
+                            ),
+                            children: [
+                              TextSpan(text: '${medication.name.toUpperCase()} '),
+                              if (medication.dosage.isNotEmpty)
+                                TextSpan(
+                                  text: medication.dosage,
+                                  style: GoogleFonts.alegreyaSans(
+                                    fontSize: 14,
+                                    fontWeight: FontWeight.w500,
+                                    color: AppColors.textDark,
+                                  ),
+                                ),
+                            ],
+                          ),
+                        ),
+                        const SizedBox(height: 8),
+                        Text(
+                          instruction,
+                          style: GoogleFonts.alegreyaSans(
+                            fontSize: 14,
+                            fontWeight: FontWeight.w600,
+                            color: AppColors.textDark,
+                          ),
+                        ),
+                      ],
+                    ),
+>>>>>>> Stashed changes
+                  ),
+                  const SizedBox(width: 8),
+                  Text(
+                    timeStr,
+                    style: GoogleFonts.alegreyaSans(
+                      fontSize: 26,
+                      fontWeight: FontWeight.w800,
+                      color: AppColors.textDark,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+<<<<<<< Updated upstream
           ),
           if (!taken) ...[
             Padding(
@@ -542,6 +917,25 @@ class _MedicationCard extends StatelessWidget {
                 children: [
                   Expanded(
                     child: _actionBtn('Пропустить', AppColors.skipRed, () {}),
+=======
+            const SizedBox(height: 14),
+            Row(
+              children: [
+                Expanded(
+                  child: _actionBtn('Пропустить', _medBtnSkipBg, onSkip),
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: _actionBtn('Принять сейчас', _medBtnTakeBg, onMarkTaken, fontSize: 11),
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: _actionBtn(
+                    'Принять в выбранное время',
+                    _medBtnTimeBg,
+                    onMarkAtChosenTime,
+                    fontSize: 10,
+>>>>>>> Stashed changes
                   ),
                   const SizedBox(width: 8),
                   Expanded(
@@ -555,7 +949,11 @@ class _MedicationCard extends StatelessWidget {
               ),
             ),
           ],
+<<<<<<< Updated upstream
         ],
+=======
+        ),
+>>>>>>> Stashed changes
       ),
     );
   }
@@ -563,10 +961,10 @@ class _MedicationCard extends StatelessWidget {
   Widget _actionBtn(String label, Color bg, VoidCallback onTap) {
     return Material(
       color: bg,
-      borderRadius: BorderRadius.circular(16),
+      borderRadius: BorderRadius.circular(20),
       child: InkWell(
         onTap: onTap,
-        borderRadius: BorderRadius.circular(16),
+        borderRadius: BorderRadius.circular(20),
         child: Padding(
           padding: const EdgeInsets.symmetric(vertical: 12),
           child: Text(
@@ -599,94 +997,121 @@ class _AppointmentCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final timeStr =
         '${appointment.time.hour.toString().padLeft(2, '0')}:${appointment.time.minute.toString().padLeft(2, '0')}';
+    final meeting = appointment.meetingDate ?? appointment.date;
+    final note = appointment.note;
 
     return Container(
       decoration: BoxDecoration(
-        color: AppColors.white,
-        borderRadius: BorderRadius.circular(24),
-        border: Border.all(color: AppColors.orange, width: 3),
+        color: AppColors.appointmentCardFrame,
+        borderRadius: BorderRadius.circular(22),
         boxShadow: [
           BoxShadow(
-            color: AppColors.orange.withValues(alpha: 0.15),
-            blurRadius: 12,
-            offset: const Offset(0, 4),
+            color: AppColors.appointmentCardFrame.withValues(alpha: 0.35),
+            blurRadius: 14,
+            offset: const Offset(0, 5),
           ),
         ],
       ),
+      padding: const EdgeInsets.fromLTRB(5, 5, 5, 5),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
+        mainAxisSize: MainAxisSize.min,
         children: [
-          Container(
-            padding: const EdgeInsets.fromLTRB(16, 12, 8, 8),
-            decoration: BoxDecoration(
-              color: AppColors.orange.withValues(alpha: 0.2),
-              borderRadius: const BorderRadius.vertical(top: Radius.circular(21)),
-            ),
+          Padding(
+            padding: const EdgeInsets.fromLTRB(4, 2, 0, 8),
             child: Row(
               mainAxisAlignment: MainAxisAlignment.end,
               children: [
                 IconButton(
                   onPressed: onDelete,
-                  icon: const Icon(Icons.delete_outline, color: AppColors.textDark),
+                  visualDensity: VisualDensity.compact,
+                  icon: const Icon(Icons.delete_outline, color: AppColors.white, size: 24),
                 ),
                 IconButton(
                   onPressed: onEdit,
-                  icon: const Icon(Icons.edit_outlined, color: AppColors.textDark),
+                  visualDensity: VisualDensity.compact,
+                  icon: const Icon(Icons.edit_outlined, color: AppColors.white, size: 24),
                 ),
               ],
             ),
           ),
-          Padding(
-            padding: const EdgeInsets.all(16),
-            child: Row(
-              crossAxisAlignment: CrossAxisAlignment.start,
+          Container(
+            decoration: BoxDecoration(
+              color: AppColors.white,
+              borderRadius: BorderRadius.circular(18),
+            ),
+            padding: const EdgeInsets.fromLTRB(14, 14, 14, 12),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                Icon(Icons.event_available_rounded, color: AppColors.orange, size: 40),
-                const SizedBox(width: 16),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
+                IntrinsicHeight(
+                  child: Row(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
                     children: [
+                      Padding(
+                        padding: const EdgeInsets.only(top: 2),
+                        child: SizedBox(
+                          width: _kCalendarCardLeadingIconExtent,
+                          height: _kCalendarCardLeadingIconExtent,
+                          child: SvgPicture.asset(
+                            'assets/icons/couch and clock.svg',
+                            fit: BoxFit.contain,
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 10),
+                      Container(width: 1, color: AppColors.textDark.withValues(alpha: 0.35)),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              appointment.title.toUpperCase(),
+                              style: GoogleFonts.alegreyaSans(
+                                fontSize: 16,
+                                fontWeight: FontWeight.w800,
+                                color: AppColors.textDark,
+                                letterSpacing: 0.2,
+                              ),
+                            ),
+                            const SizedBox(height: 6),
+                            Text(
+                              'ДАТА ВСТРЕЧИ: ${_formatDate(meeting)}'.toUpperCase(),
+                              style: GoogleFonts.alegreyaSans(
+                                fontSize: 12,
+                                fontWeight: FontWeight.w700,
+                                color: AppColors.textDark,
+                                letterSpacing: 0.15,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                      const SizedBox(width: 8),
                       Text(
-                        appointment.title.toUpperCase(),
+                        timeStr,
                         style: GoogleFonts.alegreyaSans(
-                          fontSize: 18,
+                          fontSize: 26,
                           fontWeight: FontWeight.w800,
                           color: AppColors.textDark,
                         ),
                       ),
-                      if (appointment.meetingDate != null) ...[
-                        const SizedBox(height: 4),
-                        Text(
-                          'Дата встречи: ${_formatDate(appointment.meetingDate!)}',
-                          style: GoogleFonts.alegreyaSans(
-                            fontSize: 14,
-                            fontWeight: FontWeight.w600,
-                            color: AppColors.textDark.withValues(alpha: 0.8),
-                          ),
-                        ),
-                      ],
-                      if (appointment.note != null && appointment.note!.isNotEmpty) ...[
-                        const SizedBox(height: 4),
-                        Text(
-                          'Дополнительная информация: ${appointment.note}',
-                          style: GoogleFonts.alegreyaSans(
-                            fontSize: 12,
-                            color: AppColors.textDark.withValues(alpha: 0.6),
-                          ),
-                        ),
-                      ],
                     ],
                   ),
                 ),
-                Text(
-                  timeStr,
-                  style: GoogleFonts.alegreyaSans(
-                    fontSize: 24,
-                    fontWeight: FontWeight.w700,
-                    color: AppColors.textDark,
+                if (note != null && note.isNotEmpty) ...[
+                  const SizedBox(height: 12),
+                  Text(
+                    'ДОПОЛНИТЕЛЬНАЯ ИНФОРМАЦИЯ: $note'.toUpperCase(),
+                    style: GoogleFonts.alegreyaSans(
+                      fontSize: 11,
+                      fontWeight: FontWeight.w700,
+                      color: AppColors.textDark,
+                      height: 1.25,
+                    ),
                   ),
-                ),
+                ],
               ],
             ),
           ),

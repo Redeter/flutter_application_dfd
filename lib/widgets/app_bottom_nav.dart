@@ -1,7 +1,23 @@
 import 'package:flutter/material.dart';
 
 import '../theme/app_colors.dart';
+<<<<<<< Updated upstream
 import 'package:flutter_svg/flutter_svg.dart';
+=======
+
+/// Зона иконки фиксированной высоты (чуть выше базовых 60 — под увеличенную иконку статистики).
+const double _kBottomNavIconSlotHeight = 62;
+/// Высота блока подписи не меняется; текст скрывают через opacity, чтобы не дергалась верстка.
+const double _kBottomNavLabelSlotHeight = 20;
+/// Обычные иконки + подпись чуть выше (отрицательное dy — вверх).
+const double _kBottomNavInactiveLift = 10;
+/// Highlight-иконки активной вкладки чуть ниже.
+const double _kBottomNavActiveDrop = 8;
+/// Сдвиг только иконки «Статистика» (вверх).
+const double _kStatisticsIconNudgeY = -2;
+/// Сдвиг только иконки «Календарь» (вниз).
+const double _kCalendarIconNudgeY = 1;
+>>>>>>> Stashed changes
 
 /// Вкладки нижней панели (без центральной «+»).
 enum BottomNavTab { statistics, notes, calendar, articles }

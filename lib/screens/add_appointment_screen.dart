@@ -1,12 +1,12 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_svg/flutter_svg.dart';
 import 'package:google_fonts/google_fonts.dart';
 
+import '../constants/calendar_reminders.dart';
 import '../models/calendar_entry.dart';
 import '../services/calendar_storage.dart';
 import '../theme/app_colors.dart';
 import '../widgets/time_picker_modal.dart';
-
-const _reminders = ['За 15 мин', 'За 1 час', 'За день', 'Не напоминать'];
 
 class AddAppointmentScreen extends StatefulWidget {
   const AddAppointmentScreen({
@@ -35,7 +35,7 @@ class _AddAppointmentScreenState extends State<AddAppointmentScreen> {
     _titleController = TextEditingController(text: a?.title ?? '');
     _noteController = TextEditingController(text: a?.note ?? '');
     _time = a?.time ?? const TimeOfDay(hour: 15, minute: 0);
-    _reminder = a?.reminder ?? _reminders[0];
+    _reminder = a?.reminder ?? kCalendarReminderOptions[0];
   }
 
   @override
@@ -99,7 +99,8 @@ class _AddAppointmentScreenState extends State<AddAppointmentScreen> {
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
             _card(
-              icon: Icons.text_fields,
+              iconAsset: 'assets/icons/add/Aa.svg',
+              iconSize: 19,
               label: 'КАКОЕ НАЗВАНИЕ ВАШЕЙ ЗАПИСИ?',
               child: TextField(
                 controller: _titleController,
@@ -108,7 +109,7 @@ class _AddAppointmentScreenState extends State<AddAppointmentScreen> {
             ),
             const SizedBox(height: 16),
             _card(
-              icon: Icons.access_time,
+              iconAsset: 'assets/icons/add/clock.svg',
               label: 'УСТАНОВИТЕ ВРЕМЯ ВАШЕЙ ЗАПИСИ',
               child: InkWell(
                 onTap: _pickTime,
@@ -122,7 +123,11 @@ class _AddAppointmentScreenState extends State<AddAppointmentScreen> {
                   child: Row(
                     mainAxisAlignment: MainAxisAlignment.center,
                     children: [
-                      Icon(Icons.access_time, color: AppColors.orange),
+                      SvgPicture.asset(
+                        'assets/icons/add/clock.svg',
+                        width: 20,
+                        height: 20,
+                      ),
                       const SizedBox(width: 12),
                       Text(
                         '${_time.hour.toString().padLeft(2, '0')}:${_time.minute.toString().padLeft(2, '0')}',
@@ -139,18 +144,21 @@ class _AddAppointmentScreenState extends State<AddAppointmentScreen> {
             ),
             const SizedBox(height: 16),
             _card(
-              icon: Icons.notifications_outlined,
+              iconAsset: 'assets/icons/add/bell.svg',
               label: 'КОГДА ВЫ ХОТИТЕ, ЧТОБЫ ВАМ НАПОМНИЛИ О ЗАПИСИ?',
               child: DropdownButtonFormField<String>(
                 value: _reminder,
                 decoration: _inputDecoration(),
-                items: _reminders.map((r) => DropdownMenuItem(value: r, child: Text(r))).toList(),
+                items: kCalendarReminderOptions
+                    .map((r) => DropdownMenuItem(value: r, child: Text(r)))
+                    .toList(),
                 onChanged: (v) => setState(() => _reminder = v ?? _reminder),
               ),
             ),
             const SizedBox(height: 16),
             _card(
-              icon: Icons.note_outlined,
+              iconAsset: 'assets/icons/add/note_page.svg',
+              iconSize: 30,
               label: 'ДОБАВЬТЕ ДОПОЛНИТЕЛЬНУЮ ИНФОРМАЦИЮ О ЗАПИСИ',
               child: TextField(
                 controller: _noteController,
@@ -167,9 +175,10 @@ class _AddAppointmentScreenState extends State<AddAppointmentScreen> {
   }
 
   Widget _card({
-    required IconData icon,
+    required String iconAsset,
     required String label,
     required Widget child,
+    double iconSize = 28,
   }) {
     return Container(
       padding: const EdgeInsets.all(20),
@@ -183,7 +192,11 @@ class _AddAppointmentScreenState extends State<AddAppointmentScreen> {
         children: [
           Row(
             children: [
-              Icon(icon, color: AppColors.orange, size: 28),
+              SvgPicture.asset(
+                iconAsset,
+                width: iconSize,
+                height: iconSize,
+              ),
               const SizedBox(width: 12),
               Expanded(
                 child: Text(
