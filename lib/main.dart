@@ -16,13 +16,25 @@ import 'widgets/app_bottom_nav.dart';
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
   await SharedPreferences.getInstance();
-  unawaited(NeuralInsightsService.instance.init());
-  unawaited(NotificationService.instance.init());
-  unawaited(NotificationService.instance.rescheduleCalendarNotifications());
+  await GoogleFonts.pendingFonts([
+    GoogleFonts.alegreyaSansSc(),
+    GoogleFonts.alegreyaSansScTextTheme(ThemeData.light().textTheme),
+    GoogleFonts.alegreyaSans(fontWeight: FontWeight.w800),
+    GoogleFonts.alegreyaSans(fontSize: 15, height: 1.45),
+  ]);
+  WidgetsBinding.instance.addPostFrameCallback((_) {
+    unawaited(NeuralInsightsService.instance.init());
+    unawaited(_bootstrapNotifications());
+  });
   runApp(const MyApp());
 }
 
 void unawaited(Future<void> f) {}
+
+Future<void> _bootstrapNotifications() async {
+  await NotificationService.instance.init();
+  await NotificationService.instance.rescheduleCalendarNotifications();
+}
 
 class MyApp extends StatelessWidget {
   const MyApp({super.key});

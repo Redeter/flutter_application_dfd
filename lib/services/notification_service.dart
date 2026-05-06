@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:timezone/data/latest_all.dart' as tzdata;
 import 'package:timezone/timezone.dart' as tz;
@@ -12,23 +12,49 @@ class NotificationService {
 
   final FlutterLocalNotificationsPlugin _plugin = FlutterLocalNotificationsPlugin();
   bool _initialized = false;
+  Future<void>? _initFuture;
 
   Future<void> init() async {
     if (_initialized) return;
+    _initFuture ??= _performInit();
+    try {
+      await _initFuture!;
+    } catch (_) {
+      _initFuture = null;
+      rethrow;
+    }
+  }
+
+  Future<void> _performInit() async {
     tzdata.initializeTimeZones();
     const android = AndroidInitializationSettings('@mipmap/ic_launcher');
     const ios = DarwinInitializationSettings();
     const settings = InitializationSettings(android: android, iOS: ios);
     await _plugin.initialize(settings);
-    await _plugin
-        .resolvePlatformSpecificImplementation<
-            AndroidFlutterLocalNotificationsPlugin>()
-        ?.requestNotificationsPermission();
+    await _requestAndroidNotificationPermission();
     await _plugin
         .resolvePlatformSpecificImplementation<
             IOSFlutterLocalNotificationsPlugin>()
         ?.requestPermissions(alert: true, badge: true, sound: true);
     _initialized = true;
+  }
+
+  Future<void> _requestAndroidNotificationPermission() async {
+    final android = _plugin.resolvePlatformSpecificImplementation<
+        AndroidFlutterLocalNotificationsPlugin>();
+    if (android == null) return;
+    for (var attempt = 0; attempt < 5; attempt++) {
+      try {
+        await android.requestNotificationsPermission();
+        return;
+      } on PlatformException catch (e) {
+        if (e.code == 'permissionRequestInProgress' && attempt < 4) {
+          await Future<void>.delayed(Duration(milliseconds: 120 * (attempt + 1)));
+          continue;
+        }
+        rethrow;
+      }
+    }
   }
 
   Future<void> showTestNotification() async {
@@ -118,25 +144,38 @@ class NotificationService {
   }
 
   Future<void> _schedule(int id, DateTime when, String title, String body) async {
-    await _plugin.zonedSchedule(
-      id,
-      title,
-      body,
-      tz.TZDateTime.from(when, tz.local),
-      const NotificationDetails(
-        android: AndroidNotificationDetails(
-          'health_reminders',
-          'Health reminders',
-          channelDescription: 'Medication and appointments reminders',
-          importance: Importance.high,
-          priority: Priority.high,
-        ),
-        iOS: DarwinNotificationDetails(),
+    final scheduledDate = tz.TZDateTime.from(when, tz.local);
+    const details = NotificationDetails(
+      android: AndroidNotificationDetails(
+        'health_reminders',
+        'Health reminders',
+        channelDescription: 'Medication and appointments reminders',
+        importance: Importance.high,
+        priority: Priority.high,
       ),
-      androidScheduleMode: AndroidScheduleMode.exactAllowWhileIdle,
-      uiLocalNotificationDateInterpretation:
-          UILocalNotificationDateInterpretation.absoluteTime,
+      iOS: DarwinNotificationDetails(),
     );
+
+    Future<void> schedule(AndroidScheduleMode mode) => _plugin.zonedSchedule(
+          id,
+          title,
+          body,
+          scheduledDate,
+          details,
+          androidScheduleMode: mode,
+          uiLocalNotificationDateInterpretation:
+              UILocalNotificationDateInterpretation.absoluteTime,
+        );
+
+    try {
+      await schedule(AndroidScheduleMode.exactAllowWhileIdle);
+    } on PlatformException catch (e) {
+      if (e.code == 'exact_alarms_not_permitted') {
+        await schedule(AndroidScheduleMode.inexactAllowWhileIdle);
+        return;
+      }
+      rethrow;
+    }
   }
 
   int _stableId(String input) {

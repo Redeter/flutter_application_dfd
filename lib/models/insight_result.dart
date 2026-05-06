@@ -17,6 +17,7 @@ class InsightResult {
     this.causalInsights = const [],
     this.confidenceReasons = const [],
     this.recommendationExplanations = const {},
+    this.recommendationVariantKeys = const [],
     this.error,
   });
 
@@ -36,6 +37,8 @@ class InsightResult {
   final List<String> causalInsights;
   final List<String> confidenceReasons;
   final Map<String, String> recommendationExplanations;
+  /// Параллельно [recommendations]: id варианта формулировки для метрик/фидбека.
+  final List<String> recommendationVariantKeys;
   final String? error;
 
   bool get hasError => error != null && error!.isNotEmpty;

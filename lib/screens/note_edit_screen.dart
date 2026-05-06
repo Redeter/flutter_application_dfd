@@ -6,6 +6,7 @@ import '../models/note_item.dart';
 import '../theme/app_colors.dart';
 import '../theme/peach_app_bar.dart';
 import '../widgets/cream_background_decor.dart';
+import '../widgets/laconic_tap.dart';
 import '../widgets/unified_horizontal_date_strip.dart';
 
 /// Создание / редактирование заметки (макет справа).
@@ -194,30 +195,33 @@ class _NoteEditScreenState extends State<NoteEditScreen> {
   }
 
   Widget _buildBackButton(BuildContext context) {
-    return Material(
-      color: Colors.transparent,
-      child: InkWell(
-        onTap: () => Navigator.pop(context),
-        borderRadius: BorderRadius.circular(14),
-        child: Container(
-          width: 48,
-          height: 48,
-          decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(14),
-            border: Border.all(color: AppColors.orange, width: 2),
-            color: AppColors.white,
-            boxShadow: [
-              BoxShadow(
-                color: Colors.black.withValues(alpha: 0.06),
-                blurRadius: 8,
-                offset: const Offset(0, 2),
-              ),
-            ],
-          ),
-          child: const Icon(
-            Icons.arrow_back_ios_new_rounded,
-            color: AppColors.orange,
-            size: 20,
+    return LaconicTap(
+      onTap: () => Navigator.pop(context),
+      child: Material(
+        color: Colors.transparent,
+        child: InkWell(
+          onTap: () => Navigator.pop(context),
+          borderRadius: BorderRadius.circular(14),
+          child: Container(
+            width: 48,
+            height: 48,
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(14),
+              border: Border.all(color: AppColors.orange, width: 2),
+              color: AppColors.white,
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black.withValues(alpha: 0.06),
+                  blurRadius: 8,
+                  offset: const Offset(0, 2),
+                ),
+              ],
+            ),
+            child: const Icon(
+              Icons.arrow_back_ios_new_rounded,
+              color: AppColors.orange,
+              size: 20,
+            ),
           ),
         ),
       ),
@@ -225,40 +229,43 @@ class _NoteEditScreenState extends State<NoteEditScreen> {
   }
 
   Widget _buildDeleteButton(BuildContext context) {
-    return Material(
-      color: Colors.transparent,
-      child: InkWell(
-        onTap: () => _confirmDelete(context),
-        borderRadius: BorderRadius.circular(14),
-        child: Container(
-          height: 48,
-          padding: const EdgeInsets.symmetric(horizontal: 14),
-          decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(14),
-            border: Border.all(color: Colors.redAccent.withValues(alpha: 0.55), width: 1.4),
-            color: AppColors.white,
-            boxShadow: [
-              BoxShadow(
-                color: Colors.black.withValues(alpha: 0.06),
-                blurRadius: 8,
-                offset: const Offset(0, 2),
-              ),
-            ],
-          ),
-          child: Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Icon(Icons.delete_outline_rounded, color: Colors.redAccent.shade400, size: 22),
-              const SizedBox(width: 6),
-              Text(
-                'Удалить',
-                style: GoogleFonts.alegreyaSans(
-                  fontSize: 15,
-                  fontWeight: FontWeight.w700,
-                  color: Colors.redAccent.shade400,
+    return LaconicTap(
+      onTap: () => _confirmDelete(context),
+      child: Material(
+        color: Colors.transparent,
+        child: InkWell(
+          onTap: () => _confirmDelete(context),
+          borderRadius: BorderRadius.circular(14),
+          child: Container(
+            height: 48,
+            padding: const EdgeInsets.symmetric(horizontal: 14),
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(14),
+              border: Border.all(color: Colors.redAccent.withValues(alpha: 0.55), width: 1.4),
+              color: AppColors.white,
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black.withValues(alpha: 0.06),
+                  blurRadius: 8,
+                  offset: const Offset(0, 2),
                 ),
-              ),
-            ],
+              ],
+            ),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(Icons.delete_outline_rounded, color: Colors.redAccent.shade400, size: 22),
+                const SizedBox(width: 6),
+                Text(
+                  'Удалить',
+                  style: GoogleFonts.alegreyaSans(
+                    fontSize: 15,
+                    fontWeight: FontWeight.w700,
+                    color: Colors.redAccent.shade400,
+                  ),
+                ),
+              ],
+            ),
           ),
         ),
       ),
@@ -288,30 +295,41 @@ class _NoteEditScreenState extends State<NoteEditScreen> {
   }
 
   Widget _buildSaveButton(BuildContext context) {
-    return Material(
-      color: AppColors.orange,
-      borderRadius: BorderRadius.circular(24),
-      elevation: 0,
-      shadowColor: Colors.transparent,
-      child: InkWell(
-        onTap: () {
-          Navigator.pop(context, {
-            'title': _titleController.text,
-            'body': _bodyController.text,
-            'tags': _tagsController.text,
-            'date': _selectedDay,
-            'sticker': _selectedSticker,
-          });
-        },
+    return LaconicTap(
+      onTap: () {
+        Navigator.pop(context, {
+          'title': _titleController.text,
+          'body': _bodyController.text,
+          'tags': _tagsController.text,
+          'date': _selectedDay,
+          'sticker': _selectedSticker,
+        });
+      },
+      child: Material(
+        color: AppColors.orange,
         borderRadius: BorderRadius.circular(24),
-        child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 26, vertical: 13),
-          child: Text(
-            'Сохранить',
-            style: GoogleFonts.alegreyaSans(
-              fontSize: 17,
-              fontWeight: FontWeight.w700,
-              color: AppColors.white,
+        elevation: 0,
+        shadowColor: Colors.transparent,
+        child: InkWell(
+          onTap: () {
+            Navigator.pop(context, {
+              'title': _titleController.text,
+              'body': _bodyController.text,
+              'tags': _tagsController.text,
+              'date': _selectedDay,
+              'sticker': _selectedSticker,
+            });
+          },
+          borderRadius: BorderRadius.circular(24),
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 26, vertical: 13),
+            child: Text(
+              'Сохранить',
+              style: GoogleFonts.alegreyaSans(
+                fontSize: 17,
+                fontWeight: FontWeight.w700,
+                color: AppColors.white,
+              ),
             ),
           ),
         ),

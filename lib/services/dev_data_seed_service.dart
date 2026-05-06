@@ -154,7 +154,7 @@ class DevDataSeedService {
               date: d,
               time: TimeOfDay(hour: 10 + random.nextInt(8), minute: random.nextBool() ? 0 : 30),
               title: positive ? 'Плановый чек-ап' : 'Контроль состояния',
-              meetingDate: d,
+              meetingDate: _upcomingMeetingDate(random),
               note: positive
                   ? 'Позитивный сценарий для проверки стабильных рекомендаций'
                   : 'Негативный сценарий для проверки адаптивных рекомендаций',
@@ -163,6 +163,35 @@ class DevDataSeedService {
           calendarKeys.add(appKey);
           created++;
         }
+      }
+
+      final emoKey = 'EmotionsEntry:${d.year}-${d.month}-${d.day}';
+      if (!stateKeys.contains(emoKey) && random.nextDouble() < 0.12) {
+        await StateStorage.instance.save(
+          EmotionsEntry(
+            createdAt: d.add(Duration(hours: 11 + random.nextInt(8))),
+            emotions: positive
+                ? ['радость', 'спокойствие', 'интерес']
+                : ['тревога', 'усталость', 'напряжение'],
+          ),
+        );
+        stateKeys.add(emoKey);
+        created++;
+      }
+
+      final nutKey = 'NutritionEntry:${d.year}-${d.month}-${d.day}';
+      if (!stateKeys.contains(nutKey) && random.nextDouble() < 0.08) {
+        await StateStorage.instance.save(
+          NutritionEntry(
+            createdAt: d.add(const Duration(hours: 13, minutes: 20)),
+            meals: positive ? const ['завтрак', 'обед'] : const ['перекусы'],
+            snackCount: positive ? random.nextInt(3) : 2 + random.nextInt(4),
+            sensations: positive ? const ['лёгкость'] : const ['тяжесть', 'перегруз'],
+            emotionalConnection: positive ? const ['спокойствие'] : const ['тревога'],
+          ),
+        );
+        stateKeys.add(nutKey);
+        created++;
       }
     }
 
@@ -289,13 +318,42 @@ class DevDataSeedService {
               date: d,
               time: TimeOfDay(hour: 10 + random.nextInt(7), minute: 0),
               title: positive ? 'Контрольный визит' : 'Внеплановый прием',
-              meetingDate: d,
+              meetingDate: _upcomingMeetingDate(random),
               note: 'Смешанный сценарий для теста календарной аналитики',
             ),
           );
           calendarKeys.add(appKey);
           created++;
         }
+      }
+
+      final emoKey = 'EmotionsEntry:${d.year}-${d.month}-${d.day}';
+      if (!stateKeys.contains(emoKey) && random.nextDouble() < 0.11) {
+        await StateStorage.instance.save(
+          EmotionsEntry(
+            createdAt: d.add(Duration(hours: 10 + random.nextInt(9))),
+            emotions: positive
+                ? ['радость', 'спокойствие']
+                : ['тревога', 'раздражение', 'усталость'],
+          ),
+        );
+        stateKeys.add(emoKey);
+        created++;
+      }
+
+      final nutKey = 'NutritionEntry:${d.year}-${d.month}-${d.day}';
+      if (!stateKeys.contains(nutKey) && random.nextDouble() < 0.07) {
+        await StateStorage.instance.save(
+          NutritionEntry(
+            createdAt: d.add(const Duration(hours: 12, minutes: 45)),
+            meals: positive ? const ['обед'] : const ['перекусы', 'кофе'],
+            snackCount: positive ? random.nextInt(2) : 3 + random.nextInt(3),
+            sensations: const ['сытость'],
+            emotionalConnection: positive ? const [] : const ['стресс'],
+          ),
+        );
+        stateKeys.add(nutKey);
+        created++;
       }
     }
 
@@ -348,6 +406,12 @@ class DevDataSeedService {
     return pool.take(2).toList();
   }
 
+  /// Дата визита в будущем — иначе совет «врач» по гейту не срабатывает.
+  static DateTime _upcomingMeetingDate(Random random) {
+    final t0 = DateTime(DateTime.now().year, DateTime.now().month, DateTime.now().day);
+    return t0.add(Duration(days: 2 + random.nextInt(28)));
+  }
+
   String _uniquePreview(Random r, bool lowTone, bool positive) {
     final low = [
       'Сегодня устал, концентрация низкая, нужно восстановление.',
@@ -386,6 +450,8 @@ class DevDataSeedService {
       'stats_foundation_sync_week_end_v1',
       'foundation_overall_display_smooth_v1',
       'foundation_weight_survey_v1',
+      'rec_personalizer_last_variants_v1',
+      'insights_expectations_dialog_v1',
     ];
     final prefs = await SharedPreferences.getInstance();
     for (final key in keys) {

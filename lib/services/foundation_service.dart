@@ -468,16 +468,19 @@ class FoundationService {
     required int fromDaysAgo,
     required int toDaysAgo,
   }) {
-    final now = DateTime.now();
-    final from = now.subtract(Duration(days: fromDaysAgo));
-    final to = now.subtract(Duration(days: toDaysAgo));
+    DateTime dayOnly(DateTime d) => DateTime(d.year, d.month, d.day);
+    final today = dayOnly(DateTime.now());
+    final from = today.subtract(Duration(days: fromDaysAgo));
+    final to = today.subtract(Duration(days: toDaysAgo));
+    bool inRange(DateTime d) {
+      final day = dayOnly(d);
+      return !day.isBefore(from) && !day.isAfter(to);
+    }
     return AggregatedData(
-      notes: data.notes.where((n) => !n.date.isBefore(from) && !n.date.isAfter(to)).toList(),
-      stateEntries: data.stateEntries
-          .where((s) => !s.createdAt.isBefore(from) && !s.createdAt.isAfter(to))
-          .toList(),
-      medications: data.medications.where((m) => !m.date.isBefore(from) && !m.date.isAfter(to)).toList(),
-      appointments: data.appointments.where((a) => !a.date.isBefore(from) && !a.date.isAfter(to)).toList(),
+      notes: data.notes.where((n) => inRange(n.date)).toList(),
+      stateEntries: data.stateEntries.where((s) => inRange(s.createdAt)).toList(),
+      medications: data.medications.where((m) => inRange(m.date)).toList(),
+      appointments: data.appointments.where((a) => inRange(a.date)).toList(),
     );
   }
 

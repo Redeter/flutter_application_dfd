@@ -25,6 +25,16 @@ class InsightSafetyService {
           .toList();
       safeReasons[rec] = reasons;
     }
+    final safeVariantKeys = <String>[
+      for (var i = 0; i < safeRecs.length; i++)
+        i < input.recommendationVariantKeys.length ? input.recommendationVariantKeys[i] : '',
+    ];
+    final safeScores = <String, double>{
+      for (final r in safeRecs) r: input.recommendationScores[r] ?? input.confidence,
+    };
+    final safeExpl = <String, String>{
+      for (final r in safeRecs) r: input.recommendationExplanations[r] ?? '',
+    };
 
     if (_isSevereRisk(input)) {
       overall = [
@@ -47,13 +57,14 @@ class InsightSafetyService {
       dataQualityScore: input.dataQualityScore,
       insufficientData: input.insufficientData,
       personalizationScores: input.personalizationScores,
-      recommendationScores: input.recommendationScores,
+      recommendationScores: safeScores,
       weeklyDigest: input.weeklyDigest,
       burnoutAlert: input.burnoutAlert,
       topTriggers: input.topTriggers,
       causalInsights: input.causalInsights,
       confidenceReasons: input.confidenceReasons,
-      recommendationExplanations: input.recommendationExplanations,
+      recommendationExplanations: safeExpl,
+      recommendationVariantKeys: safeVariantKeys,
       error: input.error,
     );
   }

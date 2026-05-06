@@ -4,6 +4,7 @@ import 'package:google_fonts/google_fonts.dart';
 import '../models/calendar_entry.dart';
 import '../services/calendar_storage.dart';
 import '../theme/app_colors.dart';
+import '../widgets/laconic_tap.dart';
 import '../widgets/time_picker_modal.dart';
 
 const _frequencies = ['Ежедневно', 'Через день', 'Раз в неделю', 'По необходимости'];
@@ -364,15 +365,18 @@ class _AddMedicationScreenState extends State<AddMedicationScreen> {
                   }),
                   Align(
                     alignment: Alignment.centerRight,
-                    child: Material(
-                      color: AppColors.orange,
-                      shape: const CircleBorder(),
-                      child: InkWell(
-                        onTap: _addScheduleItem,
-                        customBorder: const CircleBorder(),
-                        child: const Padding(
-                          padding: EdgeInsets.all(12),
-                          child: Icon(Icons.add, color: AppColors.white, size: 28),
+                    child: LaconicTap(
+                      onTap: _addScheduleItem,
+                      child: Material(
+                        color: AppColors.orange,
+                        shape: const CircleBorder(),
+                        child: InkWell(
+                          onTap: _addScheduleItem,
+                          customBorder: const CircleBorder(),
+                          child: const Padding(
+                            padding: EdgeInsets.all(12),
+                            child: Icon(Icons.add, color: AppColors.white, size: 28),
+                          ),
                         ),
                       ),
                     ),
@@ -448,21 +452,24 @@ class _AddMedicationScreenState extends State<AddMedicationScreen> {
   }
 
   Widget _saveButton() {
-    return SizedBox(
-      width: double.infinity,
-      child: FilledButton(
-        onPressed: _save,
-        style: FilledButton.styleFrom(
-          backgroundColor: AppColors.orange,
-          foregroundColor: AppColors.white,
-          padding: const EdgeInsets.symmetric(vertical: 18),
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(28)),
-        ),
-        child: Text(
-          'Сохранить',
-          style: GoogleFonts.alegreyaSans(
-            fontSize: 18,
-            fontWeight: FontWeight.w700,
+    return LaconicTap(
+      onTap: _save,
+      child: SizedBox(
+        width: double.infinity,
+        child: FilledButton(
+          onPressed: _save,
+          style: FilledButton.styleFrom(
+            backgroundColor: AppColors.orange,
+            foregroundColor: AppColors.white,
+            padding: const EdgeInsets.symmetric(vertical: 18),
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(28)),
+          ),
+          child: Text(
+            'Сохранить',
+            style: GoogleFonts.alegreyaSans(
+              fontSize: 18,
+              fontWeight: FontWeight.w700,
+            ),
           ),
         ),
       ),

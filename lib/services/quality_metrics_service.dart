@@ -35,6 +35,7 @@ class QualityMetricsService {
     required String recommendation,
     required bool helpful,
     required bool accepted,
+    String? recommendationVariantKey,
   }) async {
     final prefs = await SharedPreferences.getInstance();
     final fb = await _loadListMap(prefs, _keyRecFeedback);
@@ -43,8 +44,20 @@ class QualityMetricsService {
       'recommendation': recommendation,
       'helpful': helpful,
       'accepted': accepted,
+      if (recommendationVariantKey != null && recommendationVariantKey.isNotEmpty)
+        'variantKey': recommendationVariantKey,
     });
     await _saveTrimmed(prefs, _keyRecFeedback, fb, 300);
+  }
+
+  /// Смещение выбора варианта формулировки: положительное — чаще помечали «полезно».
+  Future<double> recommendationVariantBias(String variantKey) async {
+    final prefs = await SharedPreferences.getInstance();
+    final fb = await _loadListMap(prefs, _keyRecFeedback);
+    final subset = fb.where((e) => '${e['variantKey']}' == variantKey).toList();
+    if (subset.length < 2) return 0.0;
+    final helpful = subset.where((e) => e['helpful'] == true).length / subset.length;
+    return ((helpful - 0.5) * 0.45).clamp(-0.22, 0.22);
   }
 
   Future<LocalQualityMetrics> getMetrics() async {
@@ -98,6 +111,25 @@ class QualityMetricsService {
       'cases': cases,
       'ts': DateTime.now().toIso8601String(),
     }));
+  }
+
+  /// Множитель ранга совета по истории helpful/accepted для похожих текстов (без роста сети).
+  Future<double> recommendationScoreMultiplier(String recommendation) async {
+    final prefs = await SharedPreferences.getInstance();
+    final fb = await _loadListMap(prefs, _keyRecFeedback);
+    if (fb.length < 6) return 1.0;
+    final needle = recommendation.length > 18 ? recommendation.substring(0, 18) : recommendation;
+    if (needle.length < 8) return 1.0;
+    final similar = fb.where((e) {
+      final t = '${e['recommendation']}';
+      return t.startsWith(needle.substring(0, 8));
+    }).toList();
+    if (similar.length < 3) return 1.0;
+    final helpful = similar.where((e) => e['helpful'] == true).length;
+    final accepted = similar.where((e) => e['accepted'] == true).length;
+    final n = similar.length.toDouble();
+    final rate = (0.55 * (helpful / n) + 0.45 * (accepted / n)).clamp(0.0, 1.0);
+    return (0.86 + 0.28 * rate).clamp(0.82, 1.18);
   }
 
   Future<double> calibrateConfidence(double rawConfidence) async {

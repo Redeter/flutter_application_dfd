@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:google_fonts/google_fonts.dart';
 
 import '../models/aggregated_data.dart';
@@ -41,11 +42,12 @@ class _StatisticsScreenState extends State<StatisticsScreen> {
   InsightResult? _insight;
   AggregatedData? _data;
   LocalQualityMetrics _qualityMetrics = const LocalQualityMetrics();
-  bool _loading = false;
+  bool _loading = true;
   UserProfile _profile = const UserProfile();
   DateTime _selectedDate = DateTime.now();
   bool _viewWeek = true; // true = неделя, false = день
   String _abMode = 'auto';
+  int _loadEpoch = 0;
   String? _draggingBlockId;
   final List<String> _blockOrder = [
     'data_summary',
@@ -55,13 +57,51 @@ class _StatisticsScreenState extends State<StatisticsScreen> {
     'accuracy_card',
   ];
 
+  static const _kExpectationsDialogDone = 'insights_expectations_dialog_v1';
+
+  Future<void> _maybeShowExpectationsDialog() async {
+    final prefs = await SharedPreferences.getInstance();
+    if (prefs.getBool(_kExpectationsDialogDone) == true) return;
+    if (!mounted) return;
+    await Future<void>.delayed(const Duration(milliseconds: 500));
+    if (!mounted) return;
+    await showDialog<void>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: Text(
+          'Об анализе и советах',
+          style: GoogleFonts.alegreyaSans(fontWeight: FontWeight.w800),
+        ),
+        content: Text(
+          'Раздел статистики использует только ваши записи на устройстве — без отправки в облако. '
+          'Это не диагноз и не замена терапии или врача.\n\n'
+          'Советы — мягкие ориентиры по наблюдаемым паттернам (сон, энергия, настроение, заметки). '
+          'При стойком ухудшении состояния обратитесь к специалисту.',
+          style: GoogleFonts.alegreyaSans(fontSize: 15, height: 1.45),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () async {
+              await prefs.setBool(_kExpectationsDialogDone, true);
+              if (ctx.mounted) Navigator.pop(ctx);
+            },
+            child: const Text('Понятно'),
+          ),
+        ],
+      ),
+    );
+  }
+
   @override
   void initState() {
     super.initState();
-    _loadMode();
-    _loadProfile();
-    _load();
-    unawaited(StatsPeriodSync.persistWeekContaining(_selectedDate));
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      _loadMode();
+      _loadProfile();
+      _load();
+      unawaited(StatsPeriodSync.persistWeekContaining(_selectedDate));
+    });
   }
 
   Future<void> _loadProfile() async {
@@ -91,8 +131,10 @@ class _StatisticsScreenState extends State<StatisticsScreen> {
           _insight = result;
           _qualityMetrics = metrics;
           _loading = false;
+          _loadEpoch++;
         });
         unawaited(StatsPeriodSync.persistWeekContaining(_selectedDate));
+        unawaited(_maybeShowExpectationsDialog());
       }
       unawaited(_refreshOfflineMetricsInBackground());
     } catch (e) {
@@ -100,6 +142,7 @@ class _StatisticsScreenState extends State<StatisticsScreen> {
         setState(() {
           _insight = InsightResult.fromError('$e');
           _loading = false;
+          _loadEpoch++;
         });
       }
     }
@@ -548,9 +591,15 @@ class _StatisticsScreenState extends State<StatisticsScreen> {
     }
 
     final visibleIds = _blockOrder.where(blocks.containsKey).toList();
-    final ordered = visibleIds
-        .map((id) => _buildDraggableBlock(id: id, child: blocks[id]!))
-        .toList();
+    final ordered = visibleIds.asMap().entries.map((entry) {
+      final index = entry.key;
+      final id = entry.value;
+      return _AnimatedEntrance(
+        key: ValueKey('block-$id-$_loadEpoch'),
+        index: index,
+        child: _buildDraggableBlock(id: id, child: blocks[id]!),
+      );
+    }).toList();
 
     return SingleChildScrollView(
       physics: const AlwaysScrollableScrollPhysics(),
@@ -635,6 +684,9 @@ class _StatisticsScreenState extends State<StatisticsScreen> {
     final stats = _localStats;
     final medsCount = stats.medicationsCount;
     final visitsCount = stats.appointmentsCount;
+    final (start, end) = _range;
+    final periodKey =
+        '${_viewWeek ? 'week' : 'day'}-${start.year}-${start.month}-${start.day}-${end.year}-${end.month}-${end.day}';
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -647,77 +699,97 @@ class _StatisticsScreenState extends State<StatisticsScreen> {
           ),
         ),
         const SizedBox(height: 12),
-        Container(
-          padding: const EdgeInsets.all(20),
-          decoration: BoxDecoration(
-            color: AppColors.textDark,
-            borderRadius: BorderRadius.circular(20),
-            boxShadow: [
-              BoxShadow(
-                color: Colors.black.withValues(alpha: 0.1),
-                blurRadius: 12,
-                offset: const Offset(0, 4),
-              ),
-            ],
-          ),
-          child: Row(
-            children: [
-              Expanded(
-                child: _buildRing(
-                  rawOutOf10: stats.avgMood,
-                  label: 'Настроение',
-                  color: AppColors.orange,
-                ),
-              ),
-              Expanded(
-                child: _buildRing(
-                  rawOutOf10: stats.avgSleep,
-                  label: 'Сон',
-                  color: AppColors.lavender,
-                ),
-              ),
-              Expanded(
-                child: _buildRing(
-                  rawOutOf10: stats.avgEnergy,
-                  label: 'Энергия',
-                  color: AppColors.lightGreen,
-                ),
-              ),
-            ],
-          ),
-        ),
-        const SizedBox(height: 12),
-        LayoutBuilder(
-          builder: (_, c) {
-            final cardWidth = (c.maxWidth - 8) / 2;
-            return Wrap(
-              spacing: 8,
-              runSpacing: 8,
-              children: [
-                _buildMetricCard(
-                  cardWidth,
-                  'Заметок',
-                  '${stats.notesCount}',
-                  Icons.edit_note_rounded,
-                  [AppColors.lightBlue, const Color(0xFF64B5F6)],
-                ),
-                _buildMetricCard(
-                  cardWidth,
-                  'Таблетки',
-                  '$medsCount',
-                  Icons.medication_outlined,
-                  [const Color(0xFFF8BBD0), const Color(0xFFF48FB1)],
-                ),
-                _buildMetricCard(
-                  cardWidth,
-                  'Приёмы',
-                  '$visitsCount',
-                  Icons.event_available_rounded,
-                  [const Color(0xFFC8E6C9), const Color(0xFFA5D6A7)],
-                ),
-              ],
+        AnimatedSwitcher(
+          duration: const Duration(milliseconds: 320),
+          switchInCurve: Curves.easeOutCubic,
+          switchOutCurve: Curves.easeInCubic,
+          transitionBuilder: (child, animation) {
+            final position = Tween<Offset>(
+              begin: const Offset(0, 0.06),
+              end: Offset.zero,
+            ).animate(animation);
+            return FadeTransition(
+              opacity: animation,
+              child: SlideTransition(position: position, child: child),
             );
           },
+          child: Column(
+            key: ValueKey(periodKey),
+            children: [
+              Container(
+                padding: const EdgeInsets.all(20),
+                decoration: BoxDecoration(
+                  color: AppColors.textDark,
+                  borderRadius: BorderRadius.circular(20),
+                  boxShadow: [
+                    BoxShadow(
+                      color: Colors.black.withValues(alpha: 0.1),
+                      blurRadius: 12,
+                      offset: const Offset(0, 4),
+                    ),
+                  ],
+                ),
+                child: Row(
+                  children: [
+                    Expanded(
+                      child: _buildRing(
+                        rawOutOf10: stats.avgMood,
+                        label: 'Настроение',
+                        color: AppColors.orange,
+                      ),
+                    ),
+                    Expanded(
+                      child: _buildRing(
+                        rawOutOf10: stats.avgSleep,
+                        label: 'Сон',
+                        color: AppColors.lavender,
+                      ),
+                    ),
+                    Expanded(
+                      child: _buildRing(
+                        rawOutOf10: stats.avgEnergy,
+                        label: 'Энергия',
+                        color: AppColors.lightGreen,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 12),
+              LayoutBuilder(
+                builder: (_, c) {
+                  final cardWidth = (c.maxWidth - 8) / 2;
+                  return Wrap(
+                    spacing: 8,
+                    runSpacing: 8,
+                    children: [
+                      _buildMetricCard(
+                        cardWidth,
+                        'Заметок',
+                        '${stats.notesCount}',
+                        Icons.edit_note_rounded,
+                        [AppColors.lightBlue, const Color(0xFF64B5F6)],
+                      ),
+                      _buildMetricCard(
+                        cardWidth,
+                        'Таблетки',
+                        '$medsCount',
+                        Icons.medication_outlined,
+                        [const Color(0xFFF8BBD0), const Color(0xFFF48FB1)],
+                      ),
+                      _buildMetricCard(
+                        cardWidth,
+                        'Приёмы',
+                        '$visitsCount',
+                        Icons.event_available_rounded,
+                        [const Color(0xFFC8E6C9), const Color(0xFFA5D6A7)],
+                      ),
+                    ],
+                  );
+                },
+              ),
+            ],
+          ),
         ),
         const SizedBox(height: 20),
       ],
@@ -737,54 +809,60 @@ class _StatisticsScreenState extends State<StatisticsScreen> {
         SizedBox(
           width: 56,
           height: 56,
-          child: Stack(
-            alignment: Alignment.center,
-            children: [
-              CustomPaint(
-                size: const Size(56, 56),
-                painter: _RingPainter(
-                  progress: progress,
-                  color: color,
-                  backgroundColor: Colors.white.withValues(alpha: 0.2),
-                ),
-              ),
-              if (rawOutOf10 == null)
-                Text(
-                  '—',
-                  style: GoogleFonts.alegreyaSans(
-                    fontSize: 14,
-                    fontWeight: FontWeight.w700,
-                    color: AppColors.white,
-                  ),
-                )
-              else
-                FittedBox(
-                  fit: BoxFit.scaleDown,
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Text(
-                        rawOutOf10.toStringAsFixed(1),
-                        style: GoogleFonts.alegreyaSans(
-                          fontSize: 13,
-                          fontWeight: FontWeight.w800,
-                          height: 1.0,
-                          color: AppColors.white,
-                        ),
-                      ),
-                      Text(
-                        '/10',
-                        style: GoogleFonts.alegreyaSans(
-                          fontSize: 9,
-                          fontWeight: FontWeight.w600,
-                          height: 1.0,
-                          color: Colors.white.withValues(alpha: 0.75),
-                        ),
-                      ),
-                    ],
+          child: TweenAnimationBuilder<double>(
+            key: ValueKey('ring-$label-$_loadEpoch-$progress'),
+            tween: Tween(begin: 0.0, end: progress),
+            duration: const Duration(milliseconds: 850),
+            curve: Curves.easeOutCubic,
+            builder: (_, animatedProgress, __) => Stack(
+              alignment: Alignment.center,
+              children: [
+                CustomPaint(
+                  size: const Size(56, 56),
+                  painter: _RingPainter(
+                    progress: animatedProgress,
+                    color: color,
+                    backgroundColor: Colors.white.withValues(alpha: 0.2),
                   ),
                 ),
-            ],
+                if (rawOutOf10 == null)
+                  Text(
+                    '—',
+                    style: GoogleFonts.alegreyaSans(
+                      fontSize: 14,
+                      fontWeight: FontWeight.w700,
+                      color: AppColors.white,
+                    ),
+                  )
+                else
+                  FittedBox(
+                    fit: BoxFit.scaleDown,
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Text(
+                          rawOutOf10.toStringAsFixed(1),
+                          style: GoogleFonts.alegreyaSans(
+                            fontSize: 13,
+                            fontWeight: FontWeight.w800,
+                            height: 1.0,
+                            color: AppColors.white,
+                          ),
+                        ),
+                        Text(
+                          '/10',
+                          style: GoogleFonts.alegreyaSans(
+                            fontSize: 9,
+                            fontWeight: FontWeight.w600,
+                            height: 1.0,
+                            color: Colors.white.withValues(alpha: 0.75),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+              ],
+            ),
           ),
         ),
         const SizedBox(height: 6),
@@ -809,54 +887,57 @@ class _StatisticsScreenState extends State<StatisticsScreen> {
     IconData icon,
     List<Color> gradientColors,
   ) {
-    return SizedBox(
-      width: width,
-      child: Container(
-        padding: const EdgeInsets.all(14),
-        decoration: BoxDecoration(
-          gradient: LinearGradient(
-            colors: gradientColors,
-            begin: Alignment.topLeft,
-            end: Alignment.bottomRight,
-          ),
-          borderRadius: BorderRadius.circular(16),
-          boxShadow: [
-            BoxShadow(
-              color: gradientColors.first.withValues(alpha: 0.3),
-              blurRadius: 8,
-              offset: const Offset(0, 4),
+    return _PressScale(
+      scale: 0.98,
+      child: SizedBox(
+        width: width,
+        child: Container(
+          padding: const EdgeInsets.all(14),
+          decoration: BoxDecoration(
+            gradient: LinearGradient(
+              colors: gradientColors,
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
             ),
-          ],
-        ),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              children: [
-                Icon(icon, color: Colors.white.withValues(alpha: 0.9), size: 18),
-                const SizedBox(width: 6),
-                Expanded(
-                  child: Text(
-                    label,
-                    style: GoogleFonts.alegreyaSans(
-                      fontSize: 12,
-                      color: Colors.white.withValues(alpha: 0.9),
-                    ),
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 8),
-            Text(
-              value,
-              style: GoogleFonts.alegreyaSans(
-                fontSize: 22,
-                fontWeight: FontWeight.w800,
-                color: AppColors.white,
+            borderRadius: BorderRadius.circular(16),
+            boxShadow: [
+              BoxShadow(
+                color: gradientColors.first.withValues(alpha: 0.3),
+                blurRadius: 8,
+                offset: const Offset(0, 4),
               ),
-            ),
-          ],
+            ],
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  Icon(icon, color: Colors.white.withValues(alpha: 0.9), size: 18),
+                  const SizedBox(width: 6),
+                  Expanded(
+                    child: Text(
+                      label,
+                      style: GoogleFonts.alegreyaSans(
+                        fontSize: 12,
+                        color: Colors.white.withValues(alpha: 0.9),
+                      ),
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 8),
+              Text(
+                value,
+                style: GoogleFonts.alegreyaSans(
+                  fontSize: 22,
+                  fontWeight: FontWeight.w800,
+                  color: AppColors.white,
+                ),
+              ),
+            ],
+          ),
         ),
       ),
     );
@@ -1125,8 +1206,27 @@ class _StatisticsScreenState extends State<StatisticsScreen> {
               ),
             ],
           ),
+          const SizedBox(height: 8),
+          Text(
+            'Советы строятся локально по вашим отметкам — не диагноз и не терапия; при ухудшении состояния обратитесь к специалисту.',
+            style: GoogleFonts.alegreyaSans(
+              fontSize: 12,
+              height: 1.35,
+              color: AppColors.textDark.withValues(alpha: 0.62),
+            ),
+          ),
           const SizedBox(height: 12),
-          ..._insight!.recommendations.map((r) => Padding(
+          ..._insight!.recommendations.asMap().entries.map((entry) {
+            final i = entry.key;
+            final r = entry.value;
+            final variantKey = i < _insight!.recommendationVariantKeys.length
+                ? _insight!.recommendationVariantKeys[i]
+                : '';
+            return _AnimatedEntrance(
+              key: ValueKey('advice-$r-$_loadEpoch'),
+              index: i,
+              delayMs: 120,
+              child: Padding(
                 padding: const EdgeInsets.only(bottom: 10),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
@@ -1174,6 +1274,7 @@ class _StatisticsScreenState extends State<StatisticsScreen> {
                               recommendation: r,
                               helpful: true,
                               accepted: false,
+                              variantKey: variantKey.isEmpty ? null : variantKey,
                             ),
                           ),
                           _feedbackChip(
@@ -1183,6 +1284,7 @@ class _StatisticsScreenState extends State<StatisticsScreen> {
                               recommendation: r,
                               helpful: false,
                               accepted: false,
+                              variantKey: variantKey.isEmpty ? null : variantKey,
                             ),
                           ),
                           _feedbackChip(
@@ -1192,6 +1294,7 @@ class _StatisticsScreenState extends State<StatisticsScreen> {
                               recommendation: r,
                               helpful: true,
                               accepted: true,
+                              variantKey: variantKey.isEmpty ? null : variantKey,
                             ),
                           ),
                         ],
@@ -1219,7 +1322,9 @@ class _StatisticsScreenState extends State<StatisticsScreen> {
                     ),
                   ],
                 ),
-              )),
+              ),
+            );
+          }),
         ],
       ),
     );
@@ -1640,11 +1745,13 @@ class _StatisticsScreenState extends State<StatisticsScreen> {
     required String recommendation,
     required bool helpful,
     required bool accepted,
+    String? variantKey,
   }) async {
     await QualityMetricsService.instance.registerRecommendationFeedback(
       recommendation: recommendation,
       helpful: helpful,
       accepted: accepted,
+      recommendationVariantKey: variantKey,
     );
     final metrics = await QualityMetricsService.instance.getMetrics();
     if (!mounted) return;
@@ -1740,10 +1847,23 @@ class _StatisticsScreenState extends State<StatisticsScreen> {
   Widget _buildDataSummary() {
     final d = _data!;
     final parts = <String>[];
-    if (d.notes.isNotEmpty) parts.add('${d.notes.length} ${_plural(d.notes.length, 'заметка', 'заметки', 'заметок')}');
-    if (d.stateEntries.isNotEmpty) parts.add('${d.stateEntries.length} ${_plural(d.stateEntries.length, 'запись', 'записи', 'записей')} о состоянии');
-    if (d.medications.isNotEmpty) parts.add('${d.medications.length} ${_plural(d.medications.length, 'препарат', 'препарата', 'препаратов')}');
-    if (d.appointments.isNotEmpty) parts.add('${d.appointments.length} ${_plural(d.appointments.length, 'визит', 'визита', 'визитов')}');
+    if (d.notes.isNotEmpty) parts.add('${d.notes.length} ${_plural(d.notes.length, 'заметка', 'заметки', 'заметок')} всего');
+    if (d.stateEntries.isNotEmpty) {
+      parts.add(
+        '${d.stateEntries.length} ${_plural(d.stateEntries.length, 'запись', 'записи', 'записей')} о состоянии всего',
+      );
+    }
+    // Одна ежедневная схема = отдельная строка календаря на каждый день — это не «17 разных лекарств».
+    if (d.medications.isNotEmpty) {
+      parts.add(
+        '${d.medications.length} ${_plural(d.medications.length, 'строка', 'строки', 'строк')} календаря «препарат» (по датам)',
+      );
+    }
+    if (d.appointments.isNotEmpty) {
+      parts.add(
+        '${d.appointments.length} ${_plural(d.appointments.length, 'строка', 'строки', 'строк')} календаря «визит» (по датам)',
+      );
+    }
     if (_profile.hasConditions) {
       parts.add('режим: ${_profile.conditions.map((e) => e.label).join(', ')}');
     } else {
@@ -1759,16 +1879,33 @@ class _StatisticsScreenState extends State<StatisticsScreen> {
           borderRadius: BorderRadius.circular(12),
           border: Border.all(color: AppColors.orange.withValues(alpha: 0.3)),
         ),
-        child: Row(
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Icon(Icons.analytics_outlined, color: AppColors.orange, size: 20),
-            const SizedBox(width: 10),
-            Expanded(
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Icon(Icons.analytics_outlined, color: AppColors.orange, size: 20),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Text(
+                    'На основе: ${parts.join(', ')}',
+                    style: GoogleFonts.alegreyaSans(
+                      fontSize: 14,
+                      color: AppColors.textDark.withValues(alpha: 0.9),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+            Padding(
+              padding: const EdgeInsets.only(left: 30, top: 6),
               child: Text(
-                'На основе: ${parts.join(', ')}',
+                'Эти числа — всё, что сохранено в приложении. Кольца «Сводка за период» выше — только календарная неделя (пн–вс), в которую попадает выделенная на полоске дата.',
                 style: GoogleFonts.alegreyaSans(
-                  fontSize: 14,
-                  color: AppColors.textDark.withValues(alpha: 0.9),
+                  fontSize: 11.5,
+                  height: 1.35,
+                  color: AppColors.textDark.withValues(alpha: 0.55),
                 ),
               ),
             ),
@@ -1870,6 +2007,73 @@ class _StatisticsScreenState extends State<StatisticsScreen> {
     );
   }
 
+}
+
+class _AnimatedEntrance extends StatelessWidget {
+  const _AnimatedEntrance({
+    super.key,
+    required this.index,
+    required this.child,
+    this.delayMs = 70,
+  });
+
+  final int index;
+  final Widget child;
+  final int delayMs;
+
+  @override
+  Widget build(BuildContext context) {
+    final duration = Duration(milliseconds: 300 + (index * delayMs));
+    return TweenAnimationBuilder<double>(
+      tween: Tween(begin: 0, end: 1),
+      duration: duration,
+      curve: Curves.easeOutCubic,
+      builder: (_, t, ch) {
+        final dy = (1 - t) * 14;
+        return Opacity(
+          opacity: t.clamp(0.0, 1.0),
+          child: Transform.translate(
+            offset: Offset(0, dy),
+            child: ch,
+          ),
+        );
+      },
+      child: child,
+    );
+  }
+}
+
+class _PressScale extends StatefulWidget {
+  const _PressScale({
+    required this.child,
+    this.scale = 0.98,
+  });
+
+  final Widget child;
+  final double scale;
+
+  @override
+  State<_PressScale> createState() => _PressScaleState();
+}
+
+class _PressScaleState extends State<_PressScale> {
+  bool _pressed = false;
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      behavior: HitTestBehavior.translucent,
+      onTapDown: (_) => setState(() => _pressed = true),
+      onTapCancel: () => setState(() => _pressed = false),
+      onTapUp: (_) => setState(() => _pressed = false),
+      child: AnimatedScale(
+        duration: const Duration(milliseconds: 110),
+        curve: Curves.easeOutCubic,
+        scale: _pressed ? widget.scale : 1.0,
+        child: widget.child,
+      ),
+    );
+  }
 }
 
 class _RingPainter extends CustomPainter {

@@ -63,7 +63,7 @@ class OfflineValidationService {
           medications: const <Medication>[],
           appointments: const <Appointment>[],
         ),
-        expectedKeywords: const ['сна', 'энерг', 'настро'],
+        expectedKeywords: const ['14', 'сон', 'энерг', 'настро'],
       ),
       _OfflineCase(
         data: AggregatedData(

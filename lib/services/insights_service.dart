@@ -13,6 +13,7 @@ import 'local_insights_service.dart';
 import '../neural/neural_insights_service.dart';
 import 'notes_storage.dart';
 import 'quality_metrics_service.dart';
+import 'recommendation_personalizer.dart';
 import 'state_storage.dart';
 import 'user_profile_service.dart';
 
@@ -84,6 +85,7 @@ class InsightsService {
       causalInsights: input.causalInsights,
       confidenceReasons: input.confidenceReasons,
       recommendationExplanations: input.recommendationExplanations,
+      recommendationVariantKeys: input.recommendationVariantKeys,
       error: input.error,
     );
   }
@@ -101,13 +103,33 @@ class InsightsService {
     );
     final remappedReasons = <String, List<String>>{};
     final recExplanations = <String, String>{};
+    final shownRecs = <String>[];
+    final variantKeys = <String>[];
     for (var i = 0; i < rewritten.length; i++) {
       final oldRec = i < input.recommendations.length ? input.recommendations[i] : rewritten[i];
       final newRec = rewritten[i];
       final reasons = input.recommendationReasons[oldRec] ?? const <String>[];
-      remappedReasons[newRec] = reasons;
+      final rendered =
+          await RecommendationPersonalizer.instance.render(newRec, data, profile);
+      final shown = rendered.text;
+      shownRecs.add(shown);
+      variantKeys.add(rendered.variantKey);
+      remappedReasons[shown] = reasons;
       final short = reasons.take(2).join('; ');
-      recExplanations[newRec] = short.isEmpty ? 'Основано на динамике последних дней.' : short;
+      recExplanations[shown] = short.isEmpty ? 'Основано на динамике последних дней.' : short;
+    }
+
+    final remappedScores = <String, double>{};
+    for (var i = 0; i < shownRecs.length; i++) {
+      final oldRec = i < input.recommendations.length ? input.recommendations[i] : rewritten[i];
+      final newRec = rewritten[i];
+      final shown = shownRecs[i];
+      final sk = input.recommendationScores.containsKey(oldRec)
+          ? oldRec
+          : (input.recommendationScores.containsKey(newRec) ? newRec : null);
+      remappedScores[shown] = sk != null
+          ? input.recommendationScores[sk]!
+          : (input.recommendationScores[newRec] ?? 0.5);
     }
 
     final extraOverall = [
@@ -121,19 +143,20 @@ class InsightsService {
       keywords: input.keywords,
       stateSummary: input.stateSummary,
       overallInsight: extraOverall,
-      recommendations: rewritten,
+      recommendations: shownRecs,
       recommendationReasons: remappedReasons,
       confidence: input.confidence,
       dataQualityScore: input.dataQualityScore,
       insufficientData: input.insufficientData,
       personalizationScores: input.personalizationScores,
-      recommendationScores: input.recommendationScores,
+      recommendationScores: remappedScores,
       weeklyDigest: weeklyDigest,
       burnoutAlert: burnout,
       topTriggers: topTriggers,
       causalInsights: causal,
       confidenceReasons: confidenceReasons,
       recommendationExplanations: recExplanations,
+      recommendationVariantKeys: variantKeys,
       error: input.error,
     );
   }
@@ -173,15 +196,32 @@ class InsightsService {
     if (notes.length < 2) return notes;
     final sorted = [...notes]..sort((a, b) => a.date.compareTo(b.date));
     final out = <NoteItem>[];
+    final titleDayCounts = <String, int>{};
     for (final note in sorted) {
       final text = '${note.title} ${note.preview}'.toLowerCase().trim();
+      final titleKey =
+          '${note.date.year}-${note.date.month}-${note.date.day}:${note.title.trim().toLowerCase()}';
       final prev = out.isEmpty ? null : out.last;
       if (prev != null) {
         final sameDay = prev.date.year == note.date.year &&
             prev.date.month == note.date.month &&
             prev.date.day == note.date.day;
-        final sim = _jaccard('${prev.title} ${prev.preview}'.toLowerCase(), text);
-        if (sameDay && sim >= 0.82) {
+        final prevText = '${prev.title} ${prev.preview}'.toLowerCase();
+        final sim = _jaccard(prevText, text);
+        if (sameDay && sim >= 0.78) {
+          continue;
+        }
+        final nearDupAdjacent = !sameDay &&
+            sim >= 0.92 &&
+            note.date.difference(prev.date).inDays.abs() <= 2;
+        if (nearDupAdjacent) {
+          continue;
+        }
+      }
+      if (note.preview.trim().length < 6 && note.title.trim().length < 14) {
+        final c = (titleDayCounts[titleKey] ?? 0) + 1;
+        titleDayCounts[titleKey] = c;
+        if (c >= 3) {
           continue;
         }
       }
@@ -222,9 +262,11 @@ class InsightsService {
   }
 
   String _buildWeeklyDigest(AggregatedData data) {
-    final now = DateTime.now();
-    final w1 = now.subtract(const Duration(days: 7));
-    final w2 = now.subtract(const Duration(days: 14));
+    DateTime dayOnly(DateTime d) => DateTime(d.year, d.month, d.day);
+    final today = dayOnly(DateTime.now());
+    final recentStart = today.subtract(const Duration(days: 6));
+    final prevStart = today.subtract(const Duration(days: 13));
+    final prevEnd = today.subtract(const Duration(days: 7));
     double avg<T extends StateEntryBase>(
       Iterable<T> list,
       int Function(T) getValue,
@@ -232,8 +274,10 @@ class InsightsService {
       required bool recent,
     }) {
       final scoped = list.where((e) {
-        final d = getDate(e);
-        return recent ? !d.isBefore(w1) : (d.isBefore(w1) && !d.isBefore(w2));
+        final d = dayOnly(getDate(e));
+        return recent
+            ? (!d.isBefore(recentStart) && !d.isAfter(today))
+            : (!d.isBefore(prevStart) && !d.isAfter(prevEnd));
       }).toList();
       if (scoped.isEmpty) return 0;
       return scoped.map(getValue).reduce((a, b) => a + b) / scoped.length;

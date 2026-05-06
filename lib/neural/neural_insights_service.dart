@@ -10,8 +10,11 @@ import '../models/insight_result.dart';
 import '../models/note_item.dart';
 import '../models/state_entries.dart';
 import '../services/local_insights_service.dart';
+import '../services/quality_metrics_service.dart';
+import 'aggregated_insight_signals.dart';
 import 'feature_extractor.dart';
 import 'neural_net.dart';
+import 'recommendation_evidence.dart';
 
 /// Тексты рекомендаций (индексы 0–5 соответствуют выходам нейросети).
 const _recTexts = [
@@ -39,15 +42,23 @@ class NeuralInsightsService {
   static const _keyLastRetrainCount = 'neural_last_retrain_count';
   static const _keyRecFeedback = 'qm_rec_feedback_v1';
   static const _keyInsightEvents = 'qm_insight_events_v1';
-  static const _modelVersion = 3;
+  static const _modelVersion = 4;
 
-  static const _inputSize = 33;
+  static const _inputSize = 45;
   static const _hiddenSizes = [48, 24];
   static const _outputSize = 10;
 
   NeuralNet? _net;
   bool _trained = false;
   bool _initCalled = false;
+
+  /// Сброс состояния синглтона для тестов (модель/флаги обучения).
+  @visibleForTesting
+  static void debugResetForTests() {
+    _instance._trained = false;
+    _instance._initCalled = false;
+    _instance._net = null;
+  }
 
   /// Инициализация (загрузка модели). Вызвать при старте приложения.
   Future<void> init() async {
@@ -120,14 +131,10 @@ class NeuralInsightsService {
 
     unawaited(_maybeRetrainWithRealData(sanitized));
 
-    final features = FeatureExtractor.extract(sanitized);
-    if (features.length < _inputSize) {
-      final padded = List<double>.filled(_inputSize, 0);
-      for (var i = 0; i < features.length; i++) {
-        padded[i] = features[i];
-      }
-      return _runInference(padded, sanitized, quality);
-    }
+    final rawFeatures = FeatureExtractor.extract(sanitized);
+    final features = rawFeatures.length > _inputSize
+        ? rawFeatures.sublist(0, _inputSize)
+        : (rawFeatures.length < _inputSize ? _padFeatures(rawFeatures) : rawFeatures);
     return _runInference(features, sanitized, quality);
   }
 
@@ -141,18 +148,33 @@ class NeuralInsightsService {
     final recScores = outList.sublist(0, 6);
     final summaryScores = outList.sublist(6, 10);
 
+    final obsDays = _observationDays(data);
+    final now = DateTime.now();
+    DateTime d0inf(DateTime t) => DateTime(t.year, t.month, t.day);
+    final from14dInf = d0inf(now).subtract(const Duration(days: 14));
+    final trackedDays14 = data.stateEntries
+        .where((e) => !d0inf(e.createdAt).isBefore(from14dInf))
+        .map((e) => d0inf(e.createdAt))
+        .toSet()
+        .length;
+    final weakCoverage = obsDays < 12 || trackedDays14 < 5;
+    final recThreshold = weakCoverage ? 0.58 : 0.52;
+
     final recommendations = <String>[];
+    final selectedRecScores = <double>[];
     for (var i = 0; i < 6; i++) {
-      if (recScores[i] >= 0.5) {
+      if (recScores[i] >= recThreshold) {
         recommendations.add(_recTexts[i]);
+        selectedRecScores.add(recScores[i]);
       }
     }
     if (recommendations.isEmpty) {
       recommendations.add(_defaultRec);
+      selectedRecScores.add(0.5);
     }
     final ranked = await _rankRecommendations(
       recommendations,
-      recScores,
+      selectedRecScores,
       data,
     );
     final filteredRecommendations = ranked.keys.take(3).toList();
@@ -179,7 +201,8 @@ class NeuralInsightsService {
       recommendationScores: ranked.isEmpty
           ? {
               for (var i = 0; i < safeRecommendations.length; i++)
-                safeRecommendations[i]: (i < recScores.length ? recScores[i] : 0.5)
+                safeRecommendations[i]:
+                    (i < selectedRecScores.length ? selectedRecScores[i] : 0.5)
             }
           : ranked,
     );
@@ -190,6 +213,17 @@ class NeuralInsightsService {
     List<double> recScores,
     AggregatedData data,
   ) async {
+    final obsDays = _observationDays(data);
+    final now = DateTime.now();
+    DateTime d0rk(DateTime t) => DateTime(t.year, t.month, t.day);
+    final from14dRk = d0rk(now).subtract(const Duration(days: 14));
+    final trackedDays14 = data.stateEntries
+        .where((e) => !d0rk(e.createdAt).isBefore(from14dRk))
+        .map((e) => d0rk(e.createdAt))
+        .toSet()
+        .length;
+    final weakCoverage = obsDays < 12 || trackedDays14 < 5;
+
     final scores = <String, double>{};
     final personalization = _personalizationScores(data);
     final fatigue = await _recentRecommendationFatigue();
@@ -206,15 +240,17 @@ class NeuralInsightsService {
       final base = i < recScores.length ? recScores[i] : 0.5;
       final actionability = _actionabilityScore(rec, data);
       final fatiguePenalty = (fatigue[rec] ?? 0).clamp(0, 4) / 4;
-      final weighted = (0.45 * base) +
-          (0.15 * recency) +
-          (0.1 * consistency) +
-          (0.08 * stability) +
-          (0.1 * baselineDev) +
-          (0.05 * intervention) +
-          (0.12 * actionability) +
-          (0.1 * novelty) -
-          (0.2 * fatiguePenalty);
+      final feedbackMul = await QualityMetricsService.instance.recommendationScoreMultiplier(rec);
+      final weighted = ((0.45 * base) +
+              (0.15 * recency) +
+              (0.1 * consistency) +
+              (0.08 * stability) +
+              (0.1 * baselineDev) +
+              (0.05 * intervention) +
+              (0.12 * actionability) +
+              (0.1 * novelty) -
+              (0.2 * fatiguePenalty)) *
+          feedbackMul;
       scores[rec] = weighted;
       diversityBoost[rec] = _categoryDiversityFactor(rec);
     }
@@ -226,8 +262,9 @@ class NeuralInsightsService {
         return bv.compareTo(av);
       });
     final evidence = _evidenceByRecommendation(data, recs);
+    final rankCutoff = weakCoverage ? 0.5 : 0.45;
     final filtered = sorted
-        .where((e) => (e.value >= 0.45) && (evidence[e.key]?.isNotEmpty ?? false))
+        .where((e) => (e.value >= rankCutoff) && (evidence[e.key]?.isNotEmpty ?? false))
         .toList();
     final categoryLimited = _applyCategoryLimits(filtered.map((e) => e.key).toList());
     return {
@@ -400,14 +437,27 @@ class NeuralInsightsService {
   ) {
     final byRec = <String, List<String>>{};
     final now = DateTime.now();
-    final from14 = now.subtract(const Duration(days: 14));
+    DateTime d0(DateTime t) => DateTime(t.year, t.month, t.day);
+    final from14d = d0(now).subtract(const Duration(days: 14));
 
-    final sleep14 = d.stateEntries.whereType<SleepEntry>().where((e) => !e.createdAt.isBefore(from14)).toList();
-    final mood14 = d.stateEntries.whereType<MoodEntry>().where((e) => !e.createdAt.isBefore(from14)).toList();
-    final energy14 = d.stateEntries.whereType<EnergyEntry>().where((e) => !e.createdAt.isBefore(from14)).toList();
-    final lowSleepDays = sleep14.where((e) => e.quality < 6).length;
-    final lowMoodDays = mood14.where((e) => e.value < 5).length;
-    final lowEnergyDays = energy14.where((e) => e.level < 5).length;
+    final sleep14 = d.stateEntries.whereType<SleepEntry>().where((e) => !d0(e.createdAt).isBefore(from14d)).toList();
+    final mood14 = d.stateEntries.whereType<MoodEntry>().where((e) => !d0(e.createdAt).isBefore(from14d)).toList();
+    final energy14 = d.stateEntries.whereType<EnergyEntry>().where((e) => !d0(e.createdAt).isBefore(from14d)).toList();
+    final sleepDaysBad = <DateTime>{};
+    for (final e in sleep14) {
+      if (e.quality < 6) sleepDaysBad.add(d0(e.createdAt));
+    }
+    final lowSleepDays = sleepDaysBad.length;
+    final moodDaysBad = <DateTime>{};
+    for (final e in mood14) {
+      if (e.value < 5) moodDaysBad.add(d0(e.createdAt));
+    }
+    final lowMoodDays = moodDaysBad.length;
+    final energyDaysBad = <DateTime>{};
+    for (final e in energy14) {
+      if (e.level < 5) energyDaysBad.add(d0(e.createdAt));
+    }
+    final lowEnergyDays = energyDaysBad.length;
     final energyTrend = _linearTrend(energy14.map((e) => e.level.toDouble()).toList());
     final anxiousFreq = _anxiousWordFrequency(d);
     final baselineShift = _personalBaselineDeviation(d);
@@ -415,14 +465,20 @@ class NeuralInsightsService {
     final upcomingVisits = d.appointments
         .where((a) => a.meetingDate != null && a.meetingDate!.isAfter(now))
         .length;
-    final notes14 = d.notes.where((n) => !n.date.isBefore(from14)).length;
+    final notes14 = d.notes.where((n) => !d0(n.date).isBefore(from14d)).length;
     final trackedDays = d.stateEntries
-        .where((e) => !e.createdAt.isBefore(from14))
-        .map((e) => DateTime(e.createdAt.year, e.createdAt.month, e.createdAt.day))
+        .where((e) => !d0(e.createdAt).isBefore(from14d))
+        .map((e) => d0(e.createdAt))
         .toSet()
         .length;
 
     for (final rec in recs) {
+      final strong = RecommendationEvidence.meetsMinimum(rec, d);
+      if (!strong) {
+        byRec[rec] = const [];
+        continue;
+      }
+
       final facts = <String>[];
       if (rec.contains('сна') && sleep14.isNotEmpty) {
         facts.add('низкий сон: $lowSleepDays дней за 14');
@@ -431,10 +487,21 @@ class NeuralInsightsService {
         facts.add('тренд энергии: ${energyTrend >= 0 ? '+' : ''}${energyTrend.toStringAsFixed(2)}');
         facts.add('низкая энергия: $lowEnergyDays дней за 14');
       }
-      if (rec.contains('настроен') && mood14.isNotEmpty) {
+      if (rec.contains('настроен') && mood14.isNotEmpty && !rec.contains('запись мыслей')) {
         facts.add('сниженное настроение: $lowMoodDays дней за 14');
       }
-      if (rec.contains('замет')) {
+      if (rec.contains('Регулярные заметки') || rec.contains('регулярные заметки')) {
+        facts.add('дней с записями за 14 дней: $trackedDays');
+      }
+      if (rec.contains('запись мыслей') && rec.contains('замет')) {
+        facts.add('сниженное настроение: $lowMoodDays дней за 14');
+        facts.add('тревожные маркеры в заметках: ${(anxiousFreq * 100).round()}%');
+        facts.add('заметок за 14 дней: $notes14');
+      }
+      if (rec.contains('замет') &&
+          !rec.contains('Регулярные заметки') &&
+          !rec.contains('регулярные заметки') &&
+          !(rec.contains('запись мыслей') && rec.contains('замет'))) {
         facts.add('тревожные маркеры в заметках: ${(anxiousFreq * 100).round()}%');
         facts.add('заметок за 14 дней: $notes14');
       }
@@ -444,15 +511,11 @@ class NeuralInsightsService {
       if (rec.contains('врач')) {
         facts.add('ближайших визитов в календаре: $upcomingVisits');
       }
-      if (rec.contains('регуляр')) {
-        facts.add('дней с записями за 14 дней: $trackedDays');
-      }
       if (baselineShift > 0.2) {
         facts.add('отклонение от личной нормы: ${(baselineShift * 100).round()}%');
       }
       if (facts.isEmpty) {
         facts.add('наблюдений за 14 дней: ${sleep14.length + mood14.length + energy14.length}');
-        facts.add('данных по состоянию достаточно для трендового анализа');
       }
       byRec[rec] = facts;
     }
@@ -493,12 +556,7 @@ class NeuralInsightsService {
     return 'routine';
   }
 
-  (String, String) _buildSummaryFromScores(List<double> scores, AggregatedData data) {
-    final moodScore = scores.isNotEmpty ? scores[0] : 0.5;
-    final sleepScore = scores.length > 1 ? scores[1] : 0.5;
-    final energyScore = scores.length > 2 ? scores[2] : 0.5;
-    final hasEmotions = scores.length > 3 && scores[3] > 0.5;
-
+  (String, String) _buildSummaryFromScores(List<double> _, AggregatedData data) {
     double? avgMood;
     double? avgSleep;
     double? avgEnergy;
@@ -533,29 +591,33 @@ class NeuralInsightsService {
 
     final parts = <String>[];
     if (avgMood != null) {
-      if (moodScore >= 0.7) {
+      if (avgMood >= 7) {
         parts.add('Настроение в целом хорошее (${avgMood.toStringAsFixed(1)}/10)');
-      } else if (moodScore >= 0.5) {
+      } else if (avgMood >= 5) {
         parts.add('Настроение среднее (${avgMood.toStringAsFixed(1)}/10)');
       } else {
         parts.add('Настроение снижено (${avgMood.toStringAsFixed(1)}/10)');
       }
     }
     if (avgSleep != null) {
-      if (sleepScore >= 0.7) {
-        parts.add('Качество сна хорошее');
-      } else if (sleepScore < 0.5) {
-        parts.add('Качество сна нуждается во внимании');
+      if (avgSleep >= 7) {
+        parts.add('Качество сна хорошее (${avgSleep.toStringAsFixed(1)}/10)');
+      } else if (avgSleep >= 5) {
+        parts.add('Качество сна среднее (${avgSleep.toStringAsFixed(1)}/10)');
+      } else {
+        parts.add('Качество сна нуждается во внимании (${avgSleep.toStringAsFixed(1)}/10)');
       }
     }
     if (avgEnergy != null) {
-      if (energyScore < 0.5) {
-        parts.add('Уровень энергии низкий');
-      } else if (energyScore >= 0.7) {
-        parts.add('Энергия в норме');
+      if (avgEnergy >= 7) {
+        parts.add('Энергия в норме (${avgEnergy.toStringAsFixed(1)}/10)');
+      } else if (avgEnergy >= 5) {
+        parts.add('Энергия средняя (${avgEnergy.toStringAsFixed(1)}/10)');
+      } else {
+        parts.add('Уровень энергии низкий (${avgEnergy.toStringAsFixed(1)}/10)');
       }
     }
-    if (hasEmotions && emotions.isNotEmpty) {
+    if (emotions.isNotEmpty) {
       final unique = emotions.toSet().take(5).join(', ');
       parts.add('Отмеченные эмоции: $unique');
     }
@@ -565,8 +627,10 @@ class NeuralInsightsService {
         : parts.join('. ');
 
     String overallInsight = '';
-    if (moodScore < 0.5 && sleepScore < 0.5) {
+    if (avgMood != null && avgSleep != null && avgMood < 5 && avgSleep < 5) {
       overallInsight = 'Сон и настроение связаны — улучшение сна может помочь.';
+    } else if (avgEnergy != null && avgSleep != null && avgEnergy < 5 && avgSleep < 6) {
+      overallInsight = 'Низкий сон и энергия часто идут вместе — попробуйте сдвинуть отбой на 20–30 минут раньше.';
     }
 
     return (stateSummary, overallInsight);
@@ -693,33 +757,81 @@ class NeuralInsightsService {
     final samples = <_TrainingSample>[];
 
     if (realData != null && realData.stateEntries.length >= 5) {
-      for (var i = 0; i < 3; i++) {
-        final features = FeatureExtractor.extract(realData);
-        if (features.length >= _inputSize) {
-          final padded = _padFeatures(features);
-          samples.add(_TrainingSample(
-            features: padded,
-            targets: _getRuleTargets(realData),
-            weight: 1.25,
-          ));
-        }
+      for (var i = 0; i < 8; i++) {
+        final variant = i == 0 ? realData : _augmentAggregatedForTraining(realData, Random(4200 + i));
+        final features = FeatureExtractor.extract(variant);
+        if (features.length < _inputSize) continue;
+        final padded = features.length > _inputSize ? features.sublist(0, _inputSize) : _padFeatures(features);
+        samples.add(_TrainingSample(
+          features: padded,
+          targets: _getRuleTargets(variant),
+          weight: i == 0 ? 1.18 : 1.05,
+        ));
       }
     }
 
+    final profile =
+        (realData != null && realData.stateEntries.length >= 8) ? realData : null;
     for (var i = 0; i < 200; i++) {
-      final data = _randomAggregatedData(r);
+      final data = _randomAggregatedDataBias(r, profile);
       final features = FeatureExtractor.extract(data);
       if (features.length < _inputSize) continue;
 
-      final padded = _padFeatures(features);
+      final padded = features.length > _inputSize ? features.sublist(0, _inputSize) : _padFeatures(features);
       samples.add(_TrainingSample(
         features: padded,
         targets: _getRuleTargets(data),
-        weight: 0.7,
+        weight: profile != null && i < 120 ? 0.78 : 0.68,
       ));
     }
 
     return samples;
+  }
+
+  AggregatedData _augmentAggregatedForTraining(AggregatedData src, Random r) {
+    final entries = [...src.stateEntries];
+    final removeCount = (entries.length * r.nextDouble() * 0.14).floor();
+    for (var k = 0; k < removeCount && entries.isNotEmpty; k++) {
+      entries.removeAt(r.nextInt(entries.length));
+    }
+    final mapped = entries.map((e) => _jitterEntryCreatedAt(e, r)).toList();
+    return AggregatedData(
+      notes: [...src.notes],
+      stateEntries: mapped,
+      medications: [...src.medications],
+      appointments: [...src.appointments],
+    );
+  }
+
+  StateEntryBase _jitterEntryCreatedAt(StateEntryBase e, Random r) {
+    if (r.nextDouble() > 0.42) return e;
+    final t = e.createdAt.add(Duration(minutes: r.nextInt(240) - 120));
+    return switch (e) {
+      MoodEntry(:final value, :final factors) => MoodEntry(createdAt: t, value: value, factors: factors),
+      SleepEntry(:final quality, :final tags, :final bedTime, :final wakeTime) => SleepEntry(
+            createdAt: t,
+            quality: quality,
+            tags: tags,
+            bedTime: bedTime,
+            wakeTime: wakeTime,
+          ),
+      EnergyEntry(:final level, :final character, :final factors) => EnergyEntry(
+            createdAt: t,
+            level: level,
+            character: character,
+            factors: factors,
+          ),
+      EmotionsEntry(:final emotions) => EmotionsEntry(createdAt: t, emotions: emotions),
+      NutritionEntry(:final meals, :final snackCount, :final sensations, :final emotionalConnection) =>
+        NutritionEntry(
+          createdAt: t,
+          meals: meals,
+          snackCount: snackCount,
+          sensations: sensations,
+          emotionalConnection: emotionalConnection,
+        ),
+      _ => e,
+    };
   }
 
   AggregatedData _sanitizeData(AggregatedData data) {
@@ -730,6 +842,15 @@ class NeuralInsightsService {
       if (seenNoteKeys.add(key)) {
         dedupNotes.add(n);
       }
+    }
+    final shortTitleDay = <String>{};
+    final notes2 = <NoteItem>[];
+    for (final n in dedupNotes) {
+      final k = '${n.date.year}-${n.date.month}-${n.date.day}:${n.title.trim().toLowerCase()}';
+      if (n.preview.trim().length < 5 && !shortTitleDay.add(k)) {
+        continue;
+      }
+      notes2.add(n);
     }
 
     final sortedEntries = [...data.stateEntries]..sort((a, b) => a.createdAt.compareTo(b.createdAt));
@@ -742,7 +863,7 @@ class NeuralInsightsService {
     }
 
     return AggregatedData(
-      notes: dedupNotes,
+      notes: notes2,
       stateEntries: filteredEntries,
       medications: data.medications,
       appointments: data.appointments,
@@ -796,34 +917,10 @@ class NeuralInsightsService {
     return (va - vb).abs() >= 7 && (vb - vc).abs() >= 7;
   }
 
-  double _estimateDataQuality(AggregatedData d) {
-    final total = d.notes.length + d.stateEntries.length;
-    if (total == 0) return 0;
-    final noteRichness = d.notes.isEmpty
-        ? 0.6
-        : d.notes
-                .map((n) => ((n.title.length + n.preview.length) / 80).clamp(0.0, 1.0))
-                .reduce((a, b) => a + b) /
-            d.notes.length;
-    final entryCoverage = (d.stateEntries.length / 20).clamp(0.0, 1.0);
-    final days = (_observationDays(d) / 14).clamp(0.0, 1.0);
-    return (0.45 * noteRichness + 0.35 * entryCoverage + 0.2 * days).clamp(0.0, 1.0);
-  }
+  double _estimateDataQuality(AggregatedData d) =>
+      AggregatedInsightSignals.neuralStyleQuality(d);
 
-  int _observationDays(AggregatedData d) {
-    DateTime? first;
-    DateTime? last;
-    for (final n in d.notes) {
-      first = first == null || n.date.isBefore(first) ? n.date : first;
-      last = last == null || n.date.isAfter(last) ? n.date : last;
-    }
-    for (final s in d.stateEntries) {
-      first = first == null || s.createdAt.isBefore(first) ? s.createdAt : first;
-      last = last == null || s.createdAt.isAfter(last) ? s.createdAt : last;
-    }
-    if (first == null || last == null) return 0;
-    return last.difference(first).inDays + 1;
-  }
+  int _observationDays(AggregatedData d) => AggregatedInsightSignals.observationDays(d);
 
   List<double> _padFeatures(List<double> features) {
     final padded = List<double>.filled(_inputSize, 0);
@@ -891,12 +988,28 @@ class NeuralInsightsService {
     ];
   }
 
-  AggregatedData _randomAggregatedData(Random r) {
+  int _sampleIntNearProfile(Random r, List<int> pool, int fallbackMin, int fallbackMax) {
+    if (pool.isEmpty) return fallbackMin + r.nextInt(fallbackMax - fallbackMin + 1);
+    final b = pool[r.nextInt(pool.length)];
+    return (b + r.nextInt(5) - 2).clamp(1, 10);
+  }
+
+  AggregatedData _randomAggregatedDataBias(Random r, AggregatedData? profile) {
     final notes = <NoteItem>[];
     final stateEntries = <StateEntryBase>[];
     final meds = <Medication>[];
     final appointments = <Appointment>[];
 
+    final moodPool =
+        profile?.stateEntries.whereType<MoodEntry>().map((e) => e.value).toList() ?? const <int>[];
+    final sleepPool =
+        profile?.stateEntries.whereType<SleepEntry>().map((e) => e.quality).toList() ?? const <int>[];
+    final energyPool =
+        profile?.stateEntries.whereType<EnergyEntry>().map((e) => e.level).toList() ?? const <int>[];
+
+    final noteCap = profile != null
+        ? (profile.notes.length + r.nextInt(4)).clamp(2, 16)
+        : r.nextInt(15);
     const previewTemplates = [
       'сегодня плохо спал устал',
       'хорошо выспался много энергии',
@@ -904,7 +1017,7 @@ class NeuralInsightsService {
       'радость спокойствие отдохнул',
       'бессонница не могу уснуть',
     ];
-    for (var i = 0; i < r.nextInt(15); i++) {
+    for (var i = 0; i < noteCap; i++) {
       final t = previewTemplates[r.nextInt(previewTemplates.length)];
       notes.add(NoteItem(
         date: DateTime.now().subtract(Duration(days: r.nextInt(14))),
@@ -914,24 +1027,25 @@ class NeuralInsightsService {
       ));
     }
 
-    for (var i = 0; i < r.nextInt(20); i++) {
+    final moodN = profile != null ? (12 + r.nextInt(10)) : r.nextInt(20);
+    for (var i = 0; i < moodN; i++) {
       final day = DateTime.now().subtract(Duration(days: r.nextInt(14)));
       stateEntries.add(MoodEntry(
         createdAt: day,
-        value: r.nextInt(10) + 1,
+        value: _sampleIntNearProfile(r, moodPool, 1, 10),
         factors: [],
       ));
     }
-    for (var i = 0; i < r.nextInt(15); i++) {
+    for (var i = 0; i < (profile != null ? 10 + r.nextInt(8) : r.nextInt(15)); i++) {
       stateEntries.add(SleepEntry(
         createdAt: DateTime.now().subtract(Duration(days: r.nextInt(14))),
-        quality: r.nextInt(10) + 1,
+        quality: _sampleIntNearProfile(r, sleepPool, 1, 10),
       ));
     }
-    for (var i = 0; i < r.nextInt(15); i++) {
+    for (var i = 0; i < (profile != null ? 10 + r.nextInt(8) : r.nextInt(15)); i++) {
       stateEntries.add(EnergyEntry(
         createdAt: DateTime.now().subtract(Duration(days: r.nextInt(14))),
-        level: r.nextInt(10) + 1,
+        level: _sampleIntNearProfile(r, energyPool, 1, 10),
       ));
     }
     for (var i = 0; i < r.nextInt(5); i++) {

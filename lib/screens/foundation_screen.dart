@@ -10,6 +10,7 @@ import '../services/user_profile_service.dart';
 import '../theme/app_colors.dart';
 import '../theme/peach_app_bar.dart';
 import '../widgets/app_bottom_nav.dart';
+import '../widgets/laconic_tap.dart';
 import 'calendar_screen.dart';
 import 'notes_screen.dart';
 import 'state_categories_sheet.dart';
@@ -184,10 +185,13 @@ class _FoundationScreenState extends State<FoundationScreen> {
                   weightSlider('Энергия', energyWeight, (v) => setSheetState(() => energyWeight = v)),
                   weightSlider('Регулярность', consistencyWeight, (v) => setSheetState(() => consistencyWeight = v)),
                   const SizedBox(height: 8),
-                  FilledButton(
-                    onPressed: () => Navigator.pop(context, true),
-                    style: FilledButton.styleFrom(backgroundColor: AppColors.orange),
-                    child: const Text('Сохранить'),
+                  LaconicTap(
+                    onTap: () => Navigator.pop(context, true),
+                    child: FilledButton(
+                      onPressed: () => Navigator.pop(context, true),
+                      style: FilledButton.styleFrom(backgroundColor: AppColors.orange),
+                      child: const Text('Сохранить'),
+                    ),
                   ),
                 ],
               ),
@@ -337,22 +341,31 @@ class _FoundationScreenState extends State<FoundationScreen> {
                   ),
                 ),
                 const SizedBox(height: 16),
-                FilledButton(
-                  onPressed: () => Navigator.pop(ctx, 'sleep'),
-                  style: FilledButton.styleFrom(backgroundColor: AppColors.orange),
-                  child: const Text('Сон'),
+                LaconicTap(
+                  onTap: () => Navigator.pop(ctx, 'sleep'),
+                  child: FilledButton(
+                    onPressed: () => Navigator.pop(ctx, 'sleep'),
+                    style: FilledButton.styleFrom(backgroundColor: AppColors.orange),
+                    child: const Text('Сон'),
+                  ),
                 ),
                 const SizedBox(height: 8),
-                FilledButton(
-                  onPressed: () => Navigator.pop(ctx, 'mood'),
-                  style: FilledButton.styleFrom(backgroundColor: AppColors.orange),
-                  child: const Text('Настроение'),
+                LaconicTap(
+                  onTap: () => Navigator.pop(ctx, 'mood'),
+                  child: FilledButton(
+                    onPressed: () => Navigator.pop(ctx, 'mood'),
+                    style: FilledButton.styleFrom(backgroundColor: AppColors.orange),
+                    child: const Text('Настроение'),
+                  ),
                 ),
                 const SizedBox(height: 8),
-                FilledButton(
-                  onPressed: () => Navigator.pop(ctx, 'energy'),
-                  style: FilledButton.styleFrom(backgroundColor: AppColors.orange),
-                  child: const Text('Энергия'),
+                LaconicTap(
+                  onTap: () => Navigator.pop(ctx, 'energy'),
+                  child: FilledButton(
+                    onPressed: () => Navigator.pop(ctx, 'energy'),
+                    style: FilledButton.styleFrom(backgroundColor: AppColors.orange),
+                    child: const Text('Энергия'),
+                  ),
                 ),
                 const SizedBox(height: 8),
                 TextButton(

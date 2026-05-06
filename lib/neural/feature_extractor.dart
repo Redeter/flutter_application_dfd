@@ -8,7 +8,8 @@ import 'text_analyzer.dart';
 class FeatureExtractor {
   FeatureExtractor._();
 
-  static const int featureCount = 33;
+  /// Версия 4 модели: добавлены квантили, доли «плохих» дней, streak, разрывы, согласованность дня.
+  static const int featureCount = 45;
 
   /// Слова эмоциональной окраски для базового подсчёта.
   static const _emotionWords = {
@@ -165,6 +166,14 @@ class FeatureExtractor {
     final hasUpcoming = data.appointments.any((a) =>
         a.meetingDate != null && a.meetingDate!.isAfter(now));
 
+    final extended = _extendedRobustnessFeatures(
+      data,
+      moodByDate,
+      sleepByDate,
+      energyByDate,
+      now,
+    );
+
     return [
       (avgMood ?? 5) / 10,
       (avgSleep ?? 5) / 10,
@@ -200,6 +209,165 @@ class FeatureExtractor {
       ((moodEnergyInteraction + baselineShift) / 2).clamp(0.0, 1.0),
       ((daysBothLow + cadenceScore + gapScore + morningRatio + eveningRatio) / 5)
           .clamp(0.0, 1.0),
+      ...extended,
+    ];
+  }
+
+  /// Доп. признаки: медианы/квантили, доли плохих дней за 14 дней, streak, разрывы, день недели, 2/3 метрик.
+  static List<double> _extendedRobustnessFeatures(
+    AggregatedData data,
+    Map<DateTime, int> moodByDate,
+    Map<DateTime, int> sleepByDate,
+    Map<DateTime, int> energyByDate,
+    DateTime now,
+  ) {
+    final moodVals = data.stateEntries.whereType<MoodEntry>().map((e) => e.value.toDouble()).toList();
+    final sleepVals = data.stateEntries.whereType<SleepEntry>().map((e) => e.quality.toDouble()).toList();
+    final energyVals = data.stateEntries.whereType<EnergyEntry>().map((e) => e.level.toDouble()).toList();
+
+    double med(List<double> v) {
+      if (v.isEmpty) return 5;
+      final s = [...v]..sort();
+      final m = s.length ~/ 2;
+      return s.length.isOdd ? s[m] : (s[m - 1] + s[m]) / 2;
+    }
+
+    double q(List<double> v, double p) {
+      if (v.isEmpty) return 5;
+      final s = [...v]..sort();
+      final idx = (p * (s.length - 1)).round().clamp(0, s.length - 1);
+      return s[idx];
+    }
+
+    final moodMed = med(moodVals);
+    final sleepMed = med(sleepVals);
+    final energyMed = med(energyVals);
+    final moodQ25 = q(moodVals, 0.25);
+    final moodQ75 = q(moodVals, 0.75);
+    final moodSpread = ((moodQ75 - moodQ25) / 10).clamp(0.0, 1.0);
+
+    final today0 = DateTime(now.year, now.month, now.day);
+    final from14d = today0.subtract(const Duration(days: 14));
+    bool in14(DateTime d) {
+      final d0 = DateTime(d.year, d.month, d.day);
+      return !d0.isBefore(from14d);
+    }
+
+    int badMood = 0, totMood = 0;
+    for (final e in moodByDate.entries) {
+      if (!in14(e.key)) continue;
+      totMood++;
+      if (e.value < 6) badMood++;
+    }
+    int badSleep = 0, totSleep = 0;
+    for (final e in sleepByDate.entries) {
+      if (!in14(e.key)) continue;
+      totSleep++;
+      if (e.value < 6) badSleep++;
+    }
+    int badEnergy = 0, totEnergy = 0;
+    for (final e in energyByDate.entries) {
+      if (!in14(e.key)) continue;
+      totEnergy++;
+      if (e.value < 6) badEnergy++;
+    }
+
+    final badMoodFrac = totMood > 0 ? (badMood / totMood).clamp(0.0, 1.0) : 0.0;
+    final badSleepFrac = totSleep > 0 ? (badSleep / totSleep).clamp(0.0, 1.0) : 0.0;
+    final badEnergyFrac = totEnergy > 0 ? (badEnergy / totEnergy).clamp(0.0, 1.0) : 0.0;
+
+    final from21d = today0.subtract(const Duration(days: 21));
+    final moodDaysSorted = moodByDate.keys
+        .where((d) {
+          final d0 = DateTime(d.year, d.month, d.day);
+          return !d0.isBefore(from21d);
+        })
+        .toList()
+      ..sort();
+    var streak = 0, maxStreak = 0;
+    for (final d in moodDaysSorted) {
+      final v = moodByDate[d] ?? 10;
+      if (v < 5) {
+        streak++;
+        if (streak > maxStreak) maxStreak = streak;
+      } else {
+        streak = 0;
+      }
+    }
+    final lowMoodStreakNorm = (maxStreak / 7).clamp(0.0, 1.0);
+
+    final activityDays = <DateTime>{};
+    for (final d in moodByDate.keys) {
+      activityDays.add(DateTime(d.year, d.month, d.day));
+    }
+    for (final d in sleepByDate.keys) {
+      activityDays.add(DateTime(d.year, d.month, d.day));
+    }
+    for (final d in energyByDate.keys) {
+      activityDays.add(DateTime(d.year, d.month, d.day));
+    }
+    for (final n in data.notes) {
+      activityDays.add(DateTime(n.date.year, n.date.month, n.date.day));
+    }
+    final sortedDays = activityDays.toList()..sort();
+    final gaps = <int>[];
+    for (var i = 1; i < sortedDays.length; i++) {
+      gaps.add(sortedDays[i].difference(sortedDays[i - 1]).inDays);
+    }
+    double medianGapNorm = 0.5;
+    if (gaps.isNotEmpty) {
+      gaps.sort();
+      final mg = gaps[gaps.length ~/ 2];
+      medianGapNorm = (mg / 14).clamp(0.0, 1.0);
+    }
+
+    double weekendWeekdayMoodSkew = 0.5;
+    final wkM = <double>[];
+    final weM = <double>[];
+    for (final e in data.stateEntries.whereType<MoodEntry>()) {
+      final day = DateTime(e.createdAt.year, e.createdAt.month, e.createdAt.day);
+      if (!in14(day)) continue;
+      final wd = e.createdAt.weekday;
+      if (wd == DateTime.saturday || wd == DateTime.sunday) {
+        weM.add(e.value.toDouble());
+      } else {
+        wkM.add(e.value.toDouble());
+      }
+    }
+    if (wkM.isNotEmpty && weM.isNotEmpty) {
+      final wa = wkM.reduce((a, b) => a + b) / wkM.length;
+      final ea = weM.reduce((a, b) => a + b) / weM.length;
+      weekendWeekdayMoodSkew = ((ea - wa).abs() / 10).clamp(0.0, 1.0);
+    }
+
+    final unionDays = <DateTime>{...moodByDate.keys, ...sleepByDate.keys, ...energyByDate.keys};
+    var tripleDays = 0;
+    var twoOfThree = 0;
+    for (final d in unionDays) {
+      final hasM = moodByDate.containsKey(d);
+      final hasS = sleepByDate.containsKey(d);
+      final hasE = energyByDate.containsKey(d);
+      final c = (hasM ? 1 : 0) + (hasS ? 1 : 0) + (hasE ? 1 : 0);
+      if (c == 3) tripleDays++;
+      if (c == 2) twoOfThree++;
+    }
+    final unionCount = unionDays.length;
+    final tripleRate = unionCount > 0 ? (tripleDays / unionCount).clamp(0.0, 1.0) : 0.0;
+    final partial2Rate = unionCount > 0 ? (twoOfThree / unionCount).clamp(0.0, 1.0) : 0.0;
+
+    return [
+      (moodMed / 10).clamp(0.0, 1.0),
+      (sleepMed / 10).clamp(0.0, 1.0),
+      (energyMed / 10).clamp(0.0, 1.0),
+      moodSpread,
+      badMoodFrac,
+      badSleepFrac,
+      badEnergyFrac,
+      lowMoodStreakNorm,
+      medianGapNorm,
+      weekendWeekdayMoodSkew,
+      tripleRate,
+      partial2Rate,
     ];
   }
 

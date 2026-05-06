@@ -31,6 +31,14 @@ class _AppShellState extends State<AppShell> {
         _ => BottomNavTab.articles,
       };
 
+  /// Первая отрисовка только активной вкладки — меньше работы на main isolate при холодном старте.
+  Widget _slotChild(int i) {
+    if (_pages[i] == null && i != _index) {
+      return const SizedBox.shrink();
+    }
+    return _page(i);
+  }
+
   Widget _page(int i) {
     return _pages[i] ??= switch (i) {
       0 => const StatisticsScreen(embeddedInShell: true),
@@ -71,7 +79,7 @@ class _AppShellState extends State<AppShell> {
             offstage: _index != i,
             child: TickerMode(
               enabled: _index == i,
-              child: _page(i),
+              child: _slotChild(i),
             ),
           );
         }),

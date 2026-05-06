@@ -2,7 +2,6 @@ import 'package:flutter_application_dfd/models/aggregated_data.dart';
 import 'package:flutter_application_dfd/models/calendar_entry.dart';
 import 'package:flutter_application_dfd/models/foundation_score.dart';
 import 'package:flutter_application_dfd/models/note_item.dart';
-import 'package:flutter_application_dfd/models/state_entries.dart';
 import 'package:flutter_application_dfd/services/foundation_service.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:flutter/material.dart';
@@ -58,7 +57,7 @@ void main() {
       schedule: const [
         MedicationDose(time: TimeOfDay(hour: 9, minute: 0), amount: '1'),
       ],
-      takenAt: day.add(const Duration(hours: 1)),
+      takenAtPerDose: [day.add(const Duration(hours: 1))],
     );
     final data = AggregatedData(
       notes: const [],

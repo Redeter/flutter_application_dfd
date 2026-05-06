@@ -4,6 +4,7 @@ import 'package:google_fonts/google_fonts.dart';
 import '../models/user_profile.dart';
 import '../services/user_profile_service.dart';
 import '../theme/app_colors.dart';
+import '../widgets/laconic_tap.dart';
 
 class UserProfileScreen extends StatefulWidget {
   const UserProfileScreen({super.key});
@@ -144,10 +145,13 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
                     ),
                   ),
                   const SizedBox(height: 14),
-                  FilledButton(
-                    onPressed: _save,
-                    style: FilledButton.styleFrom(backgroundColor: AppColors.orange),
-                    child: const Text('Сохранить'),
+                  LaconicTap(
+                    onTap: _save,
+                    child: FilledButton(
+                      onPressed: _save,
+                      style: FilledButton.styleFrom(backgroundColor: AppColors.orange),
+                      child: const Text('Сохранить'),
+                    ),
                   ),
                 ],
               ),

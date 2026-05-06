@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../theme/app_colors.dart';
+import 'laconic_tap.dart';
 
 Future<bool> showDeleteConfirmDialog(
   BuildContext context, {
@@ -56,20 +57,23 @@ class _DeleteConfirmDialog extends StatelessWidget {
   }
 
   Widget _pillButton(String label, {required VoidCallback onPressed}) {
-    return Material(
-      color: AppColors.orange,
-      borderRadius: BorderRadius.circular(24),
-      child: InkWell(
-        onTap: onPressed,
+    return LaconicTap(
+      onTap: onPressed,
+      child: Material(
+        color: AppColors.orange,
         borderRadius: BorderRadius.circular(24),
-        child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 28, vertical: 14),
-          child: Text(
-            label,
-            style: const TextStyle(
-              fontSize: 16,
-              fontWeight: FontWeight.w700,
-              color: AppColors.white,
+        child: InkWell(
+          onTap: onPressed,
+          borderRadius: BorderRadius.circular(24),
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 28, vertical: 14),
+            child: Text(
+              label,
+              style: const TextStyle(
+                fontSize: 16,
+                fontWeight: FontWeight.w700,
+                color: AppColors.white,
+              ),
             ),
           ),
         ),
