@@ -1,6 +1,7 @@
 import 'dart:async' show unawaited;
 
 import 'package:flutter/material.dart';
+import 'package:flutter_svg/flutter_svg.dart';
 import 'package:google_fonts/google_fonts.dart';
 
 import '../models/calendar_entry.dart';
@@ -27,6 +28,9 @@ const _months = [
 ];
 
 String _formatDate(DateTime d) => '${d.day} ${_months[d.month - 1]}';
+const double _kCalendarCardLeadingIconExtent = 44;
+
+
 
 /// Одна строка списка дня: приём врача или один слот препарата.
 sealed class _CalendarDayRow {
@@ -519,12 +523,11 @@ class _MedicationDoseCard extends StatelessWidget {
     final takeText = dose.amount;
 
     final decoration = BoxDecoration(
-      color: AppColors.white,
-      borderRadius: BorderRadius.circular(taken ? 16 : 24),
-      border: Border.all(color: AppColors.orange, width: 3),
+      color: AppColors.appointmentCardFrame,
+      borderRadius: BorderRadius.circular(24),
       boxShadow: [
         BoxShadow(
-          color: AppColors.orange.withValues(alpha: 0.15),
+          color: AppColors.appointmentCardFrame.withValues(alpha: 0.22),
           blurRadius: 12,
           offset: const Offset(0, 4),
         ),
@@ -547,30 +550,46 @@ class _MedicationDoseCard extends StatelessWidget {
           mainAxisSize: MainAxisSize.min,
           children: [
             Padding(
-              padding: const EdgeInsets.fromLTRB(4, 4, 4, 0),
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.end,
-                children: [
-                  IconButton(
-                    onPressed: onDelete,
-                    icon: const Icon(Icons.delete_outline, color: AppColors.textDark, size: 22),
-                  ),
-                  IconButton(
-                    onPressed: onEdit,
-                    icon: const Icon(Icons.edit_outlined, color: AppColors.textDark, size: 22),
-                  ),
-                ],
+              padding: const EdgeInsets.fromLTRB(0, 0, 0, 4),
+              child: Container(
+                padding: const EdgeInsets.fromLTRB(16, 10, 8, 6),
+                decoration: const BoxDecoration(
+                  color: AppColors.appointmentCardFrame,
+                  borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
+                ),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.end,
+                  children: [
+                    IconButton(
+                      onPressed: onDelete,
+                      icon: const Icon(Icons.delete_outline, color: AppColors.white, size: 22),
+                    ),
+                    IconButton(
+                      onPressed: onEdit,
+                      icon: const Icon(Icons.edit_outlined, color: AppColors.white, size: 22),
+                    ),
+                  ],
+                ),
               ),
             ),
-            Padding(
-              padding: const EdgeInsets.fromLTRB(12, 0, 12, 14),
+            Container(
+              margin: const EdgeInsets.fromLTRB(6, 0, 6, 6),
+              padding: const EdgeInsets.fromLTRB(14, 8, 14, 16),
+              decoration: BoxDecoration(
+                color: AppColors.white,
+                borderRadius: BorderRadius.circular(18),
+              ),
               child: IntrinsicHeight(
                 child: Row(
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
                     Padding(
                       padding: const EdgeInsets.symmetric(vertical: 8),
-                      child: Icon(Icons.medication_outlined, color: AppColors.orange, size: 36),
+                      child: SizedBox(
+                        width: _kCalendarCardLeadingIconExtent,
+                        height: _kCalendarCardLeadingIconExtent,
+                        child: SvgPicture.asset('assets/icons/pill.svg', fit: BoxFit.contain),
+                      ),
                     ),
                     const SizedBox(width: 10),
                     Container(width: 1, color: AppColors.textDark.withValues(alpha: 0.35)),
@@ -585,20 +604,13 @@ class _MedicationDoseCard extends StatelessWidget {
                               Expanded(
                                 child: RichText(
                                   text: TextSpan(
-                                    style: GoogleFonts.alegreyaSans(
-                                      fontSize: 17,
-                                      fontWeight: FontWeight.w800,
-                                      color: AppColors.textDark,
-                                    ),
+                                    style: GoogleFonts.alegreyaSans(fontSize: 15, fontWeight: FontWeight.w800, color: AppColors.textDark),
                                     children: [
                                       TextSpan(text: '${medication.name.toUpperCase()} '),
+                                      const WidgetSpan(child: SizedBox(width: 4)),
                                       TextSpan(
                                         text: medication.dosage,
-                                        style: GoogleFonts.alegreyaSans(
-                                          fontSize: 14,
-                                          fontWeight: FontWeight.w500,
-                                          color: AppColors.textDark,
-                                        ),
+                                        style: GoogleFonts.alegreyaSans(fontSize: 14, fontWeight: FontWeight.w500, color: AppColors.textDark),
                                       ),
                                     ],
                                   ),
@@ -606,44 +618,21 @@ class _MedicationDoseCard extends StatelessWidget {
                               ),
                               Text(
                                 timeStr,
-                                style: GoogleFonts.alegreyaSans(
-                                  fontSize: 16,
-                                  fontWeight: FontWeight.w600,
-                                  color: AppColors.textDark.withValues(alpha: 0.45),
-                                ),
+                                style: GoogleFonts.alegreyaSans(fontSize: 18, fontWeight: FontWeight.w600, color: AppColors.textDark.withValues(alpha: 0.45)),
                               ),
                             ],
                           ),
                           const SizedBox(height: 6),
                           Text(
                             takeText.toUpperCase(),
-                            style: GoogleFonts.alegreyaSans(
-                              fontSize: 12,
-                              fontWeight: FontWeight.w700,
-                              letterSpacing: 0.3,
-                              color: AppColors.textDark,
-                            ),
+                            style: GoogleFonts.alegreyaSans(fontSize: 12, fontWeight: FontWeight.w700, letterSpacing: 0.3, color: AppColors.textDark),
                           ),
                           const SizedBox(height: 10),
                           Row(
                             mainAxisAlignment: MainAxisAlignment.spaceBetween,
                             children: [
-                              Text(
-                                'Принято в',
-                                style: GoogleFonts.alegreyaSans(
-                                  fontSize: 14,
-                                  fontWeight: FontWeight.w600,
-                                  color: AppColors.takeGreen,
-                                ),
-                              ),
-                              Text(
-                                takenStr,
-                                style: GoogleFonts.alegreyaSans(
-                                  fontSize: 14,
-                                  fontWeight: FontWeight.w700,
-                                  color: AppColors.takeGreen,
-                                ),
-                              ),
+                              Text('Принято в', style: GoogleFonts.alegreyaSans(fontSize: 16, fontWeight: FontWeight.w600, color: AppColors.takeGreen)),
+                              Text(takenStr, style: GoogleFonts.alegreyaSans(fontSize: 18, fontWeight: FontWeight.w700, color: AppColors.takeGreen)),
                             ],
                           ),
                         ],
@@ -689,10 +678,16 @@ class _MedicationDoseCard extends StatelessWidget {
                   children: [
                     Padding(
                       padding: const EdgeInsets.symmetric(vertical: 8),
-                      child: Icon(
-                        Icons.medication_outlined,
-                        color: AppColors.textDark.withValues(alpha: 0.35),
-                        size: 36,
+                      child: Opacity(
+                        opacity: 0.55,
+                        child: SizedBox(
+                          width: _kCalendarCardLeadingIconExtent,
+                          height: _kCalendarCardLeadingIconExtent,
+                          child: SvgPicture.asset(
+                            'assets/icons/pill.svg',
+                            fit: BoxFit.contain,
+                          ),
+                        ),
                       ),
                     ),
                     const SizedBox(width: 10),
@@ -776,7 +771,7 @@ class _MedicationDoseCard extends StatelessWidget {
           Container(
             padding: const EdgeInsets.fromLTRB(16, 12, 8, 8),
             decoration: BoxDecoration(
-              color: AppColors.orange.withValues(alpha: 0.2),
+              color: AppColors.appointmentCardFrame,
               borderRadius: const BorderRadius.vertical(top: Radius.circular(21)),
             ),
             child: Row(
@@ -784,76 +779,88 @@ class _MedicationDoseCard extends StatelessWidget {
               children: [
                 IconButton(
                   onPressed: onDelete,
-                  icon: const Icon(Icons.delete_outline, color: AppColors.textDark),
+                  icon: const Icon(Icons.delete_outline, color: AppColors.white),
                 ),
                 IconButton(
                   onPressed: onEdit,
-                  icon: const Icon(Icons.edit_outlined, color: AppColors.textDark),
+                  icon: const Icon(Icons.edit_outlined, color: AppColors.white),
                 ),
               ],
             ),
           ),
-          Padding(
-            padding: const EdgeInsets.all(16),
-            child: Row(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Icon(Icons.medication_outlined, color: AppColors.orange, size: 40),
-                const SizedBox(width: 16),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        '${medication.name} ${medication.dosage}',
-                        style: GoogleFonts.alegreyaSans(
-                          fontSize: 18,
-                          fontWeight: FontWeight.w800,
-                          color: AppColors.textDark,
-                        ),
-                      ),
-                      const SizedBox(height: 4),
-                      Text(
-                        'Принять $takeText',
-                        style: GoogleFonts.alegreyaSans(
-                          fontSize: 14,
-                          fontWeight: FontWeight.w600,
-                          color: AppColors.textDark.withValues(alpha: 0.8),
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-                Text(
-                  timeStr,
-                  style: GoogleFonts.alegreyaSans(
-                    fontSize: 24,
-                    fontWeight: FontWeight.w700,
-                    color: AppColors.textDark,
-                  ),
-                ),
-              ],
+          Container(
+            margin: const EdgeInsets.fromLTRB(6, 0, 6, 6),
+            padding: const EdgeInsets.fromLTRB(18, 14, 18, 18),
+            decoration: BoxDecoration(
+              color: AppColors.white,
+              borderRadius: BorderRadius.circular(18),
             ),
-          ),
-          Padding(
-            padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
-            child: Row(
+            child: Column(
               children: [
-                Expanded(
-                  child: _actionBtn('Пропустить', AppColors.skipRed, onSkip),
+                Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    SizedBox(
+                      width: _kCalendarCardLeadingIconExtent,
+                      height: _kCalendarCardLeadingIconExtent,
+                      child: SvgPicture.asset('assets/icons/pill.svg', fit: BoxFit.contain),
+                    ),
+                    const SizedBox(width: 16),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          RichText(
+                            text: TextSpan(
+                              style: GoogleFonts.alegreyaSans(
+                                fontSize: 15,
+                                fontWeight: FontWeight.w800,
+                                color: AppColors.textDark,
+                              ),
+                              children: [
+                                TextSpan(text: '${medication.name.toUpperCase()} '),
+                                const WidgetSpan(child: SizedBox(width: 4)),
+                                TextSpan(
+                                  text: medication.dosage,
+                                  style: GoogleFonts.alegreyaSans(
+                                    fontSize: 14,
+                                    fontWeight: FontWeight.w500,
+                                    color: AppColors.textDark,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                          const SizedBox(height: 4),
+                          Text(
+                            'Принять $takeText',
+                            style: GoogleFonts.alegreyaSans(fontSize: 14, fontWeight: FontWeight.w600, color: AppColors.textDark.withValues(alpha: 0.8)),
+                          ),
+                        ],
+                      ),
+                    ),
+                    Text(
+                      timeStr,
+                      style: GoogleFonts.alegreyaSans(fontSize: 24, fontWeight: FontWeight.w700, color: AppColors.textDark),
+                    ),
+                  ],
                 ),
-                const SizedBox(width: 8),
-                Expanded(
-                  child: _actionBtn('Принять сейчас', AppColors.takeGreen, onMarkTaken),
-                ),
-                const SizedBox(width: 8),
-                Expanded(
-                  child: _actionBtn(
-                    'Принять в выбранное время',
-                    AppColors.orange.withValues(alpha: 0.22),
-                    onMarkAtChosenTime,
-                    fontSize: 11,
-                  ),
+                const SizedBox(height: 12),
+                Row(
+                  children: [
+                    Expanded(child: _actionBtn('Пропустить', AppColors.skipRed, onSkip)),
+                    const SizedBox(width: 8),
+                    Expanded(child: _actionBtn('Принять сейчас', AppColors.takeGreen, onMarkTaken)),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: _actionBtn(
+                        'Принять в выбранное время',
+                        AppColors.orange.withValues(alpha: 0.22),
+                        onMarkAtChosenTime,
+                        fontSize: 11,
+                      ),
+                    ),
+                  ],
                 ),
               ],
             ),
@@ -909,12 +916,11 @@ class _AppointmentCard extends StatelessWidget {
 
     return Container(
       decoration: BoxDecoration(
-        color: AppColors.white,
+        color: AppColors.appointmentCardFrame,
         borderRadius: BorderRadius.circular(24),
-        border: Border.all(color: AppColors.orange, width: 3),
         boxShadow: [
           BoxShadow(
-            color: AppColors.orange.withValues(alpha: 0.15),
+            color: AppColors.appointmentCardFrame.withValues(alpha: 0.22),
             blurRadius: 12,
             offset: const Offset(0, 4),
           ),
@@ -926,7 +932,7 @@ class _AppointmentCard extends StatelessWidget {
           Container(
             padding: const EdgeInsets.fromLTRB(16, 12, 8, 8),
             decoration: BoxDecoration(
-              color: AppColors.orange.withValues(alpha: 0.2),
+              color: AppColors.appointmentCardFrame,
               borderRadius: const BorderRadius.vertical(top: Radius.circular(21)),
             ),
             child: Row(
@@ -934,21 +940,30 @@ class _AppointmentCard extends StatelessWidget {
               children: [
                 IconButton(
                   onPressed: onDelete,
-                  icon: const Icon(Icons.delete_outline, color: AppColors.textDark),
+                  icon: const Icon(Icons.delete_outline, color: AppColors.white),
                 ),
                 IconButton(
                   onPressed: onEdit,
-                  icon: const Icon(Icons.edit_outlined, color: AppColors.textDark),
+                  icon: const Icon(Icons.edit_outlined, color: AppColors.white),
                 ),
               ],
             ),
           ),
-          Padding(
-            padding: const EdgeInsets.all(16),
+          Container(
+            margin: const EdgeInsets.fromLTRB(6, 0, 6, 6),
+            padding: const EdgeInsets.all(18),
+            decoration: BoxDecoration(
+              color: AppColors.white,
+              borderRadius: BorderRadius.circular(18),
+            ),
             child: Row(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Icon(Icons.event_available_rounded, color: AppColors.orange, size: 40),
+                SizedBox(
+                  width: _kCalendarCardLeadingIconExtent,
+                  height: _kCalendarCardLeadingIconExtent,
+                  child: SvgPicture.asset('assets/icons/couch and clock.svg', fit: BoxFit.contain),
+                ),
                 const SizedBox(width: 16),
                 Expanded(
                   child: Column(
@@ -956,31 +971,20 @@ class _AppointmentCard extends StatelessWidget {
                     children: [
                       Text(
                         appointment.title.toUpperCase(),
-                        style: GoogleFonts.alegreyaSans(
-                          fontSize: 18,
-                          fontWeight: FontWeight.w800,
-                          color: AppColors.textDark,
-                        ),
+                        style: GoogleFonts.alegreyaSans(fontSize: 18, fontWeight: FontWeight.w800, color: AppColors.textDark),
                       ),
                       if (appointment.meetingDate != null) ...[
                         const SizedBox(height: 4),
                         Text(
                           'Дата встречи: ${_formatDate(appointment.meetingDate!)}',
-                          style: GoogleFonts.alegreyaSans(
-                            fontSize: 14,
-                            fontWeight: FontWeight.w600,
-                            color: AppColors.textDark.withValues(alpha: 0.8),
-                          ),
+                          style: GoogleFonts.alegreyaSans(fontSize: 14, fontWeight: FontWeight.w600, color: AppColors.textDark.withValues(alpha: 0.8)),
                         ),
                       ],
                       if (appointment.note != null && appointment.note!.isNotEmpty) ...[
                         const SizedBox(height: 4),
                         Text(
                           'Дополнительная информация: ${appointment.note}',
-                          style: GoogleFonts.alegreyaSans(
-                            fontSize: 12,
-                            color: AppColors.textDark.withValues(alpha: 0.6),
-                          ),
+                          style: GoogleFonts.alegreyaSans(fontSize: 12, color: AppColors.textDark.withValues(alpha: 0.6)),
                         ),
                       ],
                     ],
@@ -988,11 +992,7 @@ class _AppointmentCard extends StatelessWidget {
                 ),
                 Text(
                   timeStr,
-                  style: GoogleFonts.alegreyaSans(
-                    fontSize: 24,
-                    fontWeight: FontWeight.w700,
-                    color: AppColors.textDark,
-                  ),
+                  style: GoogleFonts.alegreyaSans(fontSize: 24, fontWeight: FontWeight.w700, color: AppColors.textDark),
                 ),
               ],
             ),

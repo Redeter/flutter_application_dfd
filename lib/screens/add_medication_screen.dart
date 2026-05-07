@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_svg/flutter_svg.dart';
 import 'package:google_fonts/google_fonts.dart';
 
 import '../models/calendar_entry.dart';
@@ -6,8 +7,7 @@ import '../services/calendar_storage.dart';
 import '../theme/app_colors.dart';
 import '../widgets/laconic_tap.dart';
 import '../widgets/time_picker_modal.dart';
-
-const _frequencies = ['Ежедневно', 'Через день', 'Раз в неделю', 'По необходимости'];
+import '../constants/calendar_reminders.dart';
 
 /// Сколько дней вперёд создавать записи при «Ежедневно».
 const int _kDailySeriesDays = 365;
@@ -35,7 +35,7 @@ class AddMedicationScreen extends StatefulWidget {
 class _AddMedicationScreenState extends State<AddMedicationScreen> {
   late final TextEditingController _nameController;
   late final TextEditingController _dailyDosageController;
-  late String _frequency;
+  late String _reminder;
   late List<MedicationDose> _schedule;
 
   @override
@@ -46,7 +46,7 @@ class _AddMedicationScreenState extends State<AddMedicationScreen> {
     _dailyDosageController = TextEditingController(
       text: m?.dailyDosage ?? m?.dosage ?? '',
     );
-    _frequency = m?.frequency ?? _frequencies[0];
+    _reminder = m?.reminder ?? kCalendarReminderOptions[0];
     _schedule = m != null ? List.from(m.schedule) : [];
   }
 
@@ -189,7 +189,7 @@ class _AddMedicationScreenState extends State<AddMedicationScreen> {
         time: _schedule.first.time,
         name: name,
         dosage: dosage,
-        frequency: _frequency,
+        reminder: _reminder,
         dailyDosage: dailyDosage,
         schedule: nextSchedule,
         seriesId: m.seriesId,
@@ -200,42 +200,25 @@ class _AddMedicationScreenState extends State<AddMedicationScreen> {
     } else {
       final baseMillis = DateTime.now().millisecondsSinceEpoch;
       final start = DateTime(widget.date.year, widget.date.month, widget.date.day);
-
-      if (_frequency == 'Ежедневно') {
-        final seriesId = 'series_$baseMillis';
-        final batch = <Medication>[];
-        for (var i = 0; i < _kDailySeriesDays; i++) {
-          final d = start.add(Duration(days: i));
-          batch.add(
-            Medication(
-              id: 'med_${baseMillis}_$i',
-              date: d,
-              time: _schedule.first.time,
-              name: name,
-              dosage: dosage,
-              frequency: _frequency,
-              dailyDosage: dailyDosage,
-              schedule: List<MedicationDose>.from(_schedule),
-              seriesId: seriesId,
-            ),
-          );
-        }
-        await CalendarStorage.instance.saveMany(batch);
-      } else {
-        await CalendarStorage.instance.save(
+      final seriesId = 'series_$baseMillis';
+      final batch = <Medication>[];
+      for (var i = 0; i < _kDailySeriesDays; i++) {
+        final d = start.add(Duration(days: i));
+        batch.add(
           Medication(
-            id: baseMillis.toString(),
-            date: start,
+            id: 'med_${baseMillis}_$i',
+            date: d,
             time: _schedule.first.time,
             name: name,
             dosage: dosage,
-            frequency: _frequency,
             dailyDosage: dailyDosage,
+            reminder: _reminder,
             schedule: List<MedicationDose>.from(_schedule),
-            seriesId: null,
+            seriesId: seriesId,
           ),
         );
       }
+      await CalendarStorage.instance.saveMany(batch);
     }
     if (mounted) {
       Navigator.pop(context, true);
@@ -271,7 +254,7 @@ class _AddMedicationScreenState extends State<AddMedicationScreen> {
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
             _card(
-              icon: Icons.medication_outlined,
+              iconAsset: 'assets/icons/add/blister.svg',
               label: 'КАКОЕ ЛЕКАРСТВО ВЫ ХОТИТЕ ДОБАВИТЬ?',
               child: TextField(
                 controller: _nameController,
@@ -280,19 +263,21 @@ class _AddMedicationScreenState extends State<AddMedicationScreen> {
             ),
             const SizedBox(height: 16),
             _card(
-              icon: Icons.access_time,
-              label: 'КАК ЧАСТО ВЫ ЕГО ПРИНИМАЕТЕ?',
+              iconAsset: 'assets/icons/add/bell.svg',
+              label: 'КОГДА ВЫ ХОТИТЕ, ЧТОБЫ ВАМ НАПОМНИЛИ О ПРИЁМЕ?',
               child: DropdownButtonFormField<String>(
-                value: _frequency,
+                value: _reminder,
                 decoration: _inputDecoration(),
                 iconEnabledColor: AppColors.textDark,
-                items: _frequencies.map((f) => DropdownMenuItem(value: f, child: Text(f))).toList(),
-                onChanged: (v) => setState(() => _frequency = v ?? _frequency),
+                items: kCalendarReminderOptions
+                    .map((r) => DropdownMenuItem(value: r, child: Text(r)))
+                    .toList(),
+                onChanged: (v) => setState(() => _reminder = v ?? _reminder),
               ),
             ),
             const SizedBox(height: 16),
             _card(
-              icon: Icons.medication,
+              iconAsset: 'assets/icons/add/pills dose.svg',
               label: 'УСТАНОВИТЕ СУТОЧНУЮ ДОЗИРОВКУ',
               child: TextField(
                 controller: _dailyDosageController,
@@ -301,7 +286,7 @@ class _AddMedicationScreenState extends State<AddMedicationScreen> {
             ),
             const SizedBox(height: 16),
             _card(
-              icon: Icons.notifications_active_outlined,
+              iconAsset: 'assets/icons/add/clock.svg',
               label: 'УСТАНОВИТЕ ВРЕМЯ ПРИЕМА И КОЛИЧЕСТВО ТАБЛЕТОК',
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -393,7 +378,7 @@ class _AddMedicationScreenState extends State<AddMedicationScreen> {
   }
 
   Widget _card({
-    required IconData icon,
+    required String iconAsset,
     required String label,
     required Widget child,
   }) {
@@ -410,7 +395,11 @@ class _AddMedicationScreenState extends State<AddMedicationScreen> {
           Row(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Icon(icon, color: AppColors.orange, size: 28),
+              SvgPicture.asset(
+                iconAsset,
+                width: 28,
+                height: 28,
+              ),
               const SizedBox(width: 12),
               Expanded(
                 child: Text(
@@ -425,7 +414,7 @@ class _AddMedicationScreenState extends State<AddMedicationScreen> {
               ),
             ],
           ),
-          const SizedBox(height: 14),
+          const SizedBox(height: 12),
           child,
         ],
       ),

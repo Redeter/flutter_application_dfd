@@ -50,8 +50,8 @@ class Medication extends CalendarEntry {
     required super.time,
     required this.name,
     required this.dosage,
-    this.frequency = 'Ежедневно',
     this.dailyDosage,
+    this.reminder,
     required this.schedule,
     this.seriesId,
     List<DateTime?>? takenAtPerDose,
@@ -65,10 +65,10 @@ class Medication extends CalendarEntry {
 
   final String name;
   final String dosage; // "200мг"
-  final String frequency;
   final String? dailyDosage;
   final List<MedicationDose> schedule;
   /// Общий id серии ежедневных приёмов (для пакетного создания с одной формы).
+  final String? reminder;
   final String? seriesId;
   /// Отметка «принято» по каждому слоту [schedule] (тот же индекс).
   final List<DateTime?> takenAtPerDose;
@@ -114,8 +114,8 @@ class Medication extends CalendarEntry {
         'minute': time.minute,
         'name': name,
         'dosage': dosage,
-        'frequency': frequency,
         'dailyDosage': dailyDosage,
+        if (reminder != null) 'reminder': reminder,
         'schedule': schedule.map((e) => e.toJson()).toList(),
         if (seriesId != null) 'seriesId': seriesId,
         'takenAtPerDose': takenAtPerDose.map((e) => e?.toIso8601String()).toList(),
@@ -154,7 +154,6 @@ class Medication extends CalendarEntry {
       ),
       name: json['name'] as String? ?? '',
       dosage: json['dosage'] as String? ?? '',
-      frequency: json['frequency'] as String? ?? 'Ежедневно',
       dailyDosage: json['dailyDosage'] as String?,
       schedule: schedule,
       seriesId: json['seriesId'] as String?,
@@ -169,8 +168,8 @@ class Medication extends CalendarEntry {
     TimeOfDay? time,
     String? name,
     String? dosage,
-    String? frequency,
     String? dailyDosage,
+    String? reminder,
     List<MedicationDose>? schedule,
     String? seriesId,
     List<DateTime?>? takenAtPerDose,
@@ -187,8 +186,8 @@ class Medication extends CalendarEntry {
       time: time ?? this.time,
       name: name ?? this.name,
       dosage: dosage ?? this.dosage,
-      frequency: frequency ?? this.frequency,
       dailyDosage: dailyDosage ?? this.dailyDosage,
+      reminder: reminder ?? this.reminder,
       schedule: nextSchedule,
       seriesId: seriesId ?? this.seriesId,
       takenAtPerDose: nextTaken,
