@@ -11,10 +11,12 @@ enum MentalCondition {
 class UserProfile {
   const UserProfile({
     this.name = '',
+    this.doctorName = '',
     this.conditions = const [],
   });
 
   final String name;
+  final String doctorName;
   final List<MentalCondition> conditions;
 
   bool get hasConditions => conditions.isNotEmpty;

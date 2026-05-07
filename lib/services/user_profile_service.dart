@@ -17,11 +17,16 @@ class UserProfileService {
     try {
       final m = Map<String, dynamic>.from(jsonDecode(raw) as Map);
       final name = (m['name'] as String? ?? '').trim();
+      final doctorName = (m['doctorName'] as String? ?? '').trim();
       final conditions = (m['conditions'] as List<dynamic>? ?? [])
           .map((e) => MentalConditionX.fromCode('$e'))
           .whereType<MentalCondition>()
           .toList();
-      return UserProfile(name: name, conditions: conditions);
+      return UserProfile(
+        name: name,
+        doctorName: doctorName,
+        conditions: conditions,
+      );
     } catch (_) {
       return const UserProfile();
     }
@@ -33,6 +38,7 @@ class UserProfileService {
       _keyProfile,
       jsonEncode({
         'name': profile.name.trim(),
+        'doctorName': profile.doctorName.trim(),
         'conditions': profile.conditions.map((e) => e.code).toList(),
       }),
     );

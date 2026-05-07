@@ -31,6 +31,8 @@ Duration? _earlyOffsetForReminder(String? reminder) {
 class NotificationService {
   NotificationService._();
   static final NotificationService instance = NotificationService._();
+  static const int _kAndroidAlarmSoftLimit = 450;
+  static const int _kScheduleHorizonDays = 45;
 
   final FlutterLocalNotificationsPlugin _plugin = FlutterLocalNotificationsPlugin();
   bool _initialized = false;
@@ -111,7 +113,27 @@ class NotificationService {
     await _plugin.cancelAll();
     final entries = await CalendarStorage.instance.loadAll();
     final now = DateTime.now();
+    final horizon = now.add(const Duration(days: _kScheduleHorizonDays));
+    var scheduledCount = 0;
+
+    Future<void> trySchedule(
+      int id,
+      DateTime when,
+      String title,
+      String body,
+    ) async {
+      if (Platform.isAndroid && scheduledCount >= _kAndroidAlarmSoftLimit) return;
+      if (when.isAfter(horizon)) return;
+      try {
+        await _schedule(id, when, title, body);
+        scheduledCount++;
+      } catch (_) {
+        // Не даем единичной ошибке Android alarm manager падать всей пересборке.
+      }
+    }
+
     for (final e in entries) {
+      if (Platform.isAndroid && scheduledCount >= _kAndroidAlarmSoftLimit) break;
       switch (e) {
         case Medication():
           final times = e.schedule.isNotEmpty
@@ -133,7 +155,7 @@ class NotificationService {
               t.minute,
             );
             if (!dt.isBefore(now)) {
-              await _schedule(
+              await trySchedule(
                 _stableId('${e.id}:med:$i:at'),
                 dt,
                 'Время принять препарат',
@@ -144,7 +166,7 @@ class NotificationService {
             if (early != null) {
               final earlyAt = dt.subtract(early);
               if (!earlyAt.isBefore(now) && earlyAt.isBefore(dt)) {
-                await _schedule(
+                await trySchedule(
                   _stableId('${e.id}:med:$i:early'),
                   earlyAt,
                   'Напоминание о приёме',
@@ -162,7 +184,7 @@ class NotificationService {
             e.time.minute,
           );
           if (!visit.isBefore(now)) {
-            await _schedule(
+            await trySchedule(
               _stableId('${e.id}:visit:at'),
               visit,
               'Запись на приём',
@@ -173,7 +195,7 @@ class NotificationService {
           if (early != null) {
             final earlyAt = visit.subtract(early);
             if (!earlyAt.isBefore(now) && earlyAt.isBefore(visit)) {
-              await _schedule(
+              await trySchedule(
                 _stableId('${e.id}:visit:early'),
                 earlyAt,
                 'Скоро приём',
