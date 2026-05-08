@@ -1,8 +1,8 @@
 import 'dart:convert';
 
-import 'package:shared_preferences/shared_preferences.dart';
-
 import '../models/user_profile.dart';
+import 'secure_kv_service.dart';
+import 'user_scoped_store.dart';
 
 class UserProfileService {
   UserProfileService._();
@@ -11,8 +11,8 @@ class UserProfileService {
   static const _keyProfile = 'user_profile_v1';
 
   Future<UserProfile> load() async {
-    final prefs = await SharedPreferences.getInstance();
-    final raw = prefs.getString(_keyProfile);
+    final key = await UserScopedStore.scopedKey(_keyProfile);
+    final raw = await SecureKvService.instance.readString(key);
     if (raw == null || raw.isEmpty) return const UserProfile();
     try {
       final m = Map<String, dynamic>.from(jsonDecode(raw) as Map);
@@ -37,9 +37,9 @@ class UserProfileService {
   }
 
   Future<void> save(UserProfile profile) async {
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.setString(
-      _keyProfile,
+    final key = await UserScopedStore.scopedKey(_keyProfile);
+    await SecureKvService.instance.writeString(
+      key,
       jsonEncode({
         'name': profile.name.trim(),
         'doctorName': profile.doctorName.trim(),

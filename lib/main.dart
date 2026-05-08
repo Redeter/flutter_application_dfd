@@ -2,8 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
-import 'neural/neural_insights_service.dart';
 import 'services/notification_service.dart';
+import 'services/storage_migration_service.dart';
 import 'screens/auth_gate_screen.dart';
 import 'screens/calendar_screen.dart';
 import 'screens/goals_screen.dart';
@@ -16,6 +16,7 @@ import 'widgets/app_bottom_nav.dart';
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
   await SharedPreferences.getInstance();
+  await StorageMigrationService.instance.ensureMigrated();
   await GoogleFonts.pendingFonts([
     GoogleFonts.alegreyaSansSc(),
     GoogleFonts.alegreyaSansScTextTheme(ThemeData.light().textTheme),
@@ -23,7 +24,6 @@ void main() async {
     GoogleFonts.alegreyaSans(fontSize: 15, height: 1.45),
   ]);
   WidgetsBinding.instance.addPostFrameCallback((_) {
-    unawaited(NeuralInsightsService.instance.init());
     unawaited(_bootstrapNotifications());
   });
   runApp(const MyApp());
@@ -50,6 +50,11 @@ class MyApp extends StatelessWidget {
           ThemeData.light().textTheme,
         ),
         scaffoldBackgroundColor: AppColors.cream,
+        textSelectionTheme: const TextSelectionThemeData(
+          cursorColor: Colors.black,
+          selectionHandleColor: Colors.black,
+          selectionColor: Color(0x33000000),
+        ),
       ),
       home: const AuthGateScreen(),
     );

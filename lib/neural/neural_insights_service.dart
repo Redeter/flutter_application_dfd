@@ -9,8 +9,10 @@ import '../models/calendar_entry.dart';
 import '../models/insight_result.dart';
 import '../models/note_item.dart';
 import '../models/state_entries.dart';
+import '../services/auth_service.dart';
 import '../services/local_insights_service.dart';
 import '../services/quality_metrics_service.dart';
+import '../services/user_scoped_store.dart';
 import 'aggregated_insight_signals.dart';
 import 'feature_extractor.dart';
 import 'neural_net.dart';
@@ -55,6 +57,7 @@ class NeuralInsightsService {
   /// Сброс состояния синглтона для тестов (модель/флаги обучения).
   @visibleForTesting
   static void debugResetForTests() {
+    AuthService.instance.setFixtureSessionUserId('fixture_neural_insights_tests');
     _instance._trained = false;
     _instance._initCalled = false;
     _instance._net = null;
@@ -67,16 +70,37 @@ class NeuralInsightsService {
     _net = await _loadModel();
   }
 
+  /// После входа другого пользователя перечитываем веса модели из его хранилища.
+  Future<void> reloadForActiveUser() async {
+    _initCalled = false;
+    _net = null;
+    await init();
+  }
+
   Future<NeuralNet> _loadModel() async {
+    final uid = await AuthService.instance.sessionUserId();
+    if (uid == null) {
+      _trained = false;
+      return NeuralNet(
+        inputSize: _inputSize,
+        hiddenSizes: _hiddenSizes,
+        outputSize: _outputSize,
+      );
+    }
+
     final prefs = await SharedPreferences.getInstance();
-    final savedVersion = prefs.getInt(_keyModelVersion) ?? 0;
+    final versionKey = await UserScopedStore.scopedKey(_keyModelVersion);
+    final trainedKey = await UserScopedStore.scopedKey(_keyTrained);
+    final modelKey = await UserScopedStore.scopedKey(_keyModel);
+
+    final savedVersion = prefs.getInt(versionKey) ?? 0;
     if (savedVersion != _modelVersion) {
       _trained = false;
     } else {
-      _trained = prefs.getBool(_keyTrained) ?? false;
+      _trained = prefs.getBool(trainedKey) ?? false;
     }
 
-    final raw = prefs.getString(_keyModel);
+    final raw = prefs.getString(modelKey);
     if (raw != null && savedVersion == _modelVersion) {
       try {
         final json = jsonDecode(raw) as Map<String, dynamic>;
@@ -369,7 +393,8 @@ class NeuralInsightsService {
 
   Future<Map<String, int>> _recentRecommendationFatigue() async {
     final prefs = await SharedPreferences.getInstance();
-    final raw = prefs.getString(_keyInsightEvents);
+    final eventsKey = await UserScopedStore.scopedKey(_keyInsightEvents);
+    final raw = prefs.getString(eventsKey);
     if (raw == null) return {};
     try {
       final list = (jsonDecode(raw) as List<dynamic>)
@@ -395,7 +420,8 @@ class NeuralInsightsService {
 
   Future<double> _interventionResponseScore() async {
     final prefs = await SharedPreferences.getInstance();
-    final raw = prefs.getString(_keyRecFeedback);
+    final fbKey = await UserScopedStore.scopedKey(_keyRecFeedback);
+    final raw = prefs.getString(fbKey);
     if (raw == null) return 0.5;
     try {
       final list = (jsonDecode(raw) as List<dynamic>)
@@ -713,10 +739,14 @@ class NeuralInsightsService {
     }
 
     final prefs = await SharedPreferences.getInstance();
-    await prefs.setString(_keyModel, jsonEncode(model.toJson()));
-    await prefs.setBool(_keyTrained, true);
-    await prefs.setInt(_keyModelVersion, _modelVersion);
-    await prefs.setInt(_keyLastRetrainCount, _countEntries(existingData));
+    final modelKey = await UserScopedStore.scopedKey(_keyModel);
+    final trainedKey = await UserScopedStore.scopedKey(_keyTrained);
+    final versionKey = await UserScopedStore.scopedKey(_keyModelVersion);
+    final lastCountKey = await UserScopedStore.scopedKey(_keyLastRetrainCount);
+    await prefs.setString(modelKey, jsonEncode(model.toJson()));
+    await prefs.setBool(trainedKey, true);
+    await prefs.setInt(versionKey, _modelVersion);
+    await prefs.setInt(lastCountKey, _countEntries(existingData));
     _trained = true;
     _net = model;
   }
@@ -728,7 +758,9 @@ class NeuralInsightsService {
   Future<void> _maybeRetrainWithRealData(AggregatedData data) async {
     if (_net == null || !_trained) return;
     final prefs = await SharedPreferences.getInstance();
-    final lastCount = prefs.getInt(_keyLastRetrainCount) ?? 0;
+    final lastCountKey = await UserScopedStore.scopedKey(_keyLastRetrainCount);
+    final modelKey = await UserScopedStore.scopedKey(_keyModel);
+    final lastCount = prefs.getInt(lastCountKey) ?? 0;
     final currentCount = data.stateEntries.length;
     if (currentCount < 15) return;
     if (currentCount - lastCount < 20) return;
@@ -747,8 +779,8 @@ class NeuralInsightsService {
       }
     }
 
-    await prefs.setString(_keyModel, jsonEncode(model.toJson()));
-    await prefs.setInt(_keyLastRetrainCount, currentCount);
+    await prefs.setString(modelKey, jsonEncode(model.toJson()));
+    await prefs.setInt(lastCountKey, currentCount);
     _net = model;
   }
 

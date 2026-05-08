@@ -21,6 +21,7 @@ import 'goals_screen.dart';
 import 'notes_screen.dart';
 import 'state_categories_sheet.dart';
 import 'statistics_screen.dart';
+import 'user_profile_screen.dart';
 
 const _months = [
   'ЯНВАРЯ', 'ФЕВРАЛЯ', 'МАРТА', 'АПРЕЛЯ', 'МАЯ', 'ИЮНЯ',
@@ -402,7 +403,17 @@ class _CalendarScreenState extends State<CalendarScreen> {
           children: [
             IconButton(
               style: peachAppBarCircleIconButtonStyle(),
-              onPressed: () {},
+              tooltip: 'Личный кабинет',
+              onPressed: () async {
+                await Navigator.push<void>(
+                  context,
+                  MaterialPageRoute<void>(
+                    builder: (_) => const UserProfileScreen(),
+                  ),
+                );
+                if (!mounted) return;
+                await _loadEntries();
+              },
               icon: const Icon(Icons.person_outline_rounded),
             ),
             Expanded(

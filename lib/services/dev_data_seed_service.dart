@@ -6,11 +6,13 @@ import 'package:shared_preferences/shared_preferences.dart';
 import '../models/calendar_entry.dart';
 import '../models/note_item.dart';
 import '../models/state_entries.dart';
+import 'auth_service.dart';
 import 'calendar_storage.dart';
 import 'foundation_service.dart';
 import 'notes_storage.dart';
 import 'secure_kv_service.dart';
 import 'state_storage.dart';
+import 'user_storage_keys.dart';
 
 class DevDataSeedService {
   DevDataSeedService._();
@@ -431,32 +433,14 @@ class DevDataSeedService {
 
   /// Полный сброс всех локальных данных, метрик и модели.
   Future<void> wipeAllData() async {
-    const keys = <String>[
-      'notes',
-      'state_entries',
-      'calendar_entries',
-      'neural_insights_model',
-      'neural_insights_trained',
-      'neural_insights_version',
-      'neural_last_retrain_count',
-      'local_insights_patterns',
-      'qm_insight_events_v1',
-      'qm_rec_feedback_v1',
-      'qm_offline_validation_v1',
-      'insights_ab_mode',
-      'insights_ab_updated_at',
-      'insights_ab_manual_mode',
-      'stats_foundation_sync_week_start_v1',
-      'stats_foundation_sync_week_end_v1',
-      'foundation_overall_display_smooth_v1',
-      'foundation_weight_survey_v1',
-      'rec_personalizer_last_variants_v1',
-      'insights_expectations_dialog_v1',
-    ];
+    final uid = await AuthService.instance.sessionUserId();
+    if (uid == null) return;
+
     final prefs = await SharedPreferences.getInstance();
-    for (final key in keys) {
-      await SecureKvService.instance.delete(key);
-      await prefs.remove(key);
+    for (final base in UserStorageKeys.allScopedBases) {
+      final scoped = UserStorageKeys.forUser(uid, base);
+      await SecureKvService.instance.delete(scoped);
+      await prefs.remove(scoped);
     }
     await FoundationService.instance.clearQuestDoneDate();
   }

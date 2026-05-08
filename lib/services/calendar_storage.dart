@@ -2,6 +2,7 @@ import 'dart:convert';
 
 import '../models/calendar_entry.dart';
 import 'secure_kv_service.dart';
+import 'user_scoped_store.dart';
 
 const _keyCalendar = 'calendar_entries';
 
@@ -11,7 +12,8 @@ class CalendarStorage {
   static final _instance = CalendarStorage._();
 
   Future<List<CalendarEntry>> loadAll() async {
-    final raw = await SecureKvService.instance.readWithMigration(_keyCalendar);
+    final key = await UserScopedStore.scopedKey(_keyCalendar);
+    final raw = await SecureKvService.instance.readString(key);
     if (raw == null || raw.isEmpty) return [];
 
     try {
@@ -50,7 +52,6 @@ class CalendarStorage {
     await _write(all);
   }
 
-  /// Одна запись на диск вместо многократного [save] (например серия ежедневных приёмов).
   Future<void> saveMany(List<CalendarEntry> entries) async {
     if (entries.isEmpty) return;
     final all = await loadAll();
@@ -71,7 +72,6 @@ class CalendarStorage {
     await _write(all);
   }
 
-  /// Удаляет препарат: если у записи есть [Medication.seriesId], убираются все дни этой серии.
   Future<void> deleteMedication(Medication m) async {
     final all = await loadAll();
     final sid = m.seriesId;
@@ -84,8 +84,9 @@ class CalendarStorage {
   }
 
   Future<void> _write(List<CalendarEntry> list) async {
+    final key = await UserScopedStore.scopedKey(_keyCalendar);
     final encoded = jsonEncode(list.map((e) => e.toJson()).toList());
-    await SecureKvService.instance.writeString(_keyCalendar, encoded);
+    await SecureKvService.instance.writeString(key, encoded);
   }
 
   Future<List<CalendarEntry>> loadForDate(DateTime date) async {

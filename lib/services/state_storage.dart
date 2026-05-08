@@ -2,6 +2,7 @@ import 'dart:convert';
 
 import '../models/state_entries.dart';
 import 'secure_kv_service.dart';
+import 'user_scoped_store.dart';
 
 const _keyStateEntries = 'state_entries';
 
@@ -11,7 +12,8 @@ class StateStorage {
   static final _instance = StateStorage._();
 
   Future<List<StateEntryBase>> loadAll() async {
-    final raw = await SecureKvService.instance.readWithMigration(_keyStateEntries);
+    final key = await UserScopedStore.scopedKey(_keyStateEntries);
+    final raw = await SecureKvService.instance.readString(key);
     if (raw == null || raw.isEmpty) return [];
 
     try {
@@ -54,8 +56,9 @@ class StateStorage {
   Future<void> save(StateEntryBase entry) async {
     final all = await loadAll();
     all.insert(0, entry);
+    final key = await UserScopedStore.scopedKey(_keyStateEntries);
     final encoded = jsonEncode(all.map((e) => e.toJson()).toList());
-    await SecureKvService.instance.writeString(_keyStateEntries, encoded);
+    await SecureKvService.instance.writeString(key, encoded);
   }
 
   Future<List<T>> loadByCategory<T extends StateEntryBase>(

@@ -5,6 +5,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import '../models/aggregated_data.dart';
 import '../models/foundation_score.dart';
 import '../models/state_entries.dart';
+import 'user_scoped_store.dart';
 
 class FoundationService {
   FoundationService._();
@@ -18,12 +19,14 @@ class FoundationService {
   /// Сброс «квеста дня» при полном wipe данных (цели/веса в [prefsKeyGoals] не трогаем).
   Future<void> clearQuestDoneDate() async {
     final prefs = await SharedPreferences.getInstance();
-    await prefs.remove(prefsKeyQuestDoneDate);
+    final qKey = await UserScopedStore.scopedKey(prefsKeyQuestDoneDate);
+    await prefs.remove(qKey);
   }
 
   Future<FoundationGoals> loadGoals() async {
     final prefs = await SharedPreferences.getInstance();
-    final raw = prefs.getString(_keyGoals);
+    final gKey = await UserScopedStore.scopedKey(_keyGoals);
+    final raw = prefs.getString(gKey);
     if (raw == null || raw.isEmpty) return const FoundationGoals();
     try {
       final m = Map<String, dynamic>.from(jsonDecode(raw) as Map);
@@ -43,8 +46,9 @@ class FoundationService {
 
   Future<void> saveGoals(FoundationGoals goals) async {
     final prefs = await SharedPreferences.getInstance();
+    final gKey = await UserScopedStore.scopedKey(_keyGoals);
     await prefs.setString(
-      _keyGoals,
+      gKey,
       jsonEncode({
         'sleepTarget': goals.sleepTarget,
         'moodTarget': goals.moodTarget,
@@ -59,7 +63,8 @@ class FoundationService {
 
   Future<bool> isQuestDoneToday() async {
     final prefs = await SharedPreferences.getInstance();
-    final raw = prefs.getString(prefsKeyQuestDoneDate);
+    final qKey = await UserScopedStore.scopedKey(prefsKeyQuestDoneDate);
+    final raw = prefs.getString(qKey);
     if (raw == null) return false;
     final now = DateTime.now();
     final d = DateTime.tryParse(raw);
@@ -69,11 +74,12 @@ class FoundationService {
 
   Future<void> setQuestDoneToday(bool done) async {
     final prefs = await SharedPreferences.getInstance();
+    final qKey = await UserScopedStore.scopedKey(prefsKeyQuestDoneDate);
     if (!done) {
-      await prefs.remove(prefsKeyQuestDoneDate);
+      await prefs.remove(qKey);
       return;
     }
-    await prefs.setString(prefsKeyQuestDoneDate, DateTime.now().toIso8601String());
+    await prefs.setString(qKey, DateTime.now().toIso8601String());
   }
 
   FoundationScore compute(
@@ -256,15 +262,16 @@ class FoundationService {
 
   Future<FoundationScore> applyDisplaySmoothing(FoundationScore raw) async {
     final prefs = await SharedPreferences.getInstance();
+    final smoothKey = await UserScopedStore.scopedKey(_prefsSmoothOverall);
     if (raw.rawOverallProgress <= 0.0001 && raw.filledBricks == 0) {
-      await prefs.remove(_prefsSmoothOverall);
+      await prefs.remove(smoothKey);
       return raw;
     }
-    final prev = prefs.getDouble(_prefsSmoothOverall) ?? raw.rawOverallProgress;
+    final prev = prefs.getDouble(smoothKey) ?? raw.rawOverallProgress;
     const alpha = 0.38;
     final next =
         (alpha * raw.rawOverallProgress + (1 - alpha) * prev).clamp(0.0, 1.0);
-    await prefs.setDouble(_prefsSmoothOverall, next);
+    await prefs.setDouble(smoothKey, next);
     final filled = (next * raw.totalBricks).round().clamp(0, raw.totalBricks);
     return raw.copyWithSmoothed(
       displayOverall: next,
@@ -274,12 +281,14 @@ class FoundationService {
 
   Future<bool> isWeightSurveyDone() async {
     final prefs = await SharedPreferences.getInstance();
-    return prefs.getBool(_prefsWeightSurveyDone) ?? false;
+    final wKey = await UserScopedStore.scopedKey(_prefsWeightSurveyDone);
+    return prefs.getBool(wKey) ?? false;
   }
 
   Future<void> markWeightSurveyDone() async {
     final prefs = await SharedPreferences.getInstance();
-    await prefs.setBool(_prefsWeightSurveyDone, true);
+    final wKey = await UserScopedStore.scopedKey(_prefsWeightSurveyDone);
+    await prefs.setBool(wKey, true);
   }
 
   /// Первичный выбор «что важнее» — чуть сдвигает веса сфер.

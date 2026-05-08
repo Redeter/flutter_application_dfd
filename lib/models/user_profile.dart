@@ -15,6 +15,7 @@ enum PriorityStateFocus {
   anxiety,
   stress,
   medication,
+  doctorVisit,
 }
 
 class UserProfile {
@@ -70,6 +71,7 @@ extension PriorityStateFocusX on PriorityStateFocus {
         PriorityStateFocus.anxiety => 'anxiety',
         PriorityStateFocus.stress => 'stress',
         PriorityStateFocus.medication => 'medication',
+        PriorityStateFocus.doctorVisit => 'doctor_visit',
       };
 
   String get label => switch (this) {
@@ -79,6 +81,7 @@ extension PriorityStateFocusX on PriorityStateFocus {
         PriorityStateFocus.anxiety => 'Тревога',
         PriorityStateFocus.stress => 'Стресс',
         PriorityStateFocus.medication => 'Прием препаратов',
+        PriorityStateFocus.doctorVisit => 'Посещение врача',
       };
 
   static PriorityStateFocus fromCode(String? raw) {

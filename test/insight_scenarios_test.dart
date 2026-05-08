@@ -6,6 +6,7 @@ import 'package:flutter_application_dfd/models/state_entries.dart';
 import 'package:flutter_application_dfd/neural/aggregated_insight_signals.dart';
 import 'package:flutter_application_dfd/neural/feature_extractor.dart';
 import 'package:flutter_application_dfd/neural/neural_insights_service.dart';
+import 'package:flutter_application_dfd/services/auth_service.dart';
 import 'package:flutter_application_dfd/neural/recommendation_evidence.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -13,6 +14,10 @@ import 'package:shared_preferences/shared_preferences.dart';
 /// Фиксированные сценарии AggregatedData: гейты, доказательность советов, размер признаков.
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
+
+  tearDownAll(() {
+    AuthService.instance.setFixtureSessionUserId(null);
+  });
 
   const sleepRec = 'Обратите внимание на режим сна: старайтесь ложиться в одно время.';
   const energyRec = 'При низкой энергии полезны короткие прогулки и перерывы.';

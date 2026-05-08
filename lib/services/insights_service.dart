@@ -16,6 +16,7 @@ import 'quality_metrics_service.dart';
 import 'recommendation_personalizer.dart';
 import 'state_storage.dart';
 import 'user_profile_service.dart';
+import 'user_scoped_store.dart';
 
 /// Агрегирует все данные и получает инсайты для экрана статистики.
 /// Анализ выполняется локально на устройстве — данные никуда не отправляются.
@@ -327,8 +328,7 @@ class InsightsService {
 
   Future<List<String>> _computeWeeklyTriggersWithLexicon(AggregatedData data) async {
     final direct = _computeWeeklyTriggers(data);
-    final prefs = await SharedPreferences.getInstance();
-    final lex = await _updateAndLoadPersonalLexicon(prefs, data);
+    final lex = await _updateAndLoadPersonalLexicon(data);
     if (lex.isEmpty) return direct;
     final fromLex = lex.entries.toList()
       ..sort((a, b) => b.value.compareTo(a.value));
@@ -346,11 +346,12 @@ class InsightsService {
   }
 
   Future<Map<String, int>> _updateAndLoadPersonalLexicon(
-    SharedPreferences prefs,
     AggregatedData data,
   ) async {
+    final prefs = await SharedPreferences.getInstance();
+    final lexKey = await UserScopedStore.scopedKey(_keyPersonalLexicon);
     final current = <String, int>{};
-    final raw = prefs.getString(_keyPersonalLexicon);
+    final raw = prefs.getString(lexKey);
     if (raw != null && raw.isNotEmpty) {
       try {
         final m = Map<String, dynamic>.from(jsonDecode(raw) as Map);
@@ -375,7 +376,7 @@ class InsightsService {
     final trimmed = {
       for (final e in sorted.take(50)) e.key: e.value,
     };
-    await prefs.setString(_keyPersonalLexicon, jsonEncode(trimmed));
+    await prefs.setString(lexKey, jsonEncode(trimmed));
     return trimmed;
   }
 
@@ -485,7 +486,8 @@ class InsightsService {
 
   Future<List<String>> _rewriteRecommendationsForExperiment(List<String> recs) async {
     final prefs = await SharedPreferences.getInstance();
-    final variant = await _resolveRecommendationVariant(prefs);
+    final fbKey = await UserScopedStore.scopedKey(_keyRecFeedback);
+    final variant = await _resolveRecommendationVariant(prefs, fbKey);
     return recs.map((rec) {
       if (variant == 'supportive') {
         return rec
@@ -497,8 +499,11 @@ class InsightsService {
     }).toList();
   }
 
-  Future<String> _resolveRecommendationVariant(SharedPreferences prefs) async {
-    final raw = prefs.getString(_keyRecFeedback);
+  Future<String> _resolveRecommendationVariant(
+    SharedPreferences prefs,
+    String fbKey,
+  ) async {
+    final raw = prefs.getString(fbKey);
     if (raw == null || raw.isEmpty) return 'default';
     try {
       final list = (jsonDecode(raw) as List<dynamic>)
@@ -514,17 +519,20 @@ class InsightsService {
 
   Future<String> _resolveAbMode() async {
     final prefs = await SharedPreferences.getInstance();
-    final manual = prefs.getString(_keyAbManualMode);
+    final manualKey = await UserScopedStore.scopedKey(_keyAbManualMode);
+    final updatedKey = await UserScopedStore.scopedKey(_keyAbUpdatedAt);
+    final modeKey = await UserScopedStore.scopedKey(_keyAbMode);
+    final manual = prefs.getString(manualKey);
     if (manual == null || manual.isEmpty) {
-      await prefs.setString(_keyAbManualMode, 'ml');
+      await prefs.setString(manualKey, 'ml');
       return 'ml';
     }
     if (manual != 'auto') {
       return manual;
     }
     final now = DateTime.now();
-    final updatedAtRaw = prefs.getString(_keyAbUpdatedAt);
-    final mode = prefs.getString(_keyAbMode);
+    final updatedAtRaw = prefs.getString(updatedKey);
+    final mode = prefs.getString(modeKey);
     if (updatedAtRaw != null && mode != null) {
       final updatedAt = DateTime.tryParse(updatedAtRaw);
       if (updatedAt != null && now.difference(updatedAt).inDays < 1) {
@@ -534,18 +542,20 @@ class InsightsService {
 
     // Simple on-device A/B: alternate by day to compare rule-only vs rule+ML.
     final nextMode = now.day.isEven ? 'ml' : 'rule';
-    await prefs.setString(_keyAbMode, nextMode);
-    await prefs.setString(_keyAbUpdatedAt, now.toIso8601String());
+    await prefs.setString(modeKey, nextMode);
+    await prefs.setString(updatedKey, now.toIso8601String());
     return nextMode;
   }
 
   Future<void> setManualAbMode(String mode) async {
     final prefs = await SharedPreferences.getInstance();
-    await prefs.setString(_keyAbManualMode, mode);
+    final manualKey = await UserScopedStore.scopedKey(_keyAbManualMode);
+    await prefs.setString(manualKey, mode);
   }
 
   Future<String> getManualAbMode() async {
     final prefs = await SharedPreferences.getInstance();
-    return prefs.getString(_keyAbManualMode) ?? 'ml';
+    final manualKey = await UserScopedStore.scopedKey(_keyAbManualMode);
+    return prefs.getString(manualKey) ?? 'ml';
   }
 }

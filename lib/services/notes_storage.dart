@@ -2,6 +2,7 @@ import 'dart:convert';
 
 import '../models/note_item.dart';
 import 'secure_kv_service.dart';
+import 'user_scoped_store.dart';
 
 const _keyNotes = 'notes';
 
@@ -11,7 +12,8 @@ class NotesStorage {
   static final _instance = NotesStorage._();
 
   Future<List<NoteItem>> loadAll() async {
-    final raw = await SecureKvService.instance.readWithMigration(_keyNotes);
+    final key = await UserScopedStore.scopedKey(_keyNotes);
+    final raw = await SecureKvService.instance.readString(key);
     if (raw == null || raw.isEmpty) return [];
 
     try {
@@ -27,7 +29,8 @@ class NotesStorage {
             return NoteItem(
               date: date,
               title: m['title'] as String? ?? '',
-              tags: (m['tags'] as List<dynamic>?)?.map((e) => e.toString()).toList() ?? [],
+              tags:
+                  (m['tags'] as List<dynamic>?)?.map((e) => e.toString()).toList() ?? [],
               preview: m['preview'] as String? ?? '',
               sticker: NoteStickerKind.fromStorage(m['sticker'] as String?),
             );
@@ -41,6 +44,7 @@ class NotesStorage {
   }
 
   Future<void> saveAll(List<NoteItem> notes) async {
+    final key = await UserScopedStore.scopedKey(_keyNotes);
     final encoded = jsonEncode(notes.map((n) => {
           'date': n.date.toIso8601String(),
           'title': n.title,
@@ -48,6 +52,6 @@ class NotesStorage {
           'preview': n.preview,
           'sticker': n.sticker.storageKey,
         }).toList());
-    await SecureKvService.instance.writeString(_keyNotes, encoded);
+    await SecureKvService.instance.writeString(key, encoded);
   }
 }

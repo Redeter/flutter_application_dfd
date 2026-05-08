@@ -6,6 +6,7 @@ import '../models/aggregated_data.dart';
 import '../models/user_profile.dart';
 import '../neural/recommendation_evidence.dart';
 import 'quality_metrics_service.dart';
+import 'user_scoped_store.dart';
 
 /// Слоты и персонализированные формулировки советов (локально, без LLM).
 class RecommendationPersonalizer {
@@ -33,13 +34,15 @@ class RecommendationPersonalizer {
     }
 
     final prefs = await SharedPreferences.getInstance();
+    final variantsKey = await UserScopedStore.scopedKey(_keyLastVariants);
     final nVariants = _variantCount(id);
     final basePick = await _selectVariantWithFeedback(id, stats, profile, nVariants);
-    final adjusted = await _antiRepeatPick(prefs, id, basePick, nVariants);
+    final adjusted =
+        await _antiRepeatPick(prefs, variantsKey, id, basePick, nVariants);
     final key = variantKey(id, adjusted);
 
     final text = _buildText(id, adjusted, stats, profile, canonicalOrRewrittenRec);
-    await _rememberShown(prefs, id, adjusted);
+    await _rememberShown(prefs, variantsKey, id, adjusted);
 
     return PersonalizedRecommendation(text: text, variantKey: key, templateId: id);
   }
@@ -90,12 +93,13 @@ class RecommendationPersonalizer {
 
   Future<int> _antiRepeatPick(
     SharedPreferences prefs,
+    String variantsKey,
     String id,
     int basePick,
     int nVariants,
   ) async {
     if (nVariants <= 1) return 0;
-    final last = await _loadLast(prefs);
+    final last = await _loadLast(prefs, variantsKey);
     var pick = basePick;
     for (var attempt = 0; attempt < nVariants; attempt++) {
       final cand = (basePick + attempt) % nVariants;
@@ -108,8 +112,11 @@ class RecommendationPersonalizer {
     return pick;
   }
 
-  Future<List<String>> _loadLast(SharedPreferences prefs) async {
-    final raw = prefs.getString(_keyLastVariants);
+  Future<List<String>> _loadLast(
+    SharedPreferences prefs,
+    String variantsKey,
+  ) async {
+    final raw = prefs.getString(variantsKey);
     if (raw == null || raw.isEmpty) return [];
     try {
       final list = jsonDecode(raw) as List<dynamic>;
@@ -119,11 +126,16 @@ class RecommendationPersonalizer {
     }
   }
 
-  Future<void> _rememberShown(SharedPreferences prefs, String id, int variant) async {
-    final list = await _loadLast(prefs);
+  Future<void> _rememberShown(
+    SharedPreferences prefs,
+    String variantsKey,
+    String id,
+    int variant,
+  ) async {
+    final list = await _loadLast(prefs, variantsKey);
     list.add(variantKey(id, variant));
     final trimmed = list.length <= 24 ? list : list.sublist(list.length - 24);
-    await prefs.setString(_keyLastVariants, jsonEncode(trimmed));
+    await prefs.setString(variantsKey, jsonEncode(trimmed));
   }
 
   String? _templateIdForText(String rec) {

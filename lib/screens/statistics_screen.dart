@@ -9,14 +9,15 @@ import '../models/aggregated_data.dart';
 import '../models/insight_result.dart';
 import '../models/local_quality_metrics.dart';
 import '../models/state_entries.dart';
-import '../models/user_profile.dart';
 import '../services/dev_data_seed_service.dart';
-import '../services/user_profile_service.dart';
 import '../services/insights_service.dart';
 import '../services/notification_service.dart';
 import '../services/offline_validation_service.dart';
+import '../services/plus_dashboard_unlock_service.dart';
+import '../services/statistics_dashboard_reload_hub.dart';
 import '../services/quality_metrics_service.dart';
 import '../services/stats_period_sync.dart';
+import '../services/user_scoped_store.dart';
 import '../theme/app_colors.dart';
 import '../theme/peach_app_bar.dart';
 import '../utils/stats_helpers.dart';
@@ -43,11 +44,11 @@ class _StatisticsScreenState extends State<StatisticsScreen> {
   AggregatedData? _data;
   LocalQualityMetrics _qualityMetrics = const LocalQualityMetrics();
   bool _loading = true;
-  UserProfile _profile = const UserProfile();
   DateTime _selectedDate = DateTime.now();
   bool _viewWeek = true; // true = неделя, false = день
   String _abMode = 'auto';
   int _loadEpoch = 0;
+  bool _plusDashboardUnlocked = false;
   String? _draggingBlockId;
   final List<String> _blockOrder = [
     'data_summary',
@@ -61,35 +62,66 @@ class _StatisticsScreenState extends State<StatisticsScreen> {
 
   Future<void> _maybeShowExpectationsDialog() async {
     final prefs = await SharedPreferences.getInstance();
-    if (prefs.getBool(_kExpectationsDialogDone) == true) return;
+    final dialogKey = await UserScopedStore.scopedKey(_kExpectationsDialogDone);
+    if (prefs.getBool(dialogKey) == true) return;
     if (!mounted) return;
     await Future<void>.delayed(const Duration(milliseconds: 500));
     if (!mounted) return;
+    var accepted = false;
     await showDialog<void>(
       context: context,
-      builder: (ctx) => AlertDialog(
-        title: Text(
-          'Об анализе и советах',
-          style: GoogleFonts.alegreyaSans(fontWeight: FontWeight.w800),
-        ),
-        content: Text(
-          'Раздел статистики использует только ваши записи на устройстве — без отправки в облако. '
-          'Это не диагноз и не замена терапии или врача.\n\n'
-          'Советы — мягкие ориентиры по наблюдаемым паттернам (сон, энергия, настроение, заметки). '
-          'При стойком ухудшении состояния обратитесь к специалисту.',
-          style: GoogleFonts.alegreyaSans(fontSize: 15, height: 1.45),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () async {
-              await prefs.setBool(_kExpectationsDialogDone, true);
-              if (ctx.mounted) Navigator.pop(ctx);
-            },
-            child: const Text('Понятно'),
+      barrierDismissible: false,
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setDialogState) => AlertDialog(
+          title: Text(
+            'Важно перед использованием',
+            style: GoogleFonts.alegreyaSans(fontWeight: FontWeight.w800),
           ),
-        ],
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                'Раздел статистики использует только ваши записи на устройстве — без отправки в облако. '
+                'Это не диагноз и не замена терапии или врача.\n\n'
+                'Советы — мягкие ориентиры по наблюдаемым паттернам (сон, энергия, настроение, заметки). '
+                'При стойком ухудшении состояния обратитесь к специалисту.',
+                style: GoogleFonts.alegreyaSans(fontSize: 15, height: 1.45),
+              ),
+              const SizedBox(height: 12),
+              CheckboxListTile(
+                value: accepted,
+                onChanged: (value) {
+                  setDialogState(() => accepted = value ?? false);
+                },
+                contentPadding: EdgeInsets.zero,
+                side: const BorderSide(color: Colors.black54),
+                activeColor: Colors.black,
+                checkColor: Colors.white,
+                controlAffinity: ListTileControlAffinity.leading,
+                title: const Text('Я согласен(на) и понимаю ограничения анализа'),
+              ),
+            ],
+          ),
+          actions: [
+            FilledButton(
+              onPressed: !accepted
+                  ? null
+                  : () async {
+                      await prefs.setBool(dialogKey, true);
+                      if (ctx.mounted) Navigator.pop(ctx);
+                    },
+              child: const Text('Я согласен(на)'),
+            ),
+          ],
+        ),
       ),
     );
+  }
+
+  void _quietReloadStatistics() {
+    if (!mounted) return;
+    _load(blocking: false);
   }
 
   @override
@@ -97,17 +129,17 @@ class _StatisticsScreenState extends State<StatisticsScreen> {
     super.initState();
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
+      StatisticsDashboardReloadHub.instance.attachQuietReload(this, _quietReloadStatistics);
       _loadMode();
-      _loadProfile();
       _load();
       unawaited(StatsPeriodSync.persistWeekContaining(_selectedDate));
     });
   }
 
-  Future<void> _loadProfile() async {
-    final p = await UserProfileService.instance.load();
-    if (!mounted) return;
-    setState(() => _profile = p);
+  @override
+  void dispose() {
+    StatisticsDashboardReloadHub.instance.detachQuietReload(this);
+    super.dispose();
   }
 
   Future<void> _loadMode() async {
@@ -121,12 +153,15 @@ class _StatisticsScreenState extends State<StatisticsScreen> {
       setState(() => _loading = true);
     }
     try {
+      final plusDash =
+          await PlusDashboardUnlockService.instance.isUnlocked();
       final data = await InsightsService.instance.aggregateData();
       final result = await InsightsService.instance.getInsights(data);
       await QualityMetricsService.instance.registerInsightShown(result, data);
       final metrics = await QualityMetricsService.instance.getMetrics();
       if (mounted) {
         setState(() {
+          _plusDashboardUnlocked = plusDash;
           _data = data;
           _insight = result;
           _qualityMetrics = metrics;
@@ -138,8 +173,11 @@ class _StatisticsScreenState extends State<StatisticsScreen> {
       }
       unawaited(_refreshOfflineMetricsInBackground());
     } catch (e) {
+      final plusDash =
+          await PlusDashboardUnlockService.instance.isUnlocked();
       if (mounted) {
         setState(() {
+          _plusDashboardUnlocked = plusDash;
           _insight = InsightResult.fromError('$e');
           _loading = false;
           _loadEpoch++;
@@ -149,7 +187,6 @@ class _StatisticsScreenState extends State<StatisticsScreen> {
   }
 
   Future<void> _onPullToRefresh() async {
-    await _loadProfile();
     await _load(blocking: false);
   }
 
@@ -256,7 +293,6 @@ class _StatisticsScreenState extends State<StatisticsScreen> {
                 context,
                 MaterialPageRoute(builder: (_) => const UserProfileScreen()),
               );
-              await _loadProfile();
               await _load(blocking: false);
             },
           ),
@@ -563,7 +599,18 @@ class _StatisticsScreenState extends State<StatisticsScreen> {
   }
 
   Widget _buildContentBelowStrip() {
-    if (_insight == null) return const SizedBox.shrink();
+    if (_insight == null) {
+      return SingleChildScrollView(
+        physics: const AlwaysScrollableScrollPhysics(),
+        padding: const EdgeInsets.fromLTRB(16, 16, 16, 100),
+        child: Column(
+          children: [
+            _buildStartTrackingCard(),
+            _buildEmpty(),
+          ],
+        ),
+      );
+    }
     if (_insight!.hasError) {
       return SingleChildScrollView(
         physics: const AlwaysScrollableScrollPhysics(),
@@ -575,19 +622,25 @@ class _StatisticsScreenState extends State<StatisticsScreen> {
     if (_data != null && _hasAnyData) {
       blocks['data_summary'] = _buildDataSummary();
     }
-    if (_localStats.hasAny || _hasAnyData) {
+    if (_canShowSummaryRings) {
       blocks['rings'] = _buildRingsAndCards();
     }
-    if (_insight!.stateSummary.isNotEmpty ||
-        _insight!.overallInsight.isNotEmpty ||
-        _insight!.keywords.isNotEmpty) {
-      blocks['analysis'] = _buildAiAnalysisCard();
+    if (_hasAnyData) {
+      blocks['analysis'] = _canShowDetailedInsights
+          ? _buildAiAnalysisCard()
+          : _buildAiAnalysisPreviewCard();
     }
-    if (_insight!.recommendations.isNotEmpty) {
-      blocks['advice'] = _buildAdviceCard();
+    if (_hasAnyData) {
+      blocks['advice'] = _canShowDetailedInsights && _insight!.recommendations.isNotEmpty
+          ? _buildAdviceCard()
+          : _buildAdvicePreviewCard();
     }
-    if (_data != null && _insight!.recommendations.isNotEmpty) {
-      blocks['accuracy_card'] = _buildEvidenceCard();
+    if (_hasAnyData) {
+      blocks['accuracy_card'] = _canShowDetailedInsights &&
+              _data != null &&
+              _insight!.recommendations.isNotEmpty
+          ? _buildEvidenceCard()
+          : _buildEvidencePreviewCard();
     }
 
     final visibleIds = _blockOrder.where(blocks.containsKey).toList();
@@ -607,7 +660,11 @@ class _StatisticsScreenState extends State<StatisticsScreen> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
+          if (!_hasAnyData) _buildStartTrackingCard(),
           ...ordered,
+          if (_hasAnyData && !_canShowSummaryRings) _buildWarmupPlaceholder(),
+          if (_hasAnyData && _canShowSummaryRings && !_canShowDetailedInsights)
+            _buildGrowingDataPlaceholder(),
           if (_insight!.insufficientData) _buildInsufficientDataCard(),
           if (!_localStats.hasAny &&
               !_hasAnyData &&
@@ -682,8 +739,17 @@ class _StatisticsScreenState extends State<StatisticsScreen> {
 
   Widget _buildRingsAndCards() {
     final stats = _localStats;
-    final medsCount = stats.medicationsCount;
-    final visitsCount = stats.appointmentsCount;
+    final d = _data!;
+    final clock = DateTime.now();
+    final today = DateTime(clock.year, clock.month, clock.day);
+    final notesToday = countNotesOnCalendarDay(d, today);
+    final notesTotal = d.notes.length;
+    final medsTotalAll = countDistinctMedicationRegimens(d.medications);
+    final visitsToday = countAppointmentsOnCalendarDay(d, today);
+    final visitsTotal = d.appointments.length;
+    final nextVisit = nextAppointmentVisitOnOrAfter(d, clock);
+    final dosesToday = countMedicationDosesOnCalendarDay(d, today);
+    final nextIntake = nextMedicationIntakeOnOrAfter(d, clock);
     final (start, end) = _range;
     final periodKey =
         '${_viewWeek ? 'week' : 'day'}-${start.year}-${start.month}-${start.day}-${end.year}-${end.month}-${end.day}';
@@ -766,23 +832,48 @@ class _StatisticsScreenState extends State<StatisticsScreen> {
                       _buildMetricCard(
                         cardWidth,
                         'Заметок',
-                        '${stats.notesCount}',
                         Icons.edit_note_rounded,
                         [AppColors.lightBlue, const Color(0xFF64B5F6)],
+                        body: _metricSlashPairRow(
+                          notesToday,
+                          notesTotal,
+                          leftCaption: 'сегодня',
+                          rightCaption: 'всего',
+                        ),
                       ),
                       _buildMetricCard(
                         cardWidth,
                         'Таблетки',
-                        '$medsCount',
                         Icons.medication_outlined,
                         [const Color(0xFFF8BBD0), const Color(0xFFF48FB1)],
+                        body: _metricSingleStack(
+                          '$medsTotalAll',
+                          'разных схем в календаре',
+                        ),
                       ),
                       _buildMetricCard(
                         cardWidth,
                         'Приёмы',
-                        '$visitsCount',
                         Icons.event_available_rounded,
                         [const Color(0xFFC8E6C9), const Color(0xFFA5D6A7)],
+                        body: _metricSlashPairRow(
+                          visitsToday,
+                          visitsTotal,
+                          leftCaption: 'сегодня',
+                          rightCaption: 'всего',
+                        ),
+                        footer: _metricNearestVisitFooter(nextVisit),
+                      ),
+                      _buildMetricCard(
+                        cardWidth,
+                        'Сегодня',
+                        Icons.schedule_rounded,
+                        [AppColors.lavender, const Color(0xFFB39DDB)],
+                        body: _metricSingleStack(
+                          '$dosesToday',
+                          'слотов приёма на сегодня',
+                        ),
+                        footer: _metricNextMedicationFooter(nextIntake),
                       ),
                     ],
                   );
@@ -880,19 +971,162 @@ class _StatisticsScreenState extends State<StatisticsScreen> {
     );
   }
 
+  static const double _kMetricCardHeight = 124;
+
+  TextStyle _metricCardCaptionStyle() => GoogleFonts.alegreyaSans(
+        fontSize: 10,
+        fontWeight: FontWeight.w600,
+        height: 1.2,
+        color: Colors.white.withValues(alpha: 0.88),
+      );
+
+  TextStyle _metricCardValueStyle() => GoogleFonts.alegreyaSans(
+        fontSize: 22,
+        fontWeight: FontWeight.w800,
+        color: AppColors.white,
+      );
+
+  /// Числа «слева / справа» с подписями сразу под своей колонкой — не разъезжается.
+  Widget _metricSlashPairRow(
+    int left,
+    int right, {
+    required String leftCaption,
+    required String rightCaption,
+  }) {
+    final big = _metricCardValueStyle();
+    final small = _metricCardCaptionStyle();
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Column(
+          crossAxisAlignment: CrossAxisAlignment.center,
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text('$left', style: big),
+            const SizedBox(height: 2),
+            Text(
+              leftCaption,
+              style: small,
+              textAlign: TextAlign.center,
+            ),
+          ],
+        ),
+        Padding(
+          padding: const EdgeInsets.fromLTRB(8, 2, 8, 0),
+          child: Text(
+            '/',
+            style: big.copyWith(
+              fontSize: 20,
+              color: Colors.white.withValues(alpha: 0.62),
+              height: 1.1,
+            ),
+          ),
+        ),
+        Column(
+          crossAxisAlignment: CrossAxisAlignment.center,
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text('$right', style: big),
+            const SizedBox(height: 2),
+            Text(
+              rightCaption,
+              style: small,
+              textAlign: TextAlign.center,
+            ),
+          ],
+        ),
+      ],
+    );
+  }
+
+  Widget _metricSingleStack(String value, String captionBelow) {
+    final big = _metricCardValueStyle();
+    final small = _metricCardCaptionStyle();
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Text(value, style: big),
+        const SizedBox(height: 4),
+        Text(
+          captionBelow,
+          style: small,
+          maxLines: 2,
+          overflow: TextOverflow.ellipsis,
+        ),
+      ],
+    );
+  }
+
+  String _formatVisitDateTime(DateTime v) {
+    final dd = v.day.toString().padLeft(2, '0');
+    final mm = v.month.toString().padLeft(2, '0');
+    final yyyy = v.year.toString();
+    final hh = v.hour.toString().padLeft(2, '0');
+    final mi = v.minute.toString().padLeft(2, '0');
+    return '$dd.$mm.$yyyy $hh:$mi';
+  }
+
+  Widget _metricNearestVisitFooter(DateTime? nextVisit) {
+    final style = _metricCardCaptionStyle();
+    final nearest = nextVisit == null
+        ? 'Ближайший визит: не запланирован'
+        : 'Ближайший визит: ${_formatVisitDateTime(nextVisit)}';
+    return Text(
+      nearest,
+      style: style,
+      maxLines: 2,
+      overflow: TextOverflow.ellipsis,
+    );
+  }
+
+  (String, String) _nextMedicationCaptionParts(DateTime? nextIn) {
+    if (nextIn == null) {
+      return ('Дальше по расписанию', 'не запланирован');
+    }
+    return ('Дальше по расписанию', _formatVisitDateTime(nextIn));
+  }
+
+  Widget _metricNextMedicationFooter(DateTime? nextIn) {
+    final style = _metricCardCaptionStyle();
+    final parts = _nextMedicationCaptionParts(nextIn);
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Text(
+          parts.$1,
+          style: style,
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+        ),
+        const SizedBox(height: 2),
+        Text(
+          parts.$2,
+          style: style,
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+        ),
+      ],
+    );
+  }
+
   Widget _buildMetricCard(
     double width,
     String label,
-    String value,
     IconData icon,
-    List<Color> gradientColors,
-  ) {
+    List<Color> gradientColors, {
+    required Widget body,
+    Widget? footer,
+  }) {
     return _PressScale(
       scale: 0.98,
       child: SizedBox(
+        height: _kMetricCardHeight,
         width: width,
         child: Container(
-          padding: const EdgeInsets.all(14),
+          padding: const EdgeInsets.fromLTRB(14, 12, 14, 12),
           decoration: BoxDecoration(
             gradient: LinearGradient(
               colors: gradientColors,
@@ -927,13 +1161,25 @@ class _StatisticsScreenState extends State<StatisticsScreen> {
                   ),
                 ],
               ),
-              const SizedBox(height: 8),
-              Text(
-                value,
-                style: GoogleFonts.alegreyaSans(
-                  fontSize: 22,
-                  fontWeight: FontWeight.w800,
-                  color: AppColors.white,
+              const SizedBox(height: 6),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    Expanded(
+                      child: Center(
+                        child: FittedBox(
+                          fit: BoxFit.scaleDown,
+                          alignment: Alignment.center,
+                          child: body,
+                        ),
+                      ),
+                    ),
+                    if (footer != null) ...[
+                      const SizedBox(height: 8),
+                      footer,
+                    ],
+                  ],
                 ),
               ),
             ],
@@ -1325,6 +1571,169 @@ class _StatisticsScreenState extends State<StatisticsScreen> {
               ),
             );
           }),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildAiAnalysisPreviewCard() {
+    final remainingDays = (7 - _trackedDaysCount).clamp(0, 7);
+    final title = remainingDays > 0
+        ? 'Предварительный анализ (низкая точность)'
+        : 'Точность анализа повышается';
+    final subtitle = remainingDays > 0
+        ? 'Сейчас выводы могут быть неточными. Рекомендуем дождаться еще примерно '
+            '$remainingDays ${_plural(remainingDays, 'дня', 'дней', 'дней')} регулярных наблюдений.'
+        : 'Данные почти готовы к устойчивому анализу. Продолжайте вносить записи ежедневно.';
+    return Container(
+      width: double.infinity,
+      margin: const EdgeInsets.only(bottom: 16),
+      padding: const EdgeInsets.all(18),
+      decoration: BoxDecoration(
+        color: AppColors.white,
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: AppColors.orange.withValues(alpha: 0.3)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Icon(Icons.psychology_rounded, color: AppColors.orange, size: 22),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Text(
+                  title,
+                  style: GoogleFonts.alegreyaSans(
+                    fontSize: 16,
+                    fontWeight: FontWeight.w800,
+                    color: AppColors.textDark,
+                  ),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 10),
+          Text(
+            subtitle,
+            style: GoogleFonts.alegreyaSans(
+              fontSize: 14,
+              height: 1.4,
+              color: AppColors.textDark.withValues(alpha: 0.8),
+            ),
+          ),
+          const SizedBox(height: 8),
+          Text(
+            'Показываем блок заранее, чтобы вы видели структуру отчета. Точность повысится после накопления истории.',
+            style: GoogleFonts.alegreyaSans(
+              fontSize: 12.5,
+              color: AppColors.textDark.withValues(alpha: 0.65),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildAdvicePreviewCard() {
+    final remainingDays = (7 - _trackedDaysCount).clamp(0, 7);
+    return Container(
+      width: double.infinity,
+      margin: const EdgeInsets.only(bottom: 24),
+      padding: const EdgeInsets.all(18),
+      decoration: BoxDecoration(
+        color: AppColors.white,
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: AppColors.lightGreen.withValues(alpha: 0.45)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Icon(Icons.lightbulb_outline_rounded,
+                  color: AppColors.lightGreen, size: 24),
+              const SizedBox(width: 10),
+              Text(
+                'Советы (предварительно)',
+                style: GoogleFonts.alegreyaSans(
+                  fontSize: 16,
+                  fontWeight: FontWeight.w800,
+                  color: AppColors.textDark,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 10),
+          Text(
+            'Индивидуальные советы появятся, когда данных станет достаточно. '
+            'Пока рекомендации могут быть слишком общими.',
+            style: GoogleFonts.alegreyaSans(
+              fontSize: 14,
+              height: 1.4,
+              color: AppColors.textDark.withValues(alpha: 0.8),
+            ),
+          ),
+          const SizedBox(height: 8),
+          Text(
+            remainingDays > 0
+                ? 'До более стабильных советов: еще около $remainingDays ${_plural(remainingDays, 'дня', 'дней', 'дней')}.'
+                : 'Советы скоро станут доступнее и точнее.',
+            style: GoogleFonts.alegreyaSans(
+              fontSize: 12.5,
+              color: AppColors.textDark.withValues(alpha: 0.65),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildEvidencePreviewCard() {
+    final remainingDays = (7 - _trackedDaysCount).clamp(0, 7);
+    return Container(
+      width: double.infinity,
+      margin: const EdgeInsets.only(bottom: 16),
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: AppColors.white,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: AppColors.orange.withValues(alpha: 0.25)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              const Icon(Icons.fact_check_outlined, color: AppColors.orange, size: 20),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Text(
+                  'Карточка точности анализа',
+                  style: GoogleFonts.alegreyaSans(
+                    fontSize: 15,
+                    fontWeight: FontWeight.w800,
+                    color: AppColors.textDark,
+                  ),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 8),
+          Text(
+            'Метрики точности пока предварительные: данных еще мало для надежной оценки.',
+            style: GoogleFonts.alegreyaSans(
+              fontSize: 13,
+              color: AppColors.textDark.withValues(alpha: 0.7),
+            ),
+          ),
+          const SizedBox(height: 8),
+          _metricPill(
+            'Статус',
+            remainingDays > 0
+                ? 'накопление истории, ещё ~$remainingDays д'
+                : 'почти готово',
+          ),
         ],
       ),
     );
@@ -1844,6 +2253,21 @@ class _StatisticsScreenState extends State<StatisticsScreen> {
         _data!.appointments.isNotEmpty;
   }
 
+  int get _trackedDaysCount {
+    if (_data == null) return 0;
+    return _buildDayEvidence(_data!).length;
+  }
+
+  /// Кольца и карточки метрик — только после первой записи состояния через «Плюс».
+  bool get _canShowSummaryRings {
+    return _plusDashboardUnlocked && _data != null && _hasAnyData;
+  }
+
+  bool get _canShowDetailedInsights {
+    final stateCount = _data?.stateEntries.length ?? 0;
+    return _trackedDaysCount >= 7 && stateCount >= 12;
+  }
+
   Widget _buildDataSummary() {
     final d = _data!;
     final parts = <String>[];
@@ -1853,21 +2277,24 @@ class _StatisticsScreenState extends State<StatisticsScreen> {
         '${d.stateEntries.length} ${_plural(d.stateEntries.length, 'запись', 'записи', 'записей')} о состоянии всего',
       );
     }
-    // Одна ежедневная схема = отдельная строка календаря на каждый день — это не «17 разных лекарств».
     if (d.medications.isNotEmpty) {
-      parts.add(
-        '${d.medications.length} ${_plural(d.medications.length, 'строка', 'строки', 'строк')} календаря «препарат» (по датам)',
-      );
+      final regimes = countDistinctMedicationRegimens(d.medications);
+      final rows = d.medications.length;
+      if (rows == regimes) {
+        parts.add(
+          '$regimes ${_plural(regimes, 'препарат', 'препарата', 'препаратов')} в календаре',
+        );
+      } else {
+        parts.add(
+          '$regimes ${_plural(regimes, 'схема приёма', 'схемы приёма', 'схем приёма')} '
+          '($rows ${_plural(rows, 'день в календаре', 'дня в календаре', 'дней в календаре')})',
+        );
+      }
     }
     if (d.appointments.isNotEmpty) {
       parts.add(
         '${d.appointments.length} ${_plural(d.appointments.length, 'строка', 'строки', 'строк')} календаря «визит» (по датам)',
       );
-    }
-    if (_profile.hasConditions) {
-      parts.add('режим: ${_profile.conditions.map((e) => e.label).join(', ')}');
-    } else {
-      parts.add('режим: без заболевания');
     }
     if (parts.isEmpty) return const SizedBox.shrink();
     return Padding(
@@ -1987,6 +2414,158 @@ class _StatisticsScreenState extends State<StatisticsScreen> {
             ),
           ],
         ),
+      ),
+    );
+  }
+
+  Widget _buildStartTrackingCard() {
+    return Container(
+      width: double.infinity,
+      margin: const EdgeInsets.only(bottom: 16),
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: AppColors.white,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: AppColors.orange.withValues(alpha: 0.35)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              const Icon(Icons.edit_note_rounded, color: AppColors.orange),
+              const SizedBox(width: 8),
+              Text(
+                'Начните с первой записи',
+                style: GoogleFonts.alegreyaSans(
+                  fontSize: 16,
+                  fontWeight: FontWeight.w800,
+                  color: AppColors.textDark,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 8),
+          Text(
+            'Чтобы статистика появилась, добавьте хотя бы одну запись о состоянии через кнопку ниже.',
+            style: GoogleFonts.alegreyaSans(
+              fontSize: 14,
+              height: 1.4,
+              color: AppColors.textDark.withValues(alpha: 0.8),
+            ),
+          ),
+          const SizedBox(height: 12),
+          FilledButton.icon(
+            style: FilledButton.styleFrom(
+              backgroundColor: AppColors.orange,
+              foregroundColor: AppColors.white,
+            ),
+            onPressed: () => showStateCategoriesSheet(context),
+            icon: const Icon(Icons.add_rounded),
+            label: const Text('Добавить запись'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildWarmupPlaceholder() {
+    return Container(
+      width: double.infinity,
+      margin: const EdgeInsets.only(bottom: 16),
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: AppColors.white,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: AppColors.orange.withValues(alpha: 0.28)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              const Icon(Icons.hourglass_top_rounded, color: AppColors.orange),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Text(
+                  _plusDashboardUnlocked
+                      ? 'Собираем первые данные'
+                      : 'Откройте сводку через «Плюс»',
+                  style: GoogleFonts.alegreyaSans(
+                    fontSize: 16,
+                    fontWeight: FontWeight.w800,
+                    color: AppColors.textDark,
+                  ),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 8),
+          Text(
+            _plusDashboardUnlocked
+                ? 'Пока данных мало для стабильной статистики. Добавьте несколько отметок состояния в разные дни — кольца и тренды станут информативнее.'
+                : 'Кольца настроения/сна/энергии и карточки «Заметки», «Таблетки», «Приёмы» и «Сегодня» появятся после первой сохранённой записи состояния через круглую кнопку «Плюс» внизу (настроение, сон, энергия и другие категории).',
+            style: GoogleFonts.alegreyaSans(
+              fontSize: 14,
+              height: 1.4,
+              color: AppColors.textDark.withValues(alpha: 0.78),
+            ),
+          ),
+          const SizedBox(height: 10),
+          Text(
+            _plusDashboardUnlocked
+                ? 'Сейчас собрано: $_trackedDaysCount ${_plural(_trackedDaysCount, 'день', 'дня', 'дней')} наблюдений'
+                : 'Заметки и календарь можно вести и раньше — сводка разблокируется отдельно после отметки через «Плюс».',
+            style: GoogleFonts.alegreyaSans(
+              fontSize: 13,
+              color: AppColors.textDark.withValues(alpha: 0.7),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildGrowingDataPlaceholder() {
+    final needDays = (7 - _trackedDaysCount).clamp(0, 7);
+    return Container(
+      width: double.infinity,
+      margin: const EdgeInsets.only(bottom: 16),
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: AppColors.white,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: AppColors.lightGreen.withValues(alpha: 0.45)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              const Icon(Icons.insights_rounded, color: AppColors.lightGreen),
+              const SizedBox(width: 8),
+              Text(
+                'База растет, скоро полный анализ',
+                style: GoogleFonts.alegreyaSans(
+                  fontSize: 16,
+                  fontWeight: FontWeight.w800,
+                  color: AppColors.textDark,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 8),
+          Text(
+            needDays == 0
+                ? 'Данных почти достаточно. Продолжайте вносить записи регулярно, чтобы повысить точность советов.'
+                : 'Для более надежных советов нужно еще примерно $needDays ${_plural(needDays, 'день', 'дня', 'дней')} наблюдений.',
+            style: GoogleFonts.alegreyaSans(
+              fontSize: 14,
+              height: 1.4,
+              color: AppColors.textDark.withValues(alpha: 0.78),
+            ),
+          ),
+        ],
       ),
     );
   }

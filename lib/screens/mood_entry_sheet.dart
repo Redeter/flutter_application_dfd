@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 
 import '../models/state_entries.dart';
+import '../services/plus_dashboard_unlock_service.dart';
 import '../services/state_storage.dart';
 import '../theme/app_colors.dart';
 import '../widgets/asset_scale_slider.dart';
@@ -289,6 +290,7 @@ class _MoodEntrySheetState extends State<_MoodEntrySheet> {
       factors: _selected.toList(),
     );
     await StateStorage.instance.save(entry);
+    await PlusDashboardUnlockService.instance.markUnlockedAfterPlusEntry();
     if (mounted) {
       Navigator.pop(context);
       ScaffoldMessenger.of(context).showSnackBar(

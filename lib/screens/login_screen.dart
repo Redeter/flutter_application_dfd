@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 
+import '../neural/neural_insights_service.dart';
 import '../services/auth_service.dart';
 import 'registration_screen.dart';
 import '../theme/app_colors.dart';
@@ -20,20 +21,26 @@ class LoginScreen extends StatefulWidget {
 class _LoginScreenState extends State<LoginScreen> {
   final _usernameController = TextEditingController();
   final _passwordController = TextEditingController();
+  final _formKey = GlobalKey<FormState>();
+  static final RegExp _usernameRegExp = RegExp(r'^[a-zA-Z0-9._-]{3,32}$');
   bool _loading = false;
+  bool _rememberMe = true;
 
   Future<void> _login() async {
     final username = _usernameController.text.trim();
     final password = _passwordController.text;
-    if (username.isEmpty || password.isEmpty) return;
+    final isValid = _formKey.currentState?.validate() ?? false;
+    if (!isValid) return;
     setState(() => _loading = true);
     final ok = await AuthService.instance.login(
       username: username,
       password: password,
+      rememberSession: _rememberMe,
     );
     if (!mounted) return;
     setState(() => _loading = false);
     if (ok) {
+      await NeuralInsightsService.instance.reloadForActiveUser();
       widget.onSuccess();
       return;
     }
@@ -58,72 +65,123 @@ class _LoginScreenState extends State<LoginScreen> {
           padding: const EdgeInsets.all(20),
           child: ConstrainedBox(
             constraints: const BoxConstraints(maxWidth: 420),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                Text(
-                  'Вход в приложение',
-                  textAlign: TextAlign.center,
-                  style: GoogleFonts.alegreyaSans(
-                    fontSize: 28,
-                    fontWeight: FontWeight.w800,
-                    color: AppColors.textDark,
+            child: Form(
+              key: _formKey,
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  Text(
+                    'rAIise',
+                    textAlign: TextAlign.center,
+                    style: GoogleFonts.alegreyaSans(
+                      fontSize: 28,
+                      fontWeight: FontWeight.w800,
+                      color: AppColors.textDark,
+                    ),
                   ),
-                ),
-                const SizedBox(height: 18),
-                TextField(
-                  controller: _usernameController,
-                  decoration: const InputDecoration(
-                    labelText: 'Имя пользователя',
-                    border: OutlineInputBorder(),
+                  const SizedBox(height: 18),
+                  TextFormField(
+                    controller: _usernameController,
+                    cursorColor: Colors.black,
+                    decoration: _inputDecoration('Имя пользователя'),
+                    validator: (value) {
+                      final usernameValue = (value ?? '').trim();
+                      if (usernameValue.isEmpty) {
+                        return 'Введите имя пользователя';
+                      }
+                      if (!_usernameRegExp.hasMatch(usernameValue)) {
+                        return 'Логин: 3-32 символа, буквы/цифры/._-';
+                      }
+                      return null;
+                    },
                   ),
-                ),
-                const SizedBox(height: 12),
-                TextField(
-                  controller: _passwordController,
-                  obscureText: true,
-                  decoration: const InputDecoration(
-                    labelText: 'Пароль',
-                    border: OutlineInputBorder(),
+                  const SizedBox(height: 12),
+                  TextFormField(
+                    controller: _passwordController,
+                    obscureText: true,
+                    cursorColor: Colors.black,
+                    decoration: _inputDecoration('Пароль'),
+                    validator: (value) {
+                      if ((value ?? '').isEmpty) return 'Введите пароль';
+                      return null;
+                    },
                   ),
-                ),
-                const SizedBox(height: 14),
-                FilledButton(
-                  onPressed: _loading ? null : _login,
-                  style: FilledButton.styleFrom(
-                    backgroundColor: AppColors.orange,
+                  CheckboxListTile(
+                    value: _rememberMe,
+                    onChanged: _loading
+                        ? null
+                        : (value) {
+                            setState(() => _rememberMe = value ?? false);
+                          },
+                    contentPadding: EdgeInsets.zero,
+                    side: const BorderSide(color: Colors.black54),
+                    activeColor: Colors.black,
+                    checkColor: Colors.white,
+                    controlAffinity: ListTileControlAffinity.leading,
+                    title: const Text(
+                      'Запомнить меня',
+                      style: TextStyle(color: Colors.black87),
+                    ),
                   ),
-                  child: _loading
-                      ? const SizedBox(
-                          height: 18,
-                          width: 18,
-                          child: CircularProgressIndicator(strokeWidth: 2),
-                        )
-                      : const Text('Войти'),
-                ),
-                const SizedBox(height: 10),
-                OutlinedButton(
-                  onPressed: _loading
-                      ? null
-                      : () async {
-                          await Navigator.push(
-                            context,
-                            MaterialPageRoute(
-                              builder: (_) => RegistrationScreen(
-                                onCompleted: () {
-                                  Navigator.pop(context);
-                                  widget.onSuccess();
-                                },
+                  const SizedBox(height: 14),
+                  FilledButton(
+                    onPressed: _loading ? null : _login,
+                    style: FilledButton.styleFrom(
+                      backgroundColor: AppColors.orange,
+                    ),
+                    child: _loading
+                        ? const SizedBox(
+                            height: 18,
+                            width: 18,
+                            child: CircularProgressIndicator(strokeWidth: 2),
+                          )
+                        : const Text('Войти'),
+                  ),
+                  const SizedBox(height: 10),
+                  OutlinedButton(
+                    onPressed: _loading
+                        ? null
+                        : () async {
+                            await Navigator.push(
+                              context,
+                              MaterialPageRoute(
+                                builder: (_) => RegistrationScreen(
+                                  onCompleted: () {
+                                    Navigator.pop(context);
+                                    widget.onSuccess();
+                                  },
+                                ),
                               ),
-                            ),
-                          );
-                        },
-                  child: const Text('Зарегистрироваться'),
-                ),
-              ],
+                            );
+                          },
+                    style: OutlinedButton.styleFrom(
+                      foregroundColor: Colors.black,
+                      side: const BorderSide(color: Colors.black54),
+                    ),
+                    child: const Text('Зарегистрироваться'),
+                  ),
+                ],
+              ),
             ),
           ),
         ),
+      ),
+    );
+  }
+
+  InputDecoration _inputDecoration(String label) {
+    return InputDecoration(
+      labelText: label,
+      labelStyle: const TextStyle(color: Colors.black),
+      floatingLabelStyle: const TextStyle(color: Colors.black),
+      enabledBorder: const OutlineInputBorder(
+        borderSide: BorderSide(color: Colors.black54),
+      ),
+      focusedBorder: const OutlineInputBorder(
+        borderSide: BorderSide(color: Colors.black, width: 1.5),
+      ),
+      border: const OutlineInputBorder(
+        borderSide: BorderSide(color: Colors.black54),
       ),
     );
   }

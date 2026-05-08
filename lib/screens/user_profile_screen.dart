@@ -9,6 +9,7 @@ import '../models/user_profile.dart';
 import '../services/calendar_storage.dart';
 import '../services/foundation_service.dart';
 import '../services/insights_service.dart';
+import '../neural/neural_insights_service.dart';
 import '../services/auth_service.dart';
 import '../services/user_profile_service.dart';
 import 'auth_gate_screen.dart';
@@ -114,6 +115,7 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
     );
     if (confirm != true) return;
     await AuthService.instance.logout();
+    await NeuralInsightsService.instance.reloadForActiveUser();
     if (!mounted) return;
     Navigator.of(context).pushAndRemoveUntil(
       MaterialPageRoute(builder: (_) => const AuthGateScreen()),

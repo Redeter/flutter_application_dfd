@@ -1,5 +1,119 @@
+import 'package:flutter/material.dart';
+
 import '../models/aggregated_data.dart';
+import '../models/calendar_entry.dart';
 import '../models/state_entries.dart';
+
+/// Ключ одной схемы приёма: как в профиле «Принимаемые препараты»
+/// ([seriesId] при многодневной серии, иначе имя+дозировка — не уникальный [id] строки).
+String medicationRegimenKey(Medication m) {
+  final sid = m.seriesId;
+  if (sid != null && sid.isNotEmpty) return sid;
+  return '${m.name.toLowerCase()}|${m.dosage}';
+}
+
+/// Сколько разных препаратов/схем в списке (не число строк календаря по дням).
+int countDistinctMedicationRegimens(Iterable<Medication> meds) {
+  final seen = <String>{};
+  for (final m in meds) {
+    seen.add(medicationRegimenKey(m));
+  }
+  return seen.length;
+}
+
+/// Разные схемы, у которых есть хотя бы один день приёма не раньше [today] (как список в профиле).
+int countDistinctActiveMedicationRegimens(AggregatedData data, DateTime today) {
+  final d0 = _calendarDay(today);
+  final seen = <String>{};
+  for (final m in data.medications) {
+    final md = _calendarDay(m.date);
+    if (md.isBefore(d0)) continue;
+    seen.add(medicationRegimenKey(m));
+  }
+  return seen.length;
+}
+
+DateTime _calendarDay(DateTime d) => DateTime(d.year, d.month, d.day);
+
+/// Заметки с датой [day] (локальный календарный день).
+int countNotesOnCalendarDay(AggregatedData data, DateTime day) {
+  final d0 = _calendarDay(day);
+  var n = 0;
+  for (final note in data.notes) {
+    if (_calendarDay(note.date) == d0) n++;
+  }
+  return n;
+}
+
+/// Запланированные слоты приёма на календарный день [day] (по расписанию препаратов).
+int countMedicationDosesOnCalendarDay(AggregatedData data, DateTime day) {
+  final d0 = _calendarDay(day);
+  var n = 0;
+  for (final m in data.medications) {
+    if (_calendarDay(m.date) != d0) continue;
+    if (m.schedule.isEmpty) {
+      n += 1;
+    } else {
+      n += m.schedule.length;
+    }
+  }
+  return n;
+}
+
+/// Ближайший приём не раньше [now] по всем записям календаря препаратов.
+DateTime? nextMedicationIntakeOnOrAfter(AggregatedData data, DateTime now) {
+  DateTime? best;
+  for (final m in data.medications) {
+    final base = _calendarDay(m.date);
+    final times = m.schedule.isEmpty
+        ? <TimeOfDay>[m.time]
+        : [for (final dose in m.schedule) dose.time];
+    for (final t in times) {
+      final dt = DateTime(base.year, base.month, base.day, t.hour, t.minute);
+      if (dt.isBefore(now)) continue;
+      if (best == null || dt.isBefore(best)) best = dt;
+    }
+  }
+  return best;
+}
+
+/// Визиты с датой [day] (календарный день записи).
+int countAppointmentsOnCalendarDay(AggregatedData data, DateTime day) {
+  final d0 = _calendarDay(day);
+  var n = 0;
+  for (final a in data.appointments) {
+    if (_calendarDay(a.date) == d0) n++;
+  }
+  return n;
+}
+
+/// Разные схемы препаратов, у которых есть строка календаря в день [day].
+int countDistinctMedicationRegimensOnDay(AggregatedData data, DateTime day) {
+  final d0 = _calendarDay(day);
+  final seen = <String>{};
+  for (final m in data.medications) {
+    if (_calendarDay(m.date) != d0) continue;
+    seen.add(medicationRegimenKey(m));
+  }
+  return seen.length;
+}
+
+/// Ближайший визит к врачу не раньше [now].
+DateTime? nextAppointmentVisitOnOrAfter(AggregatedData data, DateTime now) {
+  DateTime? best;
+  for (final a in data.appointments) {
+    final dt = DateTime(
+      a.date.year,
+      a.date.month,
+      a.date.day,
+      a.time.hour,
+      a.time.minute,
+    );
+    if (dt.isBefore(now)) continue;
+    if (best == null || dt.isBefore(best)) best = dt;
+  }
+  return best;
+}
 
 /// Локальная статистика за выбранный период (без ИИ).
 class LocalStats {
@@ -84,11 +198,15 @@ LocalStats computeLocalStats(
     if (!day.isBefore(startDay) && !day.isAfter(endDay)) notesInRange++;
   }
 
-  int medicationsInRange = 0;
+  /// Одна добавленная схема хранится как много строк (по дням) с одним [Medication.seriesId].
+  /// В сводке считаем разные схемы в периоде, а не строки календаря.
+  final medsInPeriodKeys = <String>{};
   for (final m in data.medications) {
     final day = DateTime(m.date.year, m.date.month, m.date.day);
-    if (!day.isBefore(startDay) && !day.isAfter(endDay)) medicationsInRange++;
+    if (day.isBefore(startDay) || day.isAfter(endDay)) continue;
+    medsInPeriodKeys.add(medicationRegimenKey(m));
   }
+  final medicationsInRange = medsInPeriodKeys.length;
 
   int appointmentsInRange = 0;
   for (final a in data.appointments) {

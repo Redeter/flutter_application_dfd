@@ -3,6 +3,7 @@ import 'package:flutter_svg/flutter_svg.dart';
 import 'package:google_fonts/google_fonts.dart';
 
 import '../models/state_entries.dart';
+import '../services/plus_dashboard_unlock_service.dart';
 import '../services/state_storage.dart';
 import '../theme/app_colors.dart';
 
@@ -422,6 +423,7 @@ class _NutritionEntrySheetState extends State<_NutritionEntrySheet> {
       emotionalConnection: _emotionalSel.toList(),
     );
     await StateStorage.instance.save(entry);
+    await PlusDashboardUnlockService.instance.markUnlockedAfterPlusEntry();
     if (mounted) {
       Navigator.pop(context);
       ScaffoldMessenger.of(context).showSnackBar(

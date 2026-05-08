@@ -8,6 +8,7 @@ import 'package:timezone/timezone.dart' as tz;
 
 import '../constants/calendar_reminders.dart';
 import '../models/calendar_entry.dart';
+import 'auth_service.dart';
 import 'calendar_storage.dart';
 
 
@@ -111,6 +112,11 @@ class NotificationService {
     if (kIsWeb) return;
     await init();
     await _plugin.cancelAll();
+    final sessionUserId = await AuthService.instance.sessionUserId();
+    if (sessionUserId == null || sessionUserId.isEmpty) {
+      // Пользователь вышел: не пытаемся читать user-scoped календарь без сессии.
+      return;
+    }
     final entries = await CalendarStorage.instance.loadAll();
     final now = DateTime.now();
     final horizon = now.add(const Duration(days: _kScheduleHorizonDays));

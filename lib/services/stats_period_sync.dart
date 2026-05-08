@@ -1,5 +1,7 @@
 import 'package:shared_preferences/shared_preferences.dart';
 
+import 'user_scoped_store.dart';
+
 /// Диапазон недели статистики (Пн–Вс), чтобы фундамент мог считаться на тех же данных.
 class StatsPeriodSync {
   StatsPeriodSync._();
@@ -26,14 +28,18 @@ class StatsPeriodSync {
   static Future<void> persistWeekContaining(DateTime selectedDay) async {
     final (s, e) = weekRangeContaining(selectedDay);
     final prefs = await SharedPreferences.getInstance();
-    await prefs.setString(_kStart, s.toIso8601String());
-    await prefs.setString(_kEnd, e.toIso8601String());
+    final startKey = await UserScopedStore.scopedKey(_kStart);
+    final endKey = await UserScopedStore.scopedKey(_kEnd);
+    await prefs.setString(startKey, s.toIso8601String());
+    await prefs.setString(endKey, e.toIso8601String());
   }
 
   static Future<(DateTime?, DateTime?)> loadRange() async {
     final prefs = await SharedPreferences.getInstance();
-    final a = prefs.getString(_kStart);
-    final b = prefs.getString(_kEnd);
+    final startKey = await UserScopedStore.scopedKey(_kStart);
+    final endKey = await UserScopedStore.scopedKey(_kEnd);
+    final a = prefs.getString(startKey);
+    final b = prefs.getString(endKey);
     if (a == null || b == null) return (null, null);
     return (DateTime.tryParse(a), DateTime.tryParse(b));
   }

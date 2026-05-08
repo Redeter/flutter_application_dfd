@@ -6,6 +6,7 @@ import '../models/aggregated_data.dart';
 import '../models/insight_result.dart';
 import '../models/local_quality_metrics.dart';
 import '../models/state_entries.dart';
+import 'user_scoped_store.dart';
 
 class QualityMetricsService {
   QualityMetricsService._();
@@ -17,7 +18,8 @@ class QualityMetricsService {
 
   Future<void> registerInsightShown(InsightResult insight, AggregatedData data) async {
     final prefs = await SharedPreferences.getInstance();
-    final events = await _loadListMap(prefs, _keyInsightEvents);
+    final insightKey = await UserScopedStore.scopedKey(_keyInsightEvents);
+    final events = await _loadListMap(prefs, insightKey);
     events.add({
       'ts': DateTime.now().toIso8601String(),
       'confidence': insight.confidence,
@@ -28,7 +30,7 @@ class QualityMetricsService {
       'avgEnergy': _avgEnergy(data),
       'stateSummary': insight.stateSummary,
     });
-    await _saveTrimmed(prefs, _keyInsightEvents, events, 120);
+    await _saveTrimmed(prefs, insightKey, events, 120);
   }
 
   Future<void> registerRecommendationFeedback({
@@ -38,7 +40,8 @@ class QualityMetricsService {
     String? recommendationVariantKey,
   }) async {
     final prefs = await SharedPreferences.getInstance();
-    final fb = await _loadListMap(prefs, _keyRecFeedback);
+    final fbKey = await UserScopedStore.scopedKey(_keyRecFeedback);
+    final fb = await _loadListMap(prefs, fbKey);
     fb.add({
       'ts': DateTime.now().toIso8601String(),
       'recommendation': recommendation,
@@ -47,13 +50,14 @@ class QualityMetricsService {
       if (recommendationVariantKey != null && recommendationVariantKey.isNotEmpty)
         'variantKey': recommendationVariantKey,
     });
-    await _saveTrimmed(prefs, _keyRecFeedback, fb, 300);
+    await _saveTrimmed(prefs, fbKey, fb, 300);
   }
 
   /// Смещение выбора варианта формулировки: положительное — чаще помечали «полезно».
   Future<double> recommendationVariantBias(String variantKey) async {
     final prefs = await SharedPreferences.getInstance();
-    final fb = await _loadListMap(prefs, _keyRecFeedback);
+    final fbKey = await UserScopedStore.scopedKey(_keyRecFeedback);
+    final fb = await _loadListMap(prefs, fbKey);
     final subset = fb.where((e) => '${e['variantKey']}' == variantKey).toList();
     if (subset.length < 2) return 0.0;
     final helpful = subset.where((e) => e['helpful'] == true).length / subset.length;
@@ -62,8 +66,11 @@ class QualityMetricsService {
 
   Future<LocalQualityMetrics> getMetrics() async {
     final prefs = await SharedPreferences.getInstance();
-    final events = await _loadListMap(prefs, _keyInsightEvents);
-    final fb = await _loadListMap(prefs, _keyRecFeedback);
+    final insightKey = await UserScopedStore.scopedKey(_keyInsightEvents);
+    final fbKey = await UserScopedStore.scopedKey(_keyRecFeedback);
+    final offlineKey = await UserScopedStore.scopedKey(_keyOfflineValidation);
+    final events = await _loadListMap(prefs, insightKey);
+    final fb = await _loadListMap(prefs, fbKey);
     if (events.isEmpty) return const LocalQualityMetrics();
 
     final helpful = fb.where((e) => e['helpful'] == true).length;
@@ -76,7 +83,7 @@ class QualityMetricsService {
     final insightStability = _computeInsightStability(events);
     final coverage = _computeCoverage(events);
 
-    final offlineRaw = prefs.getString(_keyOfflineValidation);
+    final offlineRaw = prefs.getString(offlineKey);
     double offlineScore = 0;
     int offlineCases = 0;
     if (offlineRaw != null) {
@@ -106,7 +113,8 @@ class QualityMetricsService {
     required int cases,
   }) async {
     final prefs = await SharedPreferences.getInstance();
-    await prefs.setString(_keyOfflineValidation, jsonEncode({
+    final offlineKey = await UserScopedStore.scopedKey(_keyOfflineValidation);
+    await prefs.setString(offlineKey, jsonEncode({
       'score': score,
       'cases': cases,
       'ts': DateTime.now().toIso8601String(),
@@ -116,7 +124,8 @@ class QualityMetricsService {
   /// Множитель ранга совета по истории helpful/accepted для похожих текстов (без роста сети).
   Future<double> recommendationScoreMultiplier(String recommendation) async {
     final prefs = await SharedPreferences.getInstance();
-    final fb = await _loadListMap(prefs, _keyRecFeedback);
+    final fbKey = await UserScopedStore.scopedKey(_keyRecFeedback);
+    final fb = await _loadListMap(prefs, fbKey);
     if (fb.length < 6) return 1.0;
     final needle = recommendation.length > 18 ? recommendation.substring(0, 18) : recommendation;
     if (needle.length < 8) return 1.0;
@@ -134,7 +143,8 @@ class QualityMetricsService {
 
   Future<double> calibrateConfidence(double rawConfidence) async {
     final prefs = await SharedPreferences.getInstance();
-    final fb = await _loadListMap(prefs, _keyRecFeedback);
+    final fbKey = await UserScopedStore.scopedKey(_keyRecFeedback);
+    final fb = await _loadListMap(prefs, fbKey);
     if (fb.length < 8) return rawConfidence;
 
     final helpfulRate = fb.where((f) => f['helpful'] == true).length / fb.length;

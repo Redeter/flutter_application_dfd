@@ -5,6 +5,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import '../models/aggregated_data.dart';
 import '../models/insight_result.dart';
 import '../models/state_entries.dart';
+import 'user_scoped_store.dart';
 
 /// Локальный анализ без облака. Извлекает ключевые слова, формирует резюме
 /// и рекомендации. Паттерны сохраняются и «обучают» систему под пользователя.
@@ -333,7 +334,8 @@ class LocalInsightsService {
   Future<Map<String, dynamic>> _loadPatterns() async {
     try {
       final prefs = await SharedPreferences.getInstance();
-      final raw = prefs.getString(_keyPatterns);
+      final pKey = await UserScopedStore.scopedKey(_keyPatterns);
+      final raw = prefs.getString(pKey);
       if (raw == null) return {};
       return Map<String, dynamic>.from(jsonDecode(raw) as Map);
     } catch (_) {
@@ -400,6 +402,7 @@ class LocalInsightsService {
 
   Future<void> _updatePatterns(AggregatedData d) async {
     final prefs = await SharedPreferences.getInstance();
+    final pKey = await UserScopedStore.scopedKey(_keyPatterns);
     final patterns = <String, dynamic>{};
 
     final moodByWeekday = <int, List<int>>{};
@@ -456,7 +459,7 @@ class LocalInsightsService {
     }
 
     if (patterns.isNotEmpty) {
-      await prefs.setString(_keyPatterns, jsonEncode(patterns));
+      await prefs.setString(pKey, jsonEncode(patterns));
     }
   }
 }
