@@ -13,6 +13,7 @@ class UnifiedHorizontalDateStrip extends StatelessWidget {
     required this.days,
     required this.selectedDay,
     required this.onDaySelected,
+    this.markedDays = const <DateTime>{},
     this.stripHeight = defaultStripHeight,
     this.horizontalPadding = kPeachAppBarHorizontalInset,
     this.separatorWidth = 6,
@@ -21,6 +22,7 @@ class UnifiedHorizontalDateStrip extends StatelessWidget {
   final List<DateTime> days;
   final DateTime selectedDay;
   final ValueChanged<DateTime> onDaySelected;
+  final Set<DateTime> markedDays;
 
   final double stripHeight;
   final double horizontalPadding;
@@ -51,6 +53,7 @@ class UnifiedHorizontalDateStrip extends StatelessWidget {
           final d = days[index];
           final isToday = sameCalendarDay(d, todayNorm);
           final selected = sameCalendarDay(d, selectedDay);
+          final marked = markedDays.any((m) => sameCalendarDay(m, d));
 
           return GestureDetector(
             onTap: () => onDaySelected(d),
@@ -59,10 +62,19 @@ class UnifiedHorizontalDateStrip extends StatelessWidget {
                     day: d,
                     isToday: isToday,
                     circleSize: _kCircle,
+                    marked: marked,
                   )
                 : (isToday
-                    ? _TodayUnselectedFrame(day: d, circleSize: _kCircle)
-                    : _DayCircle(day: d, circleSize: _kCircle)),
+                    ? _TodayUnselectedFrame(
+                        day: d,
+                        circleSize: _kCircle,
+                        marked: marked,
+                      )
+                    : _DayCircle(
+                        day: d,
+                        circleSize: _kCircle,
+                        marked: marked,
+                      )),
           );
         },
       ),
@@ -74,15 +86,20 @@ class _DayCircle extends StatelessWidget {
   const _DayCircle({
     required this.day,
     required this.circleSize,
+    required this.marked,
   });
 
   final DateTime day;
   final double circleSize;
+  final bool marked;
 
   @override
   Widget build(BuildContext context) {
     final wd = _weekdaysShortRu[day.weekday - 1];
-    return Column(
+    return Stack(
+      clipBehavior: Clip.none,
+      children: [
+        Column(
       mainAxisAlignment: MainAxisAlignment.center,
       mainAxisSize: MainAxisSize.min,
       children: [
@@ -102,8 +119,8 @@ class _DayCircle extends StatelessWidget {
             shape: BoxShape.circle,
             color: AppColors.white,
             border: Border.all(
-              color: const Color(0xFFFFE0C8),
-              width: 1.6,
+              color: marked ? AppColors.orange : const Color(0xFFFFE0C8),
+              width: marked ? 2.2 : 1.6,
             ),
             boxShadow: [
               BoxShadow(
@@ -125,6 +142,21 @@ class _DayCircle extends StatelessWidget {
           ),
         ),
       ],
+    ),
+        if (marked)
+          Positioned(
+            right: 2,
+            top: 26,
+            child: Container(
+              width: 8,
+              height: 8,
+              decoration: const BoxDecoration(
+                color: AppColors.orange,
+                shape: BoxShape.circle,
+              ),
+            ),
+          ),
+      ],
     );
   }
 }
@@ -134,11 +166,13 @@ class _SelectedDatePill extends StatelessWidget {
     required this.day,
     required this.isToday,
     required this.circleSize,
+    required this.marked,
   });
 
   final DateTime day;
   final bool isToday;
   final double circleSize;
+  final bool marked;
 
   @override
   Widget build(BuildContext context) {
@@ -169,7 +203,10 @@ class _SelectedDatePill extends StatelessWidget {
             ),
           ),
           const SizedBox(height: 7),
-          Container(
+          Stack(
+            clipBehavior: Clip.none,
+            children: [
+              Container(
             width: circleSize,
             height: circleSize,
             decoration: const BoxDecoration(
@@ -187,6 +224,23 @@ class _SelectedDatePill extends StatelessWidget {
               ),
             ),
           ),
+              if (marked)
+                const Positioned(
+                  right: 0,
+                  bottom: -2,
+                  child: SizedBox(
+                    width: 8,
+                    height: 8,
+                    child: DecoratedBox(
+                      decoration: BoxDecoration(
+                        color: AppColors.orange,
+                        shape: BoxShape.circle,
+                      ),
+                    ),
+                  ),
+                ),
+            ],
+          ),
         ],
       ),
     );
@@ -198,10 +252,12 @@ class _TodayUnselectedFrame extends StatelessWidget {
   const _TodayUnselectedFrame({
     required this.day,
     required this.circleSize,
+    required this.marked,
   });
 
   final DateTime day;
   final double circleSize;
+  final bool marked;
 
   @override
   Widget build(BuildContext context) {
@@ -226,13 +282,19 @@ class _TodayUnselectedFrame extends StatelessWidget {
             ),
           ),
           const SizedBox(height: 7),
-          Container(
+          Stack(
+            clipBehavior: Clip.none,
+            children: [
+              Container(
             width: circleSize,
             height: circleSize,
             decoration: BoxDecoration(
               shape: BoxShape.circle,
               color: AppColors.white,
-              border: Border.all(color: const Color(0xFFFFE0C8), width: 1.6),
+              border: Border.all(
+                color: marked ? AppColors.orange : const Color(0xFFFFE0C8),
+                width: marked ? 2.2 : 1.6,
+              ),
               boxShadow: [
                 BoxShadow(
                   color: Colors.black.withValues(alpha: 0.05),
@@ -251,6 +313,23 @@ class _TodayUnselectedFrame extends StatelessWidget {
                 ),
               ),
             ),
+          ),
+              if (marked)
+                const Positioned(
+                  right: 0,
+                  bottom: -2,
+                  child: SizedBox(
+                    width: 8,
+                    height: 8,
+                    child: DecoratedBox(
+                      decoration: BoxDecoration(
+                        color: AppColors.orange,
+                        shape: BoxShape.circle,
+                      ),
+                    ),
+                  ),
+                ),
+            ],
           ),
         ],
       ),

@@ -97,6 +97,7 @@ class CalendarScreen extends StatefulWidget {
 class _CalendarScreenState extends State<CalendarScreen> {
   DateTime _selectedDate = DateTime.now();
   List<CalendarEntry> _entries = [];
+  Set<DateTime> _appointmentMarkedDays = const <DateTime>{};
 
   @override
   void initState() {
@@ -109,9 +110,17 @@ class _CalendarScreenState extends State<CalendarScreen> {
   Future<void> _loadEntries() async {
     final day = _dayOnly(_selectedDate);
     final list = await CalendarStorage.instance.loadForDate(day);
+    final all = await CalendarStorage.instance.loadAll();
+    final marked = all
+        .whereType<Appointment>()
+        .map((a) => DateTime(a.date.year, a.date.month, a.date.day))
+        .toSet();
     if (!mounted) return;
     if (_dayOnly(_selectedDate) != day) return;
-    setState(() => _entries = list);
+    setState(() {
+      _entries = list;
+      _appointmentMarkedDays = marked;
+    });
   }
 
   /// Сначала обновляем список на экране, затем пересчитываем пуши в фоне — карточка меняется сразу.
@@ -138,6 +147,7 @@ class _CalendarScreenState extends State<CalendarScreen> {
       MaterialPageRoute(
         builder: (_) => CalendarFullScreen(
           selectedDate: _selectedDate,
+          appointmentDays: _appointmentMarkedDays,
           onDateSelected: _onDateChanged,
           onOpenDay: (_) => _loadEntries(),
           onAddAppointment: (d) async {
@@ -308,7 +318,19 @@ class _CalendarScreenState extends State<CalendarScreen> {
                   padding: const EdgeInsets.only(
                     bottom: kPeachHeaderStripBottomPadding,
                   ),
-                  child: _buildDateStripInner(),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      _buildDateStripInner(),
+                      const SizedBox(height: 6),
+                      Padding(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: kPeachAppBarHorizontalInset,
+                        ),
+                        child: _buildCalendarLegend(),
+                      ),
+                    ],
+                  ),
                 ),
               ],
             ),
@@ -413,6 +435,31 @@ class _CalendarScreenState extends State<CalendarScreen> {
       days: days,
       selectedDay: _selectedDate,
       onDaySelected: _onDateChanged,
+      markedDays: _appointmentMarkedDays,
+    );
+  }
+
+  Widget _buildCalendarLegend() {
+    return Row(
+      children: [
+        Container(
+          width: 8,
+          height: 8,
+          decoration: const BoxDecoration(
+            color: AppColors.orange,
+            shape: BoxShape.circle,
+          ),
+        ),
+        const SizedBox(width: 6),
+        Text(
+          'Есть посещение врача',
+          style: GoogleFonts.alegreyaSans(
+            fontSize: 12,
+            fontWeight: FontWeight.w600,
+            color: AppColors.textDark.withValues(alpha: 0.78),
+          ),
+        ),
+      ],
     );
   }
 

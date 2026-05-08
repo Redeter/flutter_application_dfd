@@ -22,12 +22,14 @@ class CalendarFullScreen extends StatefulWidget {
   const CalendarFullScreen({
     super.key,
     required this.selectedDate,
+    required this.appointmentDays,
     required this.onDateSelected,
     required this.onOpenDay,
     this.onAddAppointment,
   });
 
   final DateTime selectedDate;
+  final Set<DateTime> appointmentDays;
   final ValueChanged<DateTime> onDateSelected;
   final ValueChanged<DateTime> onOpenDay;
   final ValueChanged<DateTime>? onAddAppointment;
@@ -217,6 +219,7 @@ class _CalendarFullScreenState extends State<CalendarFullScreen> {
         return _MonthCard(
           month: m,
           selectedDate: _pickedDate,
+          appointmentDays: widget.appointmentDays,
           onDateTap: (d) => setState(() => _pickedDate = d),
         );
       },
@@ -234,6 +237,7 @@ class _CalendarFullScreenState extends State<CalendarFullScreen> {
         return _YearSection(
           year: year,
           showTopDivider: index > 0,
+          appointmentDays: widget.appointmentDays,
           onOpenMonth: _openMonthFromYear,
         );
       },
@@ -267,11 +271,13 @@ class _YearSection extends StatelessWidget {
   const _YearSection({
     required this.year,
     required this.showTopDivider,
+    required this.appointmentDays,
     required this.onOpenMonth,
   });
 
   final int year;
   final bool showTopDivider;
+  final Set<DateTime> appointmentDays;
   final void Function(int year, int month) onOpenMonth;
 
   @override
@@ -307,6 +313,7 @@ class _YearSection extends StatelessWidget {
             (mi) => _CompactMonthCell(
               year: year,
               month: mi + 1,
+              appointmentDays: appointmentDays,
               onOpenMonth: () => onOpenMonth(year, mi + 1),
             ),
           ),
@@ -320,11 +327,13 @@ class _CompactMonthCell extends StatelessWidget {
   const _CompactMonthCell({
     required this.year,
     required this.month,
+    required this.appointmentDays,
     required this.onOpenMonth,
   });
 
   final int year;
   final int month;
+  final Set<DateTime> appointmentDays;
   final VoidCallback onOpenMonth;
 
   @override
@@ -360,11 +369,37 @@ class _CompactMonthCell extends StatelessWidget {
                       return const Expanded(child: SizedBox());
                     }
                     final day = idx - leadingEmpty + 1;
+                    final hasVisit = appointmentDays.any(
+                      (d) => d.year == year && d.month == month && d.day == day,
+                    );
                     return Expanded(
                       child: Center(
-                        child: Text(
-                          '$day',
-                          style: GoogleFonts.alegreyaSans(fontSize: 10, fontWeight: FontWeight.w600),
+                        child: Stack(
+                          clipBehavior: Clip.none,
+                          children: [
+                            Text(
+                              '$day',
+                              style: GoogleFonts.alegreyaSans(
+                                fontSize: 10,
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
+                            if (hasVisit)
+                              const Positioned(
+                                right: -4,
+                                bottom: -2,
+                                child: SizedBox(
+                                  width: 5,
+                                  height: 5,
+                                  child: DecoratedBox(
+                                    decoration: BoxDecoration(
+                                      color: AppColors.orange,
+                                      shape: BoxShape.circle,
+                                    ),
+                                  ),
+                                ),
+                              ),
+                          ],
                         ),
                       ),
                     );
@@ -383,11 +418,13 @@ class _MonthCard extends StatelessWidget {
   const _MonthCard({
     required this.month,
     required this.selectedDate,
+    required this.appointmentDays,
     required this.onDateTap,
   });
 
   final DateTime month;
   final DateTime selectedDate;
+  final Set<DateTime> appointmentDays;
   final ValueChanged<DateTime> onDateTap;
 
   bool _isSameDay(DateTime a, DateTime b) =>
@@ -429,28 +466,50 @@ class _MonthCard extends StatelessWidget {
                   final d = DateTime(month.year, month.month, day);
                   final selected = _isSameDay(d, selectedDate);
                   final isToday = _isSameDay(d, today);
+                  final hasVisit = appointmentDays.any((a) => _isSameDay(a, d));
                   return Expanded(
                     child: GestureDetector(
                       onTap: () => onDateTap(d),
                       child: Padding(
                         padding: const EdgeInsets.all(2),
-                        child: Container(
-                          height: 40,
-                          alignment: Alignment.center,
-                          decoration: BoxDecoration(
-                            shape: BoxShape.circle,
-                            color: selected
-                                ? AppColors.orange
-                                : (isToday ? AppColors.appointmentCardFrame : null),
-                          ),
-                          child: Text(
-                            '$day',
-                            style: GoogleFonts.alegreyaSans(
-                              fontSize: 16,
-                              fontWeight: (selected || isToday) ? FontWeight.w700 : FontWeight.w600,
-                              color: (selected || isToday) ? AppColors.white : AppColors.textDark,
+                        child: Stack(
+                          clipBehavior: Clip.none,
+                          children: [
+                            Container(
+                              height: 40,
+                              alignment: Alignment.center,
+                              decoration: BoxDecoration(
+                                shape: BoxShape.circle,
+                                color: selected
+                                    ? AppColors.orange
+                                    : (isToday ? AppColors.appointmentCardFrame : null),
+                              ),
+                              child: Text(
+                                '$day',
+                                style: GoogleFonts.alegreyaSans(
+                                  fontSize: 16,
+                                  fontWeight:
+                                      (selected || isToday) ? FontWeight.w700 : FontWeight.w600,
+                                  color: (selected || isToday)
+                                      ? AppColors.white
+                                      : AppColors.textDark,
+                                ),
+                              ),
                             ),
-                          ),
+                            if (hasVisit)
+                              Positioned(
+                                right: 2,
+                                bottom: 2,
+                                child: Container(
+                                  width: 7,
+                                  height: 7,
+                                  decoration: BoxDecoration(
+                                    color: selected ? AppColors.white : AppColors.orange,
+                                    shape: BoxShape.circle,
+                                  ),
+                                ),
+                              ),
+                          ],
                         ),
                       ),
                     ),

@@ -8,16 +8,27 @@ enum MentalCondition {
   asd,
 }
 
+enum PriorityStateFocus {
+  sleep,
+  mood,
+  energy,
+  anxiety,
+  stress,
+  medication,
+}
+
 class UserProfile {
   const UserProfile({
     this.name = '',
     this.doctorName = '',
     this.conditions = const [],
+    this.priorityFocus = PriorityStateFocus.mood,
   });
 
   final String name;
   final String doctorName;
   final List<MentalCondition> conditions;
+  final PriorityStateFocus priorityFocus;
 
   bool get hasConditions => conditions.isNotEmpty;
 }
@@ -48,5 +59,32 @@ extension MentalConditionX on MentalCondition {
       if (c.code == code) return c;
     }
     return null;
+  }
+}
+
+extension PriorityStateFocusX on PriorityStateFocus {
+  String get code => switch (this) {
+        PriorityStateFocus.sleep => 'sleep',
+        PriorityStateFocus.mood => 'mood',
+        PriorityStateFocus.energy => 'energy',
+        PriorityStateFocus.anxiety => 'anxiety',
+        PriorityStateFocus.stress => 'stress',
+        PriorityStateFocus.medication => 'medication',
+      };
+
+  String get label => switch (this) {
+        PriorityStateFocus.sleep => 'Сон',
+        PriorityStateFocus.mood => 'Настроение',
+        PriorityStateFocus.energy => 'Энергия',
+        PriorityStateFocus.anxiety => 'Тревога',
+        PriorityStateFocus.stress => 'Стресс',
+        PriorityStateFocus.medication => 'Прием препаратов',
+      };
+
+  static PriorityStateFocus fromCode(String? raw) {
+    for (final focus in PriorityStateFocus.values) {
+      if (focus.code == raw) return focus;
+    }
+    return PriorityStateFocus.mood;
   }
 }

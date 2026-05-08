@@ -9,7 +9,10 @@ import '../models/user_profile.dart';
 import '../services/calendar_storage.dart';
 import '../services/foundation_service.dart';
 import '../services/insights_service.dart';
+import '../services/auth_service.dart';
 import '../services/user_profile_service.dart';
+import 'auth_gate_screen.dart';
+import 'condition_details_screen.dart';
 import '../theme/app_colors.dart';
 import '../widgets/laconic_tap.dart';
 
@@ -24,6 +27,7 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
   final _nameController = TextEditingController();
   final _doctorController = TextEditingController();
   final _selected = <MentalCondition>{};
+  PriorityStateFocus _priorityFocus = PriorityStateFocus.mood;
   List<Medication> _medications = const [];
   List<Appointment> _appointments = const [];
   DateTime _reportFrom = DateTime.now().subtract(const Duration(days: 30));
@@ -66,6 +70,7 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
       _selected
         ..clear()
         ..addAll(profile.conditions);
+      _priorityFocus = profile.priorityFocus;
       _medications = activeMap.values.toList()
         ..sort((a, b) => a.name.compareTo(b.name));
       _appointments = appointments;
@@ -79,6 +84,7 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
         name: _nameController.text.trim(),
         doctorName: _doctorController.text.trim(),
         conditions: _selected.toList(),
+        priorityFocus: _priorityFocus,
       ),
     );
     if (!mounted) return;
@@ -86,6 +92,33 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
       const SnackBar(content: Text('Профиль сохранен')),
     );
     Navigator.pop(context);
+  }
+
+  Future<void> _logout() async {
+    final confirm = await showDialog<bool>(
+      context: context,
+      builder: (_) => AlertDialog(
+        title: const Text('Выйти из аккаунта?'),
+        content: const Text('Для продолжения нужно будет снова войти или зарегистрироваться.'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('Отмена'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(context, true),
+            child: const Text('Выйти'),
+          ),
+        ],
+      ),
+    );
+    if (confirm != true) return;
+    await AuthService.instance.logout();
+    if (!mounted) return;
+    Navigator.of(context).pushAndRemoveUntil(
+      MaterialPageRoute(builder: (_) => const AuthGateScreen()),
+      (route) => false,
+    );
   }
 
   @override
@@ -139,6 +172,7 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
       goals,
       statsPeriodCaption: '${_fmtDate(from)} - ${_fmtDate(to)}',
     );
+    final lastSession = _lastAppointmentInRange(data, from, to);
 
     final doc = pw.Document();
     final baseFont = await PdfGoogleFonts.robotoRegular();
@@ -213,16 +247,15 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
           pw.Text(
             'Записи состояния: ${data.stateEntries.length}, заметки: ${data.notes.length}, препараты: ${data.medications.length}, визиты: ${data.appointments.length}',
           ),
-          if (data.appointments.isNotEmpty) ...[
+          if (lastSession != null) ...[
             pw.SizedBox(height: 6),
             pw.Text(
-              'Посещения врача:',
+              'Последний сеанс в периоде:',
               style: pw.TextStyle(fontWeight: pw.FontWeight.bold),
             ),
-            ..._appointmentsInRange(data, from, to).map(
-              (a) => pw.Text(
-                '- ${_fmtDate(a.date)} ${_fmtTime(a.time)}: ${a.title}${a.note?.isNotEmpty == true ? ' (${a.note})' : ''}',
-              ),
+            pw.Text(
+              '- ${_fmtDate(lastSession.date)} ${_fmtTime(lastSession.time)}: ${lastSession.title}'
+              '${lastSession.note?.isNotEmpty == true ? ' (${lastSession.note})' : ''}',
             ),
           ],
         ],
@@ -292,6 +325,32 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
                     ),
                   ),
                   const SizedBox(height: 12),
+                  DropdownButtonFormField<PriorityStateFocus>(
+                    value: _priorityFocus,
+                    decoration: InputDecoration(
+                      labelText: 'Приоритет наблюдения',
+                      filled: true,
+                      fillColor: AppColors.white,
+                      border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(12),
+                        borderSide: BorderSide.none,
+                      ),
+                    ),
+                    items: PriorityStateFocus.values
+                        .map(
+                          (e) => DropdownMenuItem(
+                            value: e,
+                            child: Text(e.label),
+                          ),
+                        )
+                        .toList(),
+                    onChanged: (v) {
+                      if (v != null) {
+                        setState(() => _priorityFocus = v);
+                      }
+                    },
+                  ),
+                  const SizedBox(height: 12),
                   _sectionCard(
                     title: 'Принимаемые препараты',
                     child: _medications.isEmpty
@@ -319,22 +378,39 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
                         Text(
                           'Предстоящие',
                           style: GoogleFonts.alegreyaSans(
-                            fontSize: 15,
+                            fontSize: 14,
                             fontWeight: FontWeight.w700,
+                            color: const Color(0xFF1F8A70),
                           ),
                         ),
                         const SizedBox(height: 6),
-                        ..._buildAppointments(upcoming: true),
+                        Wrap(
+                          spacing: 8,
+                          runSpacing: 8,
+                          children: _buildCompactAppointments(upcoming: true),
+                        ),
                         const SizedBox(height: 10),
                         Text(
                           'Прошедшие',
                           style: GoogleFonts.alegreyaSans(
-                            fontSize: 15,
+                            fontSize: 14,
                             fontWeight: FontWeight.w700,
+                            color: const Color(0xFF9A4D00),
                           ),
                         ),
                         const SizedBox(height: 6),
-                        ..._buildAppointments(upcoming: false),
+                        Wrap(
+                          spacing: 8,
+                          runSpacing: 8,
+                          children: _buildCompactAppointments(upcoming: false),
+                        ),
+                        if (_pastAppointments().length > 5) ...[
+                          const SizedBox(height: 8),
+                          TextButton(
+                            onPressed: _openAllPastAppointments,
+                            child: const Text('Показать все прошедшие'),
+                          ),
+                        ],
                       ],
                     ),
                   ),
@@ -358,21 +434,45 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
                         const SizedBox(height: 8),
                         ...MentalCondition.values.map((c) {
                           final selected = _selected.contains(c);
-                          return CheckboxListTile(
-                            value: selected,
-                            activeColor: AppColors.orange,
-                            controlAffinity: ListTileControlAffinity.leading,
-                            contentPadding: EdgeInsets.zero,
-                            title: Text(c.label),
-                            onChanged: (v) {
-                              setState(() {
-                                if (v == true) {
-                                  _selected.add(c);
-                                } else {
-                                  _selected.remove(c);
-                                }
-                              });
-                            },
+                          return Row(
+                            children: [
+                              Expanded(
+                                child: CheckboxListTile(
+                                  value: selected,
+                                  activeColor: AppColors.orange,
+                                  controlAffinity:
+                                      ListTileControlAffinity.leading,
+                                  contentPadding: EdgeInsets.zero,
+                                  title: Text(c.label),
+                                  onChanged: (v) {
+                                    setState(() {
+                                      if (v == true) {
+                                        _selected.add(c);
+                                      } else {
+                                        _selected.remove(c);
+                                      }
+                                    });
+                                  },
+                                ),
+                              ),
+                              IconButton(
+                                tooltip: 'О заболевании',
+                                onPressed: () {
+                                  Navigator.push(
+                                    context,
+                                    MaterialPageRoute(
+                                      builder: (_) => ConditionDetailsScreen(
+                                        condition: c,
+                                      ),
+                                    ),
+                                  );
+                                },
+                                icon: const Icon(
+                                  Icons.info_outline,
+                                  color: AppColors.orange,
+                                ),
+                              ),
+                            ],
                           );
                         }),
                         const SizedBox(height: 4),
@@ -434,6 +534,12 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
                       child: const Text('Сохранить'),
                     ),
                   ),
+                  const SizedBox(height: 10),
+                  OutlinedButton.icon(
+                    onPressed: _logout,
+                    icon: const Icon(Icons.logout),
+                    label: const Text('Выйти из аккаунта'),
+                  ),
                 ],
               ),
             ),
@@ -467,7 +573,7 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
     );
   }
 
-  List<Widget> _buildAppointments({required bool upcoming}) {
+  List<Widget> _buildCompactAppointments({required bool upcoming}) {
     final now = DateTime.now();
     final today = DateTime(now.year, now.month, now.day);
     final items = _appointments.where((a) {
@@ -480,19 +586,93 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
       items.sort((a, b) => b.date.compareTo(a.date));
     }
     if (items.isEmpty) {
-      return const [Text('Нет записей')];
+      return const [];
     }
-    return items
+    final visible = upcoming ? items : items.take(5).toList();
+    return visible
         .map(
-          (a) => Padding(
-            padding: const EdgeInsets.only(bottom: 6),
-            child: Text('• ${_fmtDate(a.date)} ${_fmtTime(a.time)} — ${a.title}'),
+          (a) => Container(
+            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+            decoration: BoxDecoration(
+              color: upcoming
+                  ? const Color(0xFFEAF9F3)
+                  : const Color(0xFFFFF4EA),
+              borderRadius: BorderRadius.circular(10),
+              border: Border.all(
+                color: upcoming
+                    ? const Color(0xFF77C8A9)
+                    : const Color(0xFFF0B07D),
+              ),
+            ),
+            child: Text(
+              '${upcoming ? 'Предст.' : 'Прош.'} ${_fmtDate(a.date)} ${_fmtTime(a.time)} · ${a.title}',
+              style: GoogleFonts.alegreyaSans(
+                fontSize: 13,
+                color: AppColors.textDark,
+              ),
+            ),
           ),
         )
         .toList();
   }
 
-  List<Appointment> _appointmentsInRange(
+  List<Appointment> _pastAppointments() {
+    final now = DateTime.now();
+    final today = DateTime(now.year, now.month, now.day);
+    final items = _appointments.where((a) {
+      final date = DateTime(a.date.year, a.date.month, a.date.day);
+      return date.isBefore(today);
+    }).toList()
+      ..sort((a, b) => b.date.compareTo(a.date));
+    return items;
+  }
+
+  void _openAllPastAppointments() {
+    final items = _pastAppointments();
+    showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      builder: (_) => DraggableScrollableSheet(
+        expand: false,
+        initialChildSize: 0.7,
+        maxChildSize: 0.9,
+        minChildSize: 0.45,
+        builder: (context, controller) => Padding(
+          padding: const EdgeInsets.fromLTRB(16, 12, 16, 16),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                'Все прошедшие посещения',
+                style: GoogleFonts.alegreyaSans(
+                  fontSize: 18,
+                  fontWeight: FontWeight.w800,
+                ),
+              ),
+              const SizedBox(height: 10),
+              Expanded(
+                child: ListView.builder(
+                  controller: controller,
+                  itemCount: items.length,
+                  itemBuilder: (_, i) {
+                    final a = items[i];
+                    return ListTile(
+                      dense: true,
+                      contentPadding: EdgeInsets.zero,
+                      title: Text(a.title),
+                      subtitle: Text('${_fmtDate(a.date)} ${_fmtTime(a.time)}'),
+                    );
+                  },
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Appointment? _lastAppointmentInRange(
     AggregatedData data,
     DateTime from,
     DateTime to,
@@ -502,6 +682,7 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
       return !date.isBefore(from) && !date.isAfter(to);
     }).toList()
       ..sort((a, b) => a.date.compareTo(b.date));
-    return items;
+    if (items.isEmpty) return null;
+    return items.last;
   }
 }

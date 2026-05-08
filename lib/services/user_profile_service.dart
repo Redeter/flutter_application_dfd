@@ -22,10 +22,14 @@ class UserProfileService {
           .map((e) => MentalConditionX.fromCode('$e'))
           .whereType<MentalCondition>()
           .toList();
+      final priorityFocus = PriorityStateFocusX.fromCode(
+        m['priorityFocus'] as String?,
+      );
       return UserProfile(
         name: name,
         doctorName: doctorName,
         conditions: conditions,
+        priorityFocus: priorityFocus,
       );
     } catch (_) {
       return const UserProfile();
@@ -40,6 +44,7 @@ class UserProfileService {
         'name': profile.name.trim(),
         'doctorName': profile.doctorName.trim(),
         'conditions': profile.conditions.map((e) => e.code).toList(),
+        'priorityFocus': profile.priorityFocus.code,
       }),
     );
   }
