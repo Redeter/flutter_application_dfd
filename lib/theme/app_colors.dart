@@ -14,12 +14,12 @@ abstract final class AppColors {
 
   // Цвета для экранов состояния
   static const Color orangeHandle = Color(0xFFF2994A);
-  static const Color lavender = Color(0xFFE2DDF0);
+  static const Color lavender = Color(0xFFE8E8EA);
   static const Color lightPink = Color(0xFFFFE4E4);
   static const Color lightBlue = Color(0xFFE3F2FD);
   static const Color lightGreen = Color(0xFFE8F5E9);
   static const Color lightYellow = Color(0xFFFFF9E6);
-  static const Color purple = Color(0xFF9B51E0);
+  static const Color purple = Color(0xFF000000);
 
   // Календарь
   static const Color appointmentCardFrame = Color(0xFFEEC09D);

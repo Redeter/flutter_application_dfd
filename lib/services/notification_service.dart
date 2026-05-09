@@ -10,6 +10,7 @@ import '../constants/calendar_reminders.dart';
 import '../models/calendar_entry.dart';
 import 'auth_service.dart';
 import 'calendar_storage.dart';
+import 'foundation_service.dart';
 
 
 Duration? _earlyOffsetForReminder(String? reminder) {
@@ -34,6 +35,7 @@ class NotificationService {
   static final NotificationService instance = NotificationService._();
   static const int _kAndroidAlarmSoftLimit = 450;
   static const int _kScheduleHorizonDays = 45;
+  static const int _kFoundationQuestEveningReminderId = 888777;
 
   final FlutterLocalNotificationsPlugin _plugin = FlutterLocalNotificationsPlugin();
   bool _initialized = false;
@@ -211,6 +213,55 @@ class NotificationService {
           }
       }
     }
+    await scheduleFoundationQuestEveningReminderIfNeeded();
+  }
+
+  /// Ежедневное локальное напоминание заглянуть в «Цели» (если включено в профиле).
+  Future<void> scheduleFoundationQuestEveningReminderIfNeeded() async {
+    if (kIsWeb) return;
+    await init();
+    await _plugin.cancel(_kFoundationQuestEveningReminderId);
+    final sessionUserId = await AuthService.instance.sessionUserId();
+    if (sessionUserId == null || sessionUserId.isEmpty) return;
+
+    final enabled = await FoundationService.instance.isQuestEveningReminderEnabled();
+    if (!enabled) return;
+
+    final (hour, minute) =
+        await FoundationService.instance.getQuestEveningReminderClock();
+    final scheduled = _nextTzInstanceOfClock(hour, minute);
+    try {
+      await _plugin.zonedSchedule(
+        _kFoundationQuestEveningReminderId,
+        'Шаг дня в «Цели»',
+        'Успели отметить выполнение шага? Откройте вкладку Цели.',
+        scheduled,
+        const NotificationDetails(
+          android: AndroidNotificationDetails(
+            'foundation_quest',
+            'Цели — шаг дня',
+            channelDescription: 'Вечернее напоминание об отметке шага',
+            importance: Importance.defaultImportance,
+            priority: Priority.defaultPriority,
+          ),
+          iOS: DarwinNotificationDetails(),
+        ),
+        androidScheduleMode: AndroidScheduleMode.exactAllowWhileIdle,
+        uiLocalNotificationDateInterpretation:
+            UILocalNotificationDateInterpretation.absoluteTime,
+        matchDateTimeComponents: DateTimeComponents.time,
+      );
+    } catch (_) {}
+  }
+
+  tz.TZDateTime _nextTzInstanceOfClock(int hour, int minute) {
+    final now = tz.TZDateTime.now(tz.local);
+    var scheduled =
+        tz.TZDateTime(tz.local, now.year, now.month, now.day, hour, minute);
+    if (!scheduled.isAfter(now)) {
+      scheduled = scheduled.add(const Duration(days: 1));
+    }
+    return scheduled;
   }
 
   String _twoDigits(int n) => n.toString().padLeft(2, '0');

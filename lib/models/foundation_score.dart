@@ -23,6 +23,7 @@ class FoundationScore {
     required this.rawOverallProgress,
     required this.spheres,
     required this.nextStep,
+    required this.nextStepSphereId,
     required this.brickDelta7d,
     required this.riskCracks,
     required this.riskCracksExplanation,
@@ -51,6 +52,10 @@ class FoundationScore {
 
   final List<FoundationSphereScore> spheres;
   final String nextStep;
+
+  /// Сфера, от которой отталкивается текст [nextStep] (`sleep` / `mood` / `energy`).
+  final String nextStepSphereId;
+
   final int brickDelta7d;
   final int riskCracks;
   final String? riskCracksExplanation;
@@ -80,6 +85,7 @@ class FoundationScore {
       rawOverallProgress: rawOverallProgress,
       spheres: spheres,
       nextStep: nextStep,
+      nextStepSphereId: nextStepSphereId,
       brickDelta7d: brickDelta7d,
       riskCracks: riskCracks,
       riskCracksExplanation: riskCracksExplanation,
@@ -139,4 +145,22 @@ class FoundationGoals {
   final double sleepWeight;
   final double moodWeight;
   final double energyWeight;
+
+  FoundationGoals copyWith({
+    double? sleepTarget,
+    double? moodTarget,
+    double? energyTarget,
+    double? sleepWeight,
+    double? moodWeight,
+    double? energyWeight,
+  }) {
+    return FoundationGoals(
+      sleepTarget: sleepTarget ?? this.sleepTarget,
+      moodTarget: moodTarget ?? this.moodTarget,
+      energyTarget: energyTarget ?? this.energyTarget,
+      sleepWeight: sleepWeight ?? this.sleepWeight,
+      moodWeight: moodWeight ?? this.moodWeight,
+      energyWeight: energyWeight ?? this.energyWeight,
+    );
+  }
 }

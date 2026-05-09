@@ -36,6 +36,8 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
   DateTime _reportFrom = DateTime.now().subtract(const Duration(days: 30));
   DateTime _reportTo = DateTime.now();
   bool _loading = true;
+  bool _eveningReminderEnabled = false;
+  TimeOfDay _eveningReminderTime = const TimeOfDay(hour: 20, minute: 30);
 
   @override
   void initState() {
@@ -65,6 +67,11 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
       activeMap.putIfAbsent(key, () => medication);
     }
 
+    final reminderOn =
+        await FoundationService.instance.isQuestEveningReminderEnabled();
+    final (rh, rm) =
+        await FoundationService.instance.getQuestEveningReminderClock();
+
     if (!mounted) return;
     setState(() {
       _nameController.text = profile.name;
@@ -76,8 +83,32 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
       _medications = activeMap.values.toList()
         ..sort((a, b) => a.name.compareTo(b.name));
       _appointments = appointments;
+      _eveningReminderEnabled = reminderOn;
+      _eveningReminderTime = TimeOfDay(hour: rh, minute: rm);
       _loading = false;
     });
+  }
+
+  Future<void> _pickEveningReminderTime() async {
+    final picked = await showTimePicker(
+      context: context,
+      initialTime: _eveningReminderTime,
+      builder: (ctx, child) {
+        return Theme(
+          data: Theme.of(ctx).copyWith(
+            colorScheme: ColorScheme.light(
+              primary: AppColors.dialogPrimary,
+            ),
+          ),
+          child: child ?? const SizedBox.shrink(),
+        );
+      },
+    );
+    if (picked == null || !mounted) return;
+    await FoundationService.instance
+        .setQuestEveningReminderClock(picked.hour, picked.minute);
+    setState(() => _eveningReminderTime = picked);
+    await NotificationService.instance.rescheduleCalendarNotifications();
   }
 
   Future<void> _save() async {
@@ -89,6 +120,8 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
         priorityFocus: _priorityFocus,
       ),
     );
+    await FoundationService.instance
+        .syncGoalsWeightsFromProfilePriority(_priorityFocus);
     if (!mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(
       const SnackBar(content: Text('Профиль сохранен')),
@@ -381,6 +414,79 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
                         setState(() => _priorityFocus = v);
                       }
                     },
+                  ),
+                  const SizedBox(height: 12),
+                  Container(
+                    padding: const EdgeInsets.all(12),
+                    decoration: BoxDecoration(
+                      color: AppColors.white,
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          'Вкладка «Цели»',
+                          style: GoogleFonts.alegreyaSans(
+                            fontSize: 15,
+                            fontWeight: FontWeight.w700,
+                          ),
+                        ),
+                        const SizedBox(height: 4),
+                        Text(
+                          'Локальное напоминание на этом устройстве (не веб). '
+                          'После смены времени при необходимости разрешите уведомления в системе.',
+                          style: GoogleFonts.alegreyaSans(
+                            fontSize: 12,
+                            height: 1.35,
+                            color: AppColors.textDark.withValues(alpha: 0.65),
+                          ),
+                        ),
+                        SwitchListTile(
+                          contentPadding: EdgeInsets.zero,
+                          title: Text(
+                            'Вечернее напоминание о шаге',
+                            style: GoogleFonts.alegreyaSans(
+                              fontWeight: FontWeight.w600,
+                              fontSize: 14,
+                            ),
+                          ),
+                          subtitle: Text(
+                            'Напомнит заглянуть в «Цели» и отметить шаг.',
+                            style: GoogleFonts.alegreyaSans(
+                              fontSize: 12,
+                              color: AppColors.textDark.withValues(alpha: 0.62),
+                            ),
+                          ),
+                          value: _eveningReminderEnabled,
+                          activeColor: AppColors.orange,
+                          onChanged: (v) async {
+                            setState(() => _eveningReminderEnabled = v);
+                            await FoundationService.instance
+                                .setQuestEveningReminderEnabled(v);
+                            await NotificationService.instance
+                                .rescheduleCalendarNotifications();
+                          },
+                        ),
+                        if (_eveningReminderEnabled)
+                          ListTile(
+                            contentPadding: EdgeInsets.zero,
+                            title: Text(
+                              'Время',
+                              style: GoogleFonts.alegreyaSans(fontSize: 14),
+                            ),
+                            trailing: Text(
+                              _eveningReminderTime.format(context),
+                              style: GoogleFonts.alegreyaSans(
+                                fontWeight: FontWeight.w700,
+                                fontSize: 15,
+                                color: AppColors.dialogPrimary,
+                              ),
+                            ),
+                            onTap: _pickEveningReminderTime,
+                          ),
+                      ],
+                    ),
                   ),
                   const SizedBox(height: 12),
                   _sectionCard(

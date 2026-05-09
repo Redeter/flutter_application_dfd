@@ -16,6 +16,21 @@ import 'notes_screen.dart';
 import 'state_categories_sheet.dart';
 import 'statistics_screen.dart';
 
+String _foundationPluralDaysRu(int n) {
+  final mod100 = n % 100;
+  if (mod100 >= 11 && mod100 <= 14) return 'дней';
+  switch (n % 10) {
+    case 1:
+      return 'день';
+    case 2:
+    case 3:
+    case 4:
+      return 'дня';
+    default:
+      return 'дней';
+  }
+}
+
 class FoundationScreen extends StatefulWidget {
   const FoundationScreen({
     super.key,
@@ -44,6 +59,15 @@ class _FoundationScreenState extends State<FoundationScreen> {
   FoundationScore? _score;
   bool _loading = true;
   bool _questDone = false;
+  int _questStreak = 0;
+
+  /// Не перезаписываем ручные веса из шестерёнки при каждом заходе на вкладку.
+  bool _weightsLookUnset(FoundationGoals g) {
+    const eps = 0.021;
+    return (g.sleepWeight - 1.0).abs() < eps &&
+        (g.moodWeight - 1.0).abs() < eps &&
+        (g.energyWeight - 1.0).abs() < eps;
+  }
 
   @override
   void initState() {
@@ -72,9 +96,16 @@ class _FoundationScreenState extends State<FoundationScreen> {
   }
 
   Future<void> _load() async {
-    final goals = await FoundationService.instance.loadGoals();
-    final done = await FoundationService.instance.isQuestDoneToday();
     final profile = await UserProfileService.instance.load();
+    var goals = await FoundationService.instance.loadGoals();
+    if (_weightsLookUnset(goals)) {
+      await FoundationService.instance
+          .syncGoalsWeightsFromProfilePriority(profile.priorityFocus);
+      goals = await FoundationService.instance.loadGoals();
+    }
+    await FoundationService.instance.ensureQuestHistorySyncedWithLegacyFlag();
+    final streak = await FoundationService.instance.loadQuestCompletionStreak();
+    final done = await FoundationService.instance.isQuestDoneToday();
     final raw = FoundationService.instance.compute(
       widget.data,
       goals,
@@ -87,15 +118,9 @@ class _FoundationScreenState extends State<FoundationScreen> {
       _profile = profile;
       _score = scored;
       _questDone = done;
+      _questStreak = streak;
       _loading = false;
     });
-    if (!mounted) return;
-    final surveyDone = await FoundationService.instance.isWeightSurveyDone();
-    if (!surveyDone && mounted) {
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (mounted) _offerWeightSurvey();
-      });
-    }
   }
 
   Future<void> _editGoals() async {
@@ -211,6 +236,16 @@ class _FoundationScreenState extends State<FoundationScreen> {
       energyWeight: energyWeight,
     );
     await FoundationService.instance.saveGoals(next);
+    await UserProfileService.instance.save(
+      UserProfile(
+        name: _profile.name,
+        doctorName: _profile.doctorName,
+        conditions: _profile.conditions,
+        priorityFocus:
+            FoundationService.instance.inferPriorityFocusFromWeights(next),
+      ),
+    );
+    final updatedProfile = await UserProfileService.instance.load();
     if (!mounted) return;
     final raw = FoundationService.instance.compute(
       widget.data,
@@ -221,6 +256,7 @@ class _FoundationScreenState extends State<FoundationScreen> {
     if (!mounted) return;
     setState(() {
       _goals = next;
+      _profile = updatedProfile;
       _score = scored;
     });
   }
@@ -228,7 +264,25 @@ class _FoundationScreenState extends State<FoundationScreen> {
   Future<void> _toggleQuest(bool value) async {
     await FoundationService.instance.setQuestDoneToday(value);
     if (!mounted) return;
-    setState(() => _questDone = value);
+    final confirmed = await FoundationService.instance.isQuestDoneToday();
+    final streak = await FoundationService.instance.loadQuestCompletionStreak();
+    if (!mounted) return;
+    setState(() {
+      _questDone = confirmed;
+      _questStreak = streak;
+    });
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(
+          confirmed
+              ? 'Отметка на сегодня сохранена на устройстве'
+              : 'Отметка снята',
+        ),
+        behavior: SnackBarBehavior.floating,
+        duration: const Duration(seconds: 2),
+      ),
+    );
   }
 
   Future<void> _onPullRefresh() async {
@@ -236,17 +290,6 @@ class _FoundationScreenState extends State<FoundationScreen> {
       await widget.onAggregateReload!();
     }
     await _load();
-  }
-
-  void _openStatistics() {
-    if (widget.embeddedInShell && widget.onNavigateTab != null) {
-      widget.onNavigateTab!(BottomNavTab.statistics);
-      return;
-    }
-    Navigator.pushReplacement(
-      context,
-      MaterialPageRoute<void>(builder: (_) => const StatisticsScreen()),
-    );
   }
 
   void _showPrivacyDialog() {
@@ -260,8 +303,7 @@ class _FoundationScreenState extends State<FoundationScreen> {
         content: SingleChildScrollView(
           child: Text(
             'Фундамент и статистика считаются только на этом устройстве. '
-            'Данные не отправляются на сервер, если вы сами не экспортируете их. '
-            'Сброс в разработчике удаляет локальные файлы и настройки.',
+            'Данные не отправляются на сервер, если вы сами не экспортируете их.',
             style: GoogleFonts.alegreyaSans(
               fontSize: 14,
               height: 1.35,
@@ -308,7 +350,7 @@ class _FoundationScreenState extends State<FoundationScreen> {
     );
   }
 
-  Future<void> _offerWeightSurvey() async {
+  Future<void> _pickSpherePriorityManually() async {
     final pick = await showModalBottomSheet<String>(
       context: context,
       backgroundColor: AppColors.white,
@@ -378,8 +420,8 @@ class _FoundationScreenState extends State<FoundationScreen> {
                 ),
                 const SizedBox(height: 8),
                 TextButton(
-                  onPressed: () => Navigator.pop(ctx, 'skip'),
-                  child: const Text('Пропустить'),
+                  onPressed: () => Navigator.pop(ctx),
+                  child: const Text('Отмена'),
                 ),
               ],
             ),
@@ -388,23 +430,30 @@ class _FoundationScreenState extends State<FoundationScreen> {
       },
     );
     if (pick == null || !mounted) return;
-    if (pick == 'skip') {
-      await FoundationService.instance.markWeightSurveyDone();
-      return;
-    }
-    if (pick == 'sleep' || pick == 'mood' || pick == 'energy') {
-      await FoundationService.instance.applyPresetWeightsForPrimary(pick);
-      final goals = await FoundationService.instance.loadGoals();
-      if (!mounted) return;
-      setState(() => _goals = goals);
-      await _recomputeScore();
-    }
+    if (pick != 'sleep' && pick != 'mood' && pick != 'energy') return;
+    await UserProfileService.instance.save(
+      UserProfile(
+        name: _profile.name,
+        doctorName: _profile.doctorName,
+        conditions: _profile.conditions,
+        priorityFocus: PriorityStateFocusX.fromCode(pick),
+      ),
+    );
+    await FoundationService.instance.applyPresetWeightsForPrimary(pick);
+    final goals = await FoundationService.instance.loadGoals();
+    final refreshed = await UserProfileService.instance.load();
+    if (!mounted) return;
+    setState(() {
+      _goals = goals;
+      _profile = refreshed;
+    });
+    await _recomputeScore();
   }
 
   Widget _buildMissionAndLinks() {
     final s = _score!;
     return Container(
-      padding: const EdgeInsets.all(14),
+      padding: const EdgeInsets.fromLTRB(14, 6, 14, 10),
       decoration: BoxDecoration(
         color: AppColors.white,
         borderRadius: BorderRadius.circular(14),
@@ -413,35 +462,46 @@ class _FoundationScreenState extends State<FoundationScreen> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          Text(
-            s.missionTitle,
-            style: GoogleFonts.alegreyaSans(fontSize: 15, fontWeight: FontWeight.w800),
-          ),
-          const SizedBox(height: 6),
-          Text(
-            s.missionBody,
-            style: GoogleFonts.alegreyaSans(
-              fontSize: 13,
-              height: 1.35,
-              color: AppColors.textDark.withValues(alpha: 0.82),
+          Theme(
+            data: Theme.of(context).copyWith(dividerColor: Colors.transparent),
+            child: ExpansionTile(
+              tilePadding: EdgeInsets.zero,
+              title: Text(
+                s.missionTitle,
+                style: GoogleFonts.alegreyaSans(
+                  fontSize: 15,
+                  fontWeight: FontWeight.w800,
+                ),
+              ),
+              subtitle: Text(
+                'Подробнее · что это значит',
+                style: GoogleFonts.alegreyaSans(
+                  fontSize: 12,
+                  color: AppColors.textDark.withValues(alpha: 0.62),
+                ),
+              ),
+              children: [
+                Padding(
+                  padding: const EdgeInsets.only(bottom: 10),
+                  child: Text(
+                    s.missionBody,
+                    style: GoogleFonts.alegreyaSans(
+                      fontSize: 13,
+                      height: 1.35,
+                      color: AppColors.textDark.withValues(alpha: 0.82),
+                    ),
+                  ),
+                ),
+              ],
             ),
           ),
-          const SizedBox(height: 10),
-          Wrap(
-            spacing: 8,
-            runSpacing: 8,
-            children: [
-              TextButton.icon(
-                onPressed: _showPrivacyDialog,
-                icon: const Icon(Icons.lock_outline, size: 18),
-                label: const Text('Конфиденциальность'),
-              ),
-              FilledButton.tonalIcon(
-                onPressed: _openStatistics,
-                icon: const Icon(Icons.insights_outlined, size: 18),
-                label: const Text('Открыть статистику'),
-              ),
-            ],
+          Align(
+            alignment: Alignment.centerLeft,
+            child: TextButton.icon(
+              onPressed: _showPrivacyDialog,
+              icon: const Icon(Icons.lock_outline, size: 18),
+              label: const Text('Конфиденциальность'),
+            ),
           ),
         ],
       ),
@@ -492,6 +552,134 @@ class _FoundationScreenState extends State<FoundationScreen> {
         fontSize: 12,
         fontWeight: FontWeight.w600,
         color: AppColors.textDark.withValues(alpha: 0.62),
+      ),
+    );
+  }
+
+  Widget _buildTodayStepCard() {
+    final met = FoundationService.instance.todayStepSatisfiedByPlusData(
+      data: widget.data,
+      profile: _profile,
+      nextStepSphereId: _score!.nextStepSphereId,
+    );
+    return Container(
+      padding: const EdgeInsets.fromLTRB(14, 14, 8, 8),
+      decoration: BoxDecoration(
+        color: AppColors.white,
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: AppColors.orange.withValues(alpha: 0.18)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Text(
+            'Отметка за сегодня',
+            style: GoogleFonts.alegreyaSans(
+              fontSize: 13,
+              fontWeight: FontWeight.w800,
+              color: AppColors.textDark.withValues(alpha: 0.72),
+            ),
+          ),
+          const SizedBox(height: 6),
+          Text(
+            'Текст шага — в карточке фундамента выше.',
+            style: GoogleFonts.alegreyaSans(
+              fontSize: 12,
+              height: 1.3,
+              color: AppColors.textDark.withValues(alpha: 0.62),
+            ),
+          ),
+          if (met) ...[
+            const SizedBox(height: 10),
+            Container(
+              padding: const EdgeInsets.all(10),
+              decoration: BoxDecoration(
+                color: const Color(0xFFE8F5E9),
+                borderRadius: BorderRadius.circular(10),
+              ),
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Icon(
+                    Icons.check_circle_outline_rounded,
+                    size: 20,
+                    color: Colors.green.shade700,
+                  ),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      _questDone
+                          ? 'Запись «+» за сегодня уже закрывает шаг — галочка тоже стоит.'
+                          : 'По данным «+» за сегодня шаг уже выполнен. Можно отметить галочкой для серии дней.',
+                      style: GoogleFonts.alegreyaSans(
+                        fontSize: 13,
+                        height: 1.35,
+                        color: AppColors.textDark.withValues(alpha: 0.85),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            if (!_questDone) ...[
+              const SizedBox(height: 8),
+              Align(
+                alignment: Alignment.centerLeft,
+                child: TextButton.icon(
+                  onPressed: _loading ? null : () => _toggleQuest(true),
+                  icon: Icon(Icons.auto_awesome_rounded, color: AppColors.dialogPrimary),
+                  label: Text(
+                    'Отметить автоматически по «+»',
+                    style: GoogleFonts.alegreyaSans(
+                      fontWeight: FontWeight.w700,
+                      color: AppColors.dialogPrimary,
+                    ),
+                  ),
+                ),
+              ),
+            ],
+          ],
+          CheckboxTheme(
+            data: CheckboxThemeData(
+              fillColor: WidgetStateProperty.resolveWith((states) {
+                if (states.contains(WidgetState.selected)) {
+                  return AppColors.orange;
+                }
+                return null;
+              }),
+            ),
+            child: CheckboxListTile(
+              contentPadding: EdgeInsets.zero,
+              controlAffinity: ListTileControlAffinity.leading,
+              title: Text(
+                _questDone ? 'Сделано сегодня' : 'Отметить выполнение вручную',
+                style: GoogleFonts.alegreyaSans(
+                  fontSize: 14,
+                  fontWeight: FontWeight.w700,
+                  color: AppColors.textDark.withValues(alpha: 0.88),
+                ),
+              ),
+              subtitle: Text(
+                _questDone
+                    ? 'Запись только на этом устройстве; завтра сбросится.'
+                    : 'Отметьте, когда шаг сделан — учитывается в серии дней ниже.',
+                style: GoogleFonts.alegreyaSans(
+                  fontSize: 12,
+                  height: 1.3,
+                  color: AppColors.textDark.withValues(alpha: 0.62),
+                ),
+              ),
+              value: _questDone,
+              onChanged: _loading
+                  ? null
+                  : (bool? v) {
+                      if (v != null) {
+                        _toggleQuest(v);
+                      }
+                    },
+            ),
+          ),
+        ],
       ),
     );
   }
@@ -601,7 +789,34 @@ class _FoundationScreenState extends State<FoundationScreen> {
                   child: Column(
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
-                    _FoundationHero(score: _score!),
+                    _FoundationHero(
+                      score: _score!,
+                      nextStepLine: _profileAdjustedNextStep(_score!.nextStep),
+                      questStreak: _questStreak,
+                      stepMetByData: FoundationService.instance
+                          .todayStepSatisfiedByPlusData(
+                        data: widget.data,
+                        profile: _profile,
+                        nextStepSphereId: _score!.nextStepSphereId,
+                      ),
+                    ),
+                    const SizedBox(height: 10),
+                    OutlinedButton.icon(
+                      onPressed: _loading ? null : _pickSpherePriorityManually,
+                      icon: const Icon(Icons.flag_outlined, size: 20),
+                      label: Text(
+                        'Приоритет сфер',
+                        style: GoogleFonts.alegreyaSans(
+                          fontWeight: FontWeight.w700,
+                          fontSize: 14,
+                        ),
+                      ),
+                      style: OutlinedButton.styleFrom(
+                        foregroundColor: AppColors.dialogPrimary,
+                        side: BorderSide(color: AppColors.orange.withValues(alpha: 0.45)),
+                        padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 14),
+                      ),
+                    ),
                     const SizedBox(height: 10),
                     _buildMissionAndLinks(),
                     const SizedBox(height: 10),
@@ -634,48 +849,7 @@ class _FoundationScreenState extends State<FoundationScreen> {
                     const SizedBox(height: 12),
                     ..._score!.spheres.map((s) => _SphereTile(sphere: s)),
                   const SizedBox(height: 12),
-                  Container(
-                    padding: const EdgeInsets.all(14),
-                    decoration: BoxDecoration(
-                      color: AppColors.white,
-                      borderRadius: BorderRadius.circular(14),
-                    ),
-                    child: Text(
-                      _profileAdjustedNextStep(_score!.nextStep),
-                      style: GoogleFonts.alegreyaSans(
-                        fontSize: 14,
-                        color: AppColors.textDark.withValues(alpha: 0.85),
-                      ),
-                    ),
-                  ),
-                  const SizedBox(height: 10),
-                  Container(
-                    padding: const EdgeInsets.all(12),
-                    decoration: BoxDecoration(
-                      color: AppColors.white,
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                    child: Row(
-                      children: [
-                        Checkbox(
-                          value: _questDone,
-                          onChanged: (v) => _toggleQuest(v ?? false),
-                          activeColor: AppColors.orange,
-                        ),
-                        Expanded(
-                          child: Text(
-                            _questDone
-                                ? 'Квест дня выполнен: +1 мотивационный бонус.'
-                                : 'Квест дня: выполните шаг выше, чтобы закрепить фундамент.',
-                            style: GoogleFonts.alegreyaSans(
-                              fontSize: 13,
-                              color: AppColors.textDark.withValues(alpha: 0.82),
-                            ),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
+                  _buildTodayStepCard(),
                 ],
                 ),
               ),
@@ -693,8 +867,17 @@ class _FoundationScreenState extends State<FoundationScreen> {
 }
 
 class _FoundationHero extends StatelessWidget {
-  const _FoundationHero({required this.score});
+  const _FoundationHero({
+    required this.score,
+    required this.nextStepLine,
+    required this.questStreak,
+    required this.stepMetByData,
+  });
+
   final FoundationScore score;
+  final String nextStepLine;
+  final int questStreak;
+  final bool stepMetByData;
 
   @override
   Widget build(BuildContext context) {
@@ -722,6 +905,86 @@ class _FoundationHero extends StatelessWidget {
               color: AppColors.textDark.withValues(alpha: 0.75),
             ),
           ),
+          const SizedBox(height: 12),
+          Align(
+            alignment: Alignment.centerLeft,
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Padding(
+                  padding: const EdgeInsets.only(top: 2),
+                  child: Icon(
+                    Icons.arrow_forward_rounded,
+                    size: 18,
+                    color: AppColors.dialogPrimary,
+                  ),
+                ),
+                const SizedBox(width: 6),
+                Expanded(
+                  child: Text(
+                    nextStepLine,
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                    style: GoogleFonts.alegreyaSans(
+                      fontSize: 14,
+                      height: 1.35,
+                      fontWeight: FontWeight.w700,
+                      color: AppColors.textDark.withValues(alpha: 0.9),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+          if (stepMetByData) ...[
+            const SizedBox(height: 8),
+            Align(
+              alignment: Alignment.centerLeft,
+              child: Container(
+                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                decoration: BoxDecoration(
+                  color: const Color(0xFFE8F5E9),
+                  borderRadius: BorderRadius.circular(20),
+                ),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(Icons.check_rounded, size: 16, color: Colors.green.shade800),
+                    const SizedBox(width: 6),
+                    Text(
+                      'Шаг закрыт записью «+»',
+                      style: GoogleFonts.alegreyaSans(
+                        fontSize: 12,
+                        fontWeight: FontWeight.w700,
+                        color: Colors.green.shade900,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ],
+          if (questStreak > 0) ...[
+            const SizedBox(height: 8),
+            Align(
+              alignment: Alignment.centerLeft,
+              child: Container(
+                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                decoration: BoxDecoration(
+                  color: AppColors.lavender.withValues(alpha: 0.35),
+                  borderRadius: BorderRadius.circular(20),
+                ),
+                child: Text(
+                  'Серия отметок: $questStreak ${_foundationPluralDaysRu(questStreak)} подряд',
+                  style: GoogleFonts.alegreyaSans(
+                    fontSize: 12,
+                    fontWeight: FontWeight.w700,
+                    color: AppColors.textDark.withValues(alpha: 0.82),
+                  ),
+                ),
+              ),
+            ),
+          ],
           if ((score.overallProgress - score.rawOverallProgress).abs() > 0.02) ...[
             const SizedBox(height: 4),
             Text(

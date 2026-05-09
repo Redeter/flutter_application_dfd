@@ -18,7 +18,11 @@ void showNutritionEntrySheet(BuildContext context) {
 }
 
 const _meals = ['ЗАВТРАК', 'ОБЕД', 'УЖИН'];
-const _mealColors = [Color(0xFFFFF9E6), Color(0xFFE3F2FD), Color(0xFFE2DDF0)];
+const _mealColors = [
+  AppColors.lightYellow,
+  AppColors.lightBlue,
+  AppColors.lavender,
+];
 
 const _sensations = [
   'Голод',

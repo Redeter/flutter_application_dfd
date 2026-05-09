@@ -883,7 +883,7 @@ class _StatisticsScreenState extends State<StatisticsScreen> {
                         cardWidth,
                         'Сегодня',
                         Icons.schedule_rounded,
-                        [AppColors.lavender, const Color(0xFFB39DDB)],
+                        [AppColors.lavender, Color(0xFF9E9E9E)],
                         body: _metricSingleStack(
                           '$dosesToday',
                           'слотов приёма на сегодня',
@@ -2059,7 +2059,7 @@ class _StatisticsScreenState extends State<StatisticsScreen> {
                       child: _treeNode(
                         title: 'Персонализация',
                         subtitle: 'baseline/регулярность',
-                        color: const Color(0xFFF3E5F5),
+                        color: const Color(0xFFF0F0F0),
                       ),
                     ),
                     const SizedBox(width: 10),
@@ -2076,7 +2076,7 @@ class _StatisticsScreenState extends State<StatisticsScreen> {
                 _treeNode(
                   title: 'Ранжирование рекомендаций',
                   subtitle: 'только подтвержденные, top-3',
-                  color: const Color(0xFFEDE7F6),
+                  color: const Color(0xFFEAEAEA),
                 ),
                 _treeConnector(),
                 _treeNode(

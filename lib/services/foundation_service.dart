@@ -5,6 +5,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import '../models/aggregated_data.dart';
 import '../models/foundation_score.dart';
 import '../models/state_entries.dart';
+import '../models/user_profile.dart';
 import 'user_scoped_store.dart';
 
 class FoundationService {
@@ -15,6 +16,13 @@ class FoundationService {
   static const prefsKeyQuestDoneDate = 'foundation_quest_done_date_v1';
   static const _prefsSmoothOverall = 'foundation_overall_display_smooth_v1';
   static const _prefsWeightSurveyDone = 'foundation_weight_survey_v1';
+  static const prefsKeyQuestCompletedDays = 'foundation_quest_completed_days_v1';
+  static const prefsKeyEveningReminderEnabled =
+      'foundation_quest_evening_reminder_enabled_v1';
+  static const prefsKeyEveningReminderHour =
+      'foundation_quest_evening_reminder_h_v1';
+  static const prefsKeyEveningReminderMinute =
+      'foundation_quest_evening_reminder_m_v1';
 
   /// Сброс «квеста дня» при полном wipe данных (цели/веса в [prefsKeyGoals] не трогаем).
   Future<void> clearQuestDoneDate() async {
@@ -73,11 +81,149 @@ class FoundationService {
   Future<void> setQuestDoneToday(bool done) async {
     final prefs = await SharedPreferences.getInstance();
     final qKey = await UserScopedStore.scopedKey(prefsKeyQuestDoneDate);
+    final set = await _loadCompletedDayKeys();
+    final day = _questDayKey(DateTime.now());
     if (!done) {
       await prefs.remove(qKey);
+      set.remove(day);
+      await _saveCompletedDayKeys(set);
       return;
     }
     await prefs.setString(qKey, DateTime.now().toIso8601String());
+    set.add(day);
+    await _saveCompletedDayKeys(set);
+  }
+
+  String _questDayKey(DateTime d) =>
+      '${d.year.toString().padLeft(4, '0')}-${d.month.toString().padLeft(2, '0')}-${d.day.toString().padLeft(2, '0')}';
+
+  Future<Set<String>> _loadCompletedDayKeys() async {
+    final prefs = await SharedPreferences.getInstance();
+    final key = await UserScopedStore.scopedKey(prefsKeyQuestCompletedDays);
+    final raw = prefs.getString(key);
+    if (raw == null || raw.isEmpty) return {};
+    try {
+      final list = jsonDecode(raw) as List<dynamic>;
+      return list.map((e) => e.toString()).toSet();
+    } catch (_) {
+      return {};
+    }
+  }
+
+  Future<void> _saveCompletedDayKeys(Set<String> keys) async {
+    final prefs = await SharedPreferences.getInstance();
+    final key = await UserScopedStore.scopedKey(prefsKeyQuestCompletedDays);
+    final sorted = keys.toList()..sort();
+    await prefs.setString(key, jsonEncode(sorted));
+  }
+
+  /// Добавляет сегодняшнюю дату в историю отметок, если стоит только legacy-флаг «квест выполнен».
+  Future<void> ensureQuestHistorySyncedWithLegacyFlag() async {
+    final prefs = await SharedPreferences.getInstance();
+    final qKey = await UserScopedStore.scopedKey(prefsKeyQuestDoneDate);
+    final raw = prefs.getString(qKey);
+    if (raw == null) return;
+    final d = DateTime.tryParse(raw);
+    if (d == null) return;
+    final now = DateTime.now();
+    if (d.year != now.year || d.month != now.month || d.day != now.day) {
+      return;
+    }
+    final day = _questDayKey(d);
+    final set = await _loadCompletedDayKeys();
+    if (!set.contains(day)) {
+      set.add(day);
+      await _saveCompletedDayKeys(set);
+    }
+  }
+
+  /// Серия календарных дней с отметкой (включая сегодня, если отмечено).
+  Future<int> loadQuestCompletionStreak() async {
+    await ensureQuestHistorySyncedWithLegacyFlag();
+    final set = await _loadCompletedDayKeys();
+    final today = DateTime(DateTime.now().year, DateTime.now().month, DateTime.now().day);
+    final todayKey = _questDayKey(today);
+    var cursor =
+        set.contains(todayKey) ? today : today.subtract(const Duration(days: 1));
+    var streak = 0;
+    while (set.contains(_questDayKey(cursor))) {
+      streak++;
+      cursor = cursor.subtract(const Duration(days: 1));
+    }
+    return streak;
+  }
+
+  Future<bool> isQuestEveningReminderEnabled() async {
+    final prefs = await SharedPreferences.getInstance();
+    final k = await UserScopedStore.scopedKey(prefsKeyEveningReminderEnabled);
+    return prefs.getBool(k) ?? false;
+  }
+
+  Future<void> setQuestEveningReminderEnabled(bool value) async {
+    final prefs = await SharedPreferences.getInstance();
+    final k = await UserScopedStore.scopedKey(prefsKeyEveningReminderEnabled);
+    await prefs.setBool(k, value);
+  }
+
+  Future<(int hour, int minute)> getQuestEveningReminderClock() async {
+    final prefs = await SharedPreferences.getInstance();
+    final h =
+        prefs.getInt(await UserScopedStore.scopedKey(prefsKeyEveningReminderHour));
+    final m =
+        prefs.getInt(await UserScopedStore.scopedKey(prefsKeyEveningReminderMinute));
+    return (h ?? 20, m ?? 30);
+  }
+
+  Future<void> setQuestEveningReminderClock(int hour, int minute) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setInt(
+      await UserScopedStore.scopedKey(prefsKeyEveningReminderHour),
+      hour.clamp(0, 23),
+    );
+    await prefs.setInt(
+      await UserScopedStore.scopedKey(prefsKeyEveningReminderMinute),
+      minute.clamp(0, 59),
+    );
+  }
+
+  /// Есть ли за сегодня запись «+», закрывающая шаг по правилам профиля и сферы подсказки.
+  bool todayStepSatisfiedByPlusData({
+    required AggregatedData data,
+    required UserProfile profile,
+    required String nextStepSphereId,
+  }) {
+    DateTime cal(DateTime x) => DateTime(x.year, x.month, x.day);
+    final today = cal(DateTime.now());
+    bool sameDay(DateTime x) => cal(x) == today;
+
+    bool hasSleep() =>
+        data.stateEntries.any((e) => e is SleepEntry && sameDay(e.createdAt));
+    bool hasMood() =>
+        data.stateEntries.any((e) => e is MoodEntry && sameDay(e.createdAt));
+    bool hasEnergy() =>
+        data.stateEntries.any((e) => e is EnergyEntry && sameDay(e.createdAt));
+    bool hasEmotions() =>
+        data.stateEntries.any((e) => e is EmotionsEntry && sameDay(e.createdAt));
+    bool hasNote() => data.notes.any((n) => sameDay(n.date));
+
+    if (profile.hasConditions) {
+      if (profile.conditions.contains(MentalCondition.bipolar)) {
+        return hasSleep();
+      }
+      if (profile.conditions.contains(MentalCondition.anxiety)) {
+        return hasMood() || hasEmotions();
+      }
+      if (profile.conditions.contains(MentalCondition.depression)) {
+        return hasNote() || hasMood();
+      }
+    }
+
+    return switch (nextStepSphereId) {
+      'sleep' => hasSleep(),
+      'mood' => hasMood(),
+      'energy' => hasEnergy(),
+      _ => false,
+    };
   }
 
   FoundationScore compute(
@@ -229,6 +375,7 @@ class FoundationService {
       rawOverallProgress: overall,
       spheres: spheres,
       nextStep: next,
+      nextStepSphereId: weakest.first.id,
       brickDelta7d: delta7,
       riskCracks: cracks,
       riskCracksExplanation: cracksWhy,
@@ -279,32 +426,58 @@ class FoundationService {
   }
 
   /// Первичный выбор «что важнее» — чуть сдвигает веса сфер.
+  /// Приоритет из профиля / экрана целей: сдвиг весов сфер, цели по цифрам не трогаем.
   Future<void> applyPresetWeightsForPrimary(String sphereId) async {
-    FoundationGoals g;
+    final current = await loadGoals();
+    final FoundationGoals g;
     switch (sphereId) {
       case 'sleep':
-        g = const FoundationGoals(
+        g = current.copyWith(
           sleepWeight: 1.55,
           moodWeight: 0.88,
           energyWeight: 0.88,
         );
       case 'mood':
-        g = const FoundationGoals(
+        g = current.copyWith(
           sleepWeight: 0.9,
           moodWeight: 1.55,
           energyWeight: 0.9,
         );
       case 'energy':
-        g = const FoundationGoals(
+        g = current.copyWith(
           sleepWeight: 0.9,
           moodWeight: 0.9,
           energyWeight: 1.55,
         );
       default:
-        g = const FoundationGoals();
+        g = current;
     }
     await saveGoals(g);
     await markWeightSurveyDone();
+  }
+
+  static String? sphereIdForPriorityFocus(PriorityStateFocus focus) {
+    return switch (focus) {
+      PriorityStateFocus.sleep => 'sleep',
+      PriorityStateFocus.mood => 'mood',
+      PriorityStateFocus.energy => 'energy',
+      _ => null,
+    };
+  }
+
+  /// Синхронизация весов с приоритетом из личного кабинета (сон / настроение / энергия).
+  Future<void> syncGoalsWeightsFromProfilePriority(PriorityStateFocus focus) async {
+    final id = sphereIdForPriorityFocus(focus);
+    if (id == null) return;
+    await applyPresetWeightsForPrimary(id);
+  }
+
+  PriorityStateFocus inferPriorityFocusFromWeights(FoundationGoals g) {
+    final maxW =
+        [g.sleepWeight, g.moodWeight, g.energyWeight].reduce((a, b) => a > b ? a : b);
+    if (g.sleepWeight >= maxW) return PriorityStateFocus.sleep;
+    if (g.moodWeight >= maxW) return PriorityStateFocus.mood;
+    return PriorityStateFocus.energy;
   }
 
   String _nextStepFor(String sphereId) {
