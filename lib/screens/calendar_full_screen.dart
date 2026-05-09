@@ -137,7 +137,7 @@ class _CalendarFullScreenState extends State<CalendarFullScreen> {
                           child: FilledButton(
                             onPressed: () => widget.onAddAppointment!(_pickedDate),
                             style: FilledButton.styleFrom(
-                              backgroundColor: AppColors.orange,
+                              backgroundColor: AppColors.dialogPrimary,
                               foregroundColor: AppColors.white,
                               padding: const EdgeInsets.symmetric(vertical: 18),
                               shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
@@ -157,7 +157,7 @@ class _CalendarFullScreenState extends State<CalendarFullScreen> {
                           Navigator.pop(context);
                         },
                         style: FilledButton.styleFrom(
-                          backgroundColor: AppColors.orange,
+                          backgroundColor: AppColors.dialogPrimary,
                           foregroundColor: AppColors.white,
                           padding: const EdgeInsets.symmetric(vertical: 18),
                           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),

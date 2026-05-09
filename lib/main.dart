@@ -43,7 +43,7 @@ class MyApp extends StatelessWidget {
   Widget build(BuildContext context) {
     return MaterialApp(
       debugShowCheckedModeBanner: false,
-      title: 'Helper App',
+      title: 'Raise',
       theme: ThemeData(
         fontFamily: GoogleFonts.alegreyaSansSc().fontFamily,
         textTheme: GoogleFonts.alegreyaSansScTextTheme(

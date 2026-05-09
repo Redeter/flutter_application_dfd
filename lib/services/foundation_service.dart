@@ -37,7 +37,6 @@ class FoundationService {
         sleepWeight: (m['sleepWeight'] as num?)?.toDouble() ?? 1.0,
         moodWeight: (m['moodWeight'] as num?)?.toDouble() ?? 1.0,
         energyWeight: (m['energyWeight'] as num?)?.toDouble() ?? 1.0,
-        consistencyWeight: (m['consistencyWeight'] as num?)?.toDouble() ?? 0.7,
       );
     } catch (_) {
       return const FoundationGoals();
@@ -56,7 +55,6 @@ class FoundationService {
         'sleepWeight': goals.sleepWeight,
         'moodWeight': goals.moodWeight,
         'energyWeight': goals.energyWeight,
-        'consistencyWeight': goals.consistencyWeight,
       }),
     );
   }
@@ -149,17 +147,6 @@ class FoundationService {
         brickContribution: 0,
         hasMetricSamples: hasEnergySamples,
       ),
-      FoundationSphereScore(
-        id: 'consistency',
-        label: 'Регулярность',
-        target: 0.8,
-        current: consistency,
-        progress: consistency,
-        confidence: effectiveConfidence,
-        weight: goals.consistencyWeight,
-        brickContribution: 0,
-        hasMetricSamples: true,
-      ),
     ];
 
     final weightedSum = rawSpheres.fold<double>(
@@ -222,7 +209,7 @@ class FoundationService {
     } else if (!hasStateOrNotes &&
         (data.medications.isNotEmpty || data.appointments.isNotEmpty)) {
       hint =
-          'Календарь учитывается в регулярности. Сон, настроение и энергия заполняются записями через центральную «+».';
+          'Календарь дополняет картину. Сон, настроение и энергия заполняются записями через центральную «+».';
     } else if (confidenceCap) {
       hint =
           'Фундамент показывает тренд, но данных пока мало: это предварительная оценка.';
@@ -300,21 +287,18 @@ class FoundationService {
           sleepWeight: 1.55,
           moodWeight: 0.88,
           energyWeight: 0.88,
-          consistencyWeight: 0.72,
         );
       case 'mood':
         g = const FoundationGoals(
           sleepWeight: 0.9,
           moodWeight: 1.55,
           energyWeight: 0.9,
-          consistencyWeight: 0.72,
         );
       case 'energy':
         g = const FoundationGoals(
           sleepWeight: 0.9,
           moodWeight: 0.9,
           energyWeight: 1.55,
-          consistencyWeight: 0.72,
         );
       default:
         g = const FoundationGoals();
@@ -331,8 +315,6 @@ class FoundationService {
         return 'Шаг на сегодня: короткая заметка или настроение в «+» — что поддержало день.';
       case 'energy':
         return 'Шаг на сегодня: запись энергии в «+» или 20 минут прогулки.';
-      case 'consistency':
-        return 'Шаг на сегодня: календарь (приём/визит) и хотя бы одна запись через «+».';
       default:
         return 'Шаг на сегодня: «+» — запись состояния или заметка; при необходимости отметьте календарь.';
     }
@@ -353,10 +335,9 @@ class FoundationService {
       _ratio(_avgSleep(data), goals.sleepTarget) * conf * goals.sleepWeight,
       _ratio(_avgMood(data), goals.moodTarget) * conf * goals.moodWeight,
       _ratio(_avgEnergy(data), goals.energyTarget) * conf * goals.energyWeight,
-      consistency * conf * goals.consistencyWeight,
     ];
     final totalWeight =
-        goals.sleepWeight + goals.moodWeight + goals.energyWeight + goals.consistencyWeight;
+        goals.sleepWeight + goals.moodWeight + goals.energyWeight;
     final overall =
         totalWeight == 0 ? 0.0 : (spheres.reduce((a, b) => a + b) / totalWeight).clamp(0.0, 1.0);
     return (overall * 40).round().clamp(0, 40);

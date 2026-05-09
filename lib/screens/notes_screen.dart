@@ -221,8 +221,12 @@ class _NotesScreenState extends State<NotesScreen> {
             onPressed: () => Navigator.pop(context, false),
             child: const Text('Отмена'),
           ),
-          TextButton(
+          FilledButton(
             onPressed: () => Navigator.pop(context, true),
+            style: FilledButton.styleFrom(
+              backgroundColor: AppColors.dialogPrimary,
+              foregroundColor: AppColors.white,
+            ),
             child: const Text('Удалить'),
           ),
         ],

@@ -111,6 +111,12 @@ class _StatisticsScreenState extends State<StatisticsScreen> {
                       await prefs.setBool(dialogKey, true);
                       if (ctx.mounted) Navigator.pop(ctx);
                     },
+              style: FilledButton.styleFrom(
+                backgroundColor: AppColors.dialogPrimary,
+                foregroundColor: AppColors.white,
+                disabledBackgroundColor: AppColors.greyMuted,
+                disabledForegroundColor: AppColors.white,
+              ),
               child: const Text('Я согласен(на)'),
             ),
           ],
@@ -570,8 +576,12 @@ class _StatisticsScreenState extends State<StatisticsScreen> {
             onPressed: () => Navigator.pop(context, false),
             child: const Text('Отмена'),
           ),
-          TextButton(
+          FilledButton(
             onPressed: () => Navigator.pop(context, true),
+            style: FilledButton.styleFrom(
+              backgroundColor: AppColors.dialogPrimary,
+              foregroundColor: AppColors.white,
+            ),
             child: const Text('Стереть'),
           ),
         ],
@@ -744,7 +754,8 @@ class _StatisticsScreenState extends State<StatisticsScreen> {
     final today = DateTime(clock.year, clock.month, clock.day);
     final notesToday = countNotesOnCalendarDay(d, today);
     final notesTotal = d.notes.length;
-    final medsTotalAll = countDistinctMedicationRegimens(d.medications);
+    final medsActiveUniqueNames =
+        countDistinctActiveMedicationNames(d.medications, today);
     final visitsToday = countAppointmentsOnCalendarDay(d, today);
     final visitsTotal = d.appointments.length;
     final nextVisit = nextAppointmentVisitOnOrAfter(d, clock);
@@ -824,10 +835,11 @@ class _StatisticsScreenState extends State<StatisticsScreen> {
               const SizedBox(height: 12),
               LayoutBuilder(
                 builder: (_, c) {
-                  final cardWidth = (c.maxWidth - 8) / 2;
+                  final gap = 7.0;
+                  final cardWidth = (c.maxWidth - gap) / 2;
                   return Wrap(
-                    spacing: 8,
-                    runSpacing: 8,
+                    spacing: gap,
+                    runSpacing: gap,
                     children: [
                       _buildMetricCard(
                         cardWidth,
@@ -847,8 +859,10 @@ class _StatisticsScreenState extends State<StatisticsScreen> {
                         Icons.medication_outlined,
                         [const Color(0xFFF8BBD0), const Color(0xFFF48FB1)],
                         body: _metricSingleStack(
-                          '$medsTotalAll',
-                          'разных схем в календаре',
+                          '$medsActiveUniqueNames',
+                          'принимаемых препаратов',
+                          centered: true,
+                          valueFontSize: 31,
                         ),
                       ),
                       _buildMetricCard(
@@ -861,6 +875,7 @@ class _StatisticsScreenState extends State<StatisticsScreen> {
                           visitsTotal,
                           leftCaption: 'сегодня',
                           rightCaption: 'всего',
+                          captionStyle: _metricCardCaptionStyle().copyWith(fontSize: 10),
                         ),
                         footer: _metricNearestVisitFooter(nextVisit),
                       ),
@@ -872,6 +887,10 @@ class _StatisticsScreenState extends State<StatisticsScreen> {
                         body: _metricSingleStack(
                           '$dosesToday',
                           'слотов приёма на сегодня',
+                          centered: true,
+                          valueFontSize: 31,
+                          captionStyle:
+                              _metricCardCaptionStyle().copyWith(fontSize: 10),
                         ),
                         footer: _metricNextMedicationFooter(nextIntake),
                       ),
@@ -971,17 +990,20 @@ class _StatisticsScreenState extends State<StatisticsScreen> {
     );
   }
 
-  static const double _kMetricCardHeight = 124;
+  static const double _kMetricCardHeight = 107;
+
+  /// Карточки с нижним футером («Приёмы», «Сегодня»): выше, чтобы цифры не сжимались сильнее «Заметок».
+  static const double _kMetricCardHeightWithFooter = 122;
 
   TextStyle _metricCardCaptionStyle() => GoogleFonts.alegreyaSans(
-        fontSize: 10,
+        fontSize: 9,
         fontWeight: FontWeight.w600,
         height: 1.2,
         color: Colors.white.withValues(alpha: 0.88),
       );
 
   TextStyle _metricCardValueStyle() => GoogleFonts.alegreyaSans(
-        fontSize: 22,
+        fontSize: 26,
         fontWeight: FontWeight.w800,
         color: AppColors.white,
       );
@@ -992,9 +1014,10 @@ class _StatisticsScreenState extends State<StatisticsScreen> {
     int right, {
     required String leftCaption,
     required String rightCaption,
+    TextStyle? captionStyle,
   }) {
     final big = _metricCardValueStyle();
-    final small = _metricCardCaptionStyle();
+    final small = captionStyle ?? _metricCardCaptionStyle();
     return Row(
       crossAxisAlignment: CrossAxisAlignment.start,
       mainAxisSize: MainAxisSize.min,
@@ -1013,13 +1036,13 @@ class _StatisticsScreenState extends State<StatisticsScreen> {
           ],
         ),
         Padding(
-          padding: const EdgeInsets.fromLTRB(8, 2, 8, 0),
+          padding: const EdgeInsets.fromLTRB(6, 6, 6, 0),
           child: Text(
             '/',
             style: big.copyWith(
-              fontSize: 20,
+              fontSize: (big.fontSize ?? 26) * 0.95,
               color: Colors.white.withValues(alpha: 0.62),
-              height: 1.1,
+              height: 1.05,
             ),
           ),
         ),
@@ -1040,20 +1063,31 @@ class _StatisticsScreenState extends State<StatisticsScreen> {
     );
   }
 
-  Widget _metricSingleStack(String value, String captionBelow) {
-    final big = _metricCardValueStyle();
-    final small = _metricCardCaptionStyle();
+  Widget _metricSingleStack(
+    String value,
+    String captionBelow, {
+    bool centered = false,
+    double? valueFontSize,
+    TextStyle? captionStyle,
+  }) {
+    final base = _metricCardValueStyle();
+    final big = valueFontSize != null ? base.copyWith(fontSize: valueFontSize) : base;
+    final small = captionStyle ?? _metricCardCaptionStyle();
+    final align =
+        centered ? CrossAxisAlignment.center : CrossAxisAlignment.start;
+    final ta = centered ? TextAlign.center : TextAlign.start;
     return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
+      crossAxisAlignment: align,
       mainAxisSize: MainAxisSize.min,
       children: [
-        Text(value, style: big),
-        const SizedBox(height: 4),
+        Text(value, style: big, textAlign: ta),
+        const SizedBox(height: 3),
         Text(
           captionBelow,
           style: small,
           maxLines: 2,
           overflow: TextOverflow.ellipsis,
+          textAlign: ta,
         ),
       ],
     );
@@ -1120,25 +1154,27 @@ class _StatisticsScreenState extends State<StatisticsScreen> {
     required Widget body,
     Widget? footer,
   }) {
+    final cardHeight =
+        footer != null ? _kMetricCardHeightWithFooter : _kMetricCardHeight;
     return _PressScale(
       scale: 0.98,
       child: SizedBox(
-        height: _kMetricCardHeight,
+        height: cardHeight,
         width: width,
         child: Container(
-          padding: const EdgeInsets.fromLTRB(14, 12, 14, 12),
+          padding: const EdgeInsets.fromLTRB(12, 10, 12, 10),
           decoration: BoxDecoration(
             gradient: LinearGradient(
               colors: gradientColors,
               begin: Alignment.topLeft,
               end: Alignment.bottomRight,
             ),
-            borderRadius: BorderRadius.circular(16),
+            borderRadius: BorderRadius.circular(14),
             boxShadow: [
               BoxShadow(
                 color: gradientColors.first.withValues(alpha: 0.3),
-                blurRadius: 8,
-                offset: const Offset(0, 4),
+                blurRadius: 7,
+                offset: const Offset(0, 3),
               ),
             ],
           ),
@@ -1147,13 +1183,13 @@ class _StatisticsScreenState extends State<StatisticsScreen> {
             children: [
               Row(
                 children: [
-                  Icon(icon, color: Colors.white.withValues(alpha: 0.9), size: 18),
-                  const SizedBox(width: 6),
+                  Icon(icon, color: Colors.white.withValues(alpha: 0.9), size: 16),
+                  const SizedBox(width: 5),
                   Expanded(
                     child: Text(
                       label,
                       style: GoogleFonts.alegreyaSans(
-                        fontSize: 12,
+                        fontSize: 11,
                         color: Colors.white.withValues(alpha: 0.9),
                       ),
                       overflow: TextOverflow.ellipsis,
@@ -1161,7 +1197,7 @@ class _StatisticsScreenState extends State<StatisticsScreen> {
                   ),
                 ],
               ),
-              const SizedBox(height: 6),
+              const SizedBox(height: 5),
               Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -1176,7 +1212,7 @@ class _StatisticsScreenState extends State<StatisticsScreen> {
                       ),
                     ),
                     if (footer != null) ...[
-                      const SizedBox(height: 8),
+                      const SizedBox(height: 6),
                       footer,
                     ],
                   ],

@@ -199,6 +199,7 @@ class DevDataSeedService {
 
     generatedNotes.sort((a, b) => b.date.compareTo(a.date));
     await NotesStorage.instance.saveAll(generatedNotes);
+    created += await _seedFutureMedicationsForProfile(random, positive: positive);
     return created;
   }
 
@@ -361,7 +362,89 @@ class DevDataSeedService {
 
     generatedNotes.sort((a, b) => b.date.compareTo(a.date));
     await NotesStorage.instance.saveAll(generatedNotes);
+    created += await _seedFutureMedicationsForProfile(random, mixed: true);
     return created;
+  }
+
+  /// Строки календаря «приём» только в прошлом не видны в профиле и в карточке «Таблетки»
+  /// на статистике (там учитываются даты не раньше сегодня). Дублируем типовые препараты
+  /// сценария на ближайшие дни, чтобы те же названия попали в эти экраны.
+  Future<int> _seedFutureMedicationsForProfile(
+    Random random, {
+    bool positive = true,
+    bool mixed = false,
+  }) async {
+    final List<({String name, String seriesId, String dosage})> drugs;
+    if (mixed) {
+      drugs = [
+        (
+          name: 'Поддерживающий препарат',
+          seriesId: 'seed-active-support',
+          dosage: '${random.nextInt(2) + 1} таб',
+        ),
+        (
+          name: 'Корректирующая терапия',
+          seriesId: 'seed-active-correct',
+          dosage: '${random.nextInt(2) + 1} таб',
+        ),
+      ];
+    } else if (positive) {
+      drugs = [
+        (
+          name: 'Витаминный комплекс 1',
+          seriesId: 'seed-active-vit1',
+          dosage: '${random.nextInt(2) + 1} капс',
+        ),
+        (
+          name: 'Витаминный комплекс 2',
+          seriesId: 'seed-active-vit2',
+          dosage: '${random.nextInt(2) + 1} капс',
+        ),
+      ];
+    } else {
+      drugs = [
+        (
+          name: 'Терапия 1',
+          seriesId: 'seed-active-th1',
+          dosage: '${random.nextInt(2) + 1} таб',
+        ),
+        (
+          name: 'Терапия 2',
+          seriesId: 'seed-active-th2',
+          dosage: '${random.nextInt(2) + 1} таб',
+        ),
+      ];
+    }
+
+    final now = DateTime.now();
+    final today = DateTime(now.year, now.month, now.day);
+    const horizonDays = 21;
+    var added = 0;
+
+    for (var dayOffset = 0; dayOffset < horizonDays; dayOffset++) {
+      final d = today.add(Duration(days: dayOffset));
+      for (final drug in drugs) {
+        final id = 'seed-profile-${drug.seriesId}-${d.year}-${d.month}-${d.day}';
+        await CalendarStorage.instance.save(
+          Medication(
+            id: id,
+            seriesId: drug.seriesId,
+            date: d,
+            time: TimeOfDay(hour: 8 + random.nextInt(3), minute: random.nextBool() ? 0 : 30),
+            name: drug.name,
+            dosage: drug.dosage,
+            schedule: [
+              MedicationDose(
+                time: const TimeOfDay(hour: 8, minute: 0),
+                amount: '1',
+              ),
+            ],
+          ),
+        );
+        added++;
+      }
+    }
+    return added;
   }
 
   List<String> _uniqueFactors(Random r, int mood, bool positive) {
@@ -431,17 +514,21 @@ class DevDataSeedService {
     return pool[r.nextInt(pool.length)];
   }
 
-  /// Полный сброс всех локальных данных, метрик и модели.
-  Future<void> wipeAllData() async {
-    final uid = await AuthService.instance.sessionUserId();
-    if (uid == null) return;
-
+  /// Удаляет все локальные данные приложения для [userId] (заметки, календарь, профиль, метрики и т.д.).
+  /// Не трогает реестр аккаунтов и пароль — это делает [AuthService.deleteAccount].
+  Future<void> wipeScopedDataForUser(String userId) async {
     final prefs = await SharedPreferences.getInstance();
     for (final base in UserStorageKeys.allScopedBases) {
-      final scoped = UserStorageKeys.forUser(uid, base);
+      final scoped = UserStorageKeys.forUser(userId, base);
       await SecureKvService.instance.delete(scoped);
       await prefs.remove(scoped);
     }
-    await FoundationService.instance.clearQuestDoneDate();
+  }
+
+  /// Полный сброс локальных данных текущей сессии (без удаления аккаунта).
+  Future<void> wipeAllData() async {
+    final uid = await AuthService.instance.sessionUserId();
+    if (uid == null) return;
+    await wipeScopedDataForUser(uid);
   }
 }

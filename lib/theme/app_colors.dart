@@ -3,6 +3,8 @@ import 'package:flutter/material.dart';
 /// Цвета из макета заметок и общая палитра приложения.
 abstract final class AppColors {
   static const Color orange = Color(0xFFFFAB6D);
+  /// Основные кнопки во всплывающих окнах (диалоги, модальные листы).
+  static const Color dialogPrimary = Color(0xFFF6A96F);
   static const Color peachBackground = Color(0xFFFFD8B1);
   static const Color cream = Color(0xFFFFF6EF);
   static const Color white = Color(0xFFFFFFFF);

@@ -38,7 +38,7 @@ class _TimePickerModalState extends State<_TimePickerModal> {
         decoration: BoxDecoration(
           color: AppColors.white,
           borderRadius: BorderRadius.circular(24),
-          border: Border.all(color: AppColors.orange, width: 2),
+          border: Border.all(color: AppColors.dialogPrimary, width: 2),
         ),
         child: Column(
           mainAxisSize: MainAxisSize.min,
@@ -95,7 +95,7 @@ class _TimePickerModalState extends State<_TimePickerModal> {
 
   Widget _pillButton(String label, {required VoidCallback onPressed}) {
     return Material(
-      color: AppColors.orange,
+      color: AppColors.dialogPrimary,
       borderRadius: BorderRadius.circular(18),
       child: InkWell(
         onTap: onPressed,

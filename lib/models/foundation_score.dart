@@ -131,7 +131,6 @@ class FoundationGoals {
     this.sleepWeight = 1.0,
     this.moodWeight = 1.0,
     this.energyWeight = 1.0,
-    this.consistencyWeight = 0.7,
   });
 
   final double sleepTarget;
@@ -140,5 +139,4 @@ class FoundationGoals {
   final double sleepWeight;
   final double moodWeight;
   final double energyWeight;
-  final double consistencyWeight;
 }

@@ -11,10 +11,12 @@ import '../services/foundation_service.dart';
 import '../services/insights_service.dart';
 import '../neural/neural_insights_service.dart';
 import '../services/auth_service.dart';
+import '../services/notification_service.dart';
 import '../services/user_profile_service.dart';
 import 'auth_gate_screen.dart';
 import 'condition_details_screen.dart';
 import '../theme/app_colors.dart';
+import '../utils/stats_helpers.dart';
 import '../widgets/laconic_tap.dart';
 
 class UserProfileScreen extends StatefulWidget {
@@ -58,9 +60,8 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
         medication.date.day,
       );
       if (medDate.isBefore(today)) continue;
-      final key = medication.seriesId?.isNotEmpty == true
-          ? medication.seriesId!
-          : '${medication.name.toLowerCase()}|${medication.dosage}';
+      final key = medicationUniqueNameKey(medication);
+      if (key.isEmpty) continue;
       activeMap.putIfAbsent(key, () => medication);
     }
 
@@ -108,6 +109,10 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
           ),
           FilledButton(
             onPressed: () => Navigator.pop(context, true),
+            style: FilledButton.styleFrom(
+              backgroundColor: AppColors.dialogPrimary,
+              foregroundColor: AppColors.white,
+            ),
             child: const Text('Выйти'),
           ),
         ],
@@ -116,6 +121,31 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
     if (confirm != true) return;
     await AuthService.instance.logout();
     await NeuralInsightsService.instance.reloadForActiveUser();
+    if (!mounted) return;
+    Navigator.of(context).pushAndRemoveUntil(
+      MaterialPageRoute(builder: (_) => const AuthGateScreen()),
+      (route) => false,
+    );
+  }
+
+  Future<void> _deleteAccount() async {
+    final pwd = await showDialog<String>(
+      context: context,
+      builder: (ctx) => const _DeleteAccountPasswordDialog(),
+    );
+    if (!mounted) return;
+    if (pwd == null || pwd.isEmpty) return;
+
+    final ok = await AuthService.instance.deleteAccount(password: pwd);
+    if (!mounted) return;
+    if (!ok) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Неверный пароль')),
+      );
+      return;
+    }
+    await NeuralInsightsService.instance.reloadForActiveUser();
+    await NotificationService.instance.rescheduleCalendarNotifications();
     if (!mounted) return;
     Navigator.of(context).pushAndRemoveUntil(
       MaterialPageRoute(builder: (_) => const AuthGateScreen()),
@@ -542,6 +572,18 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
                     icon: const Icon(Icons.logout),
                     label: const Text('Выйти из аккаунта'),
                   ),
+                  const SizedBox(height: 8),
+                  TextButton.icon(
+                    onPressed: _deleteAccount,
+                    icon: const Icon(Icons.delete_forever_outlined, color: Color(0xFFB71C1C)),
+                    label: Text(
+                      'Удалить аккаунт',
+                      style: GoogleFonts.alegreyaSans(
+                        fontWeight: FontWeight.w700,
+                        color: const Color(0xFFB71C1C),
+                      ),
+                    ),
+                  ),
                 ],
               ),
             ),
@@ -686,5 +728,76 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
       ..sort((a, b) => a.date.compareTo(b.date));
     if (items.isEmpty) return null;
     return items.last;
+  }
+}
+
+/// Диалог с паролем: контроллер живёт в State маршрута и корректно dispose-ится
+/// после снятия [TextField] с дерева (избегает `_dependents.isEmpty` при удалении аккаунта).
+class _DeleteAccountPasswordDialog extends StatefulWidget {
+  const _DeleteAccountPasswordDialog();
+
+  @override
+  State<_DeleteAccountPasswordDialog> createState() =>
+      _DeleteAccountPasswordDialogState();
+}
+
+class _DeleteAccountPasswordDialogState extends State<_DeleteAccountPasswordDialog> {
+  late final TextEditingController _passwordController;
+
+  @override
+  void initState() {
+    super.initState();
+    _passwordController = TextEditingController();
+  }
+
+  @override
+  void dispose() {
+    _passwordController.dispose();
+    super.dispose();
+  }
+
+  void _dismissKeyboardAndPop([String? password]) {
+    FocusManager.instance.primaryFocus?.unfocus();
+    Navigator.pop(context, password);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      title: const Text('Удалить аккаунт?'),
+      content: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Text(
+            'Будут безвозвратно удалены все локальные данные этого аккаунта на этом устройстве '
+            '(заметки, календарь, записи состояния, профиль и модели анализа). '
+            'Восстановить их будет нельзя.',
+            style: GoogleFonts.alegreyaSans(fontSize: 14),
+          ),
+          const SizedBox(height: 14),
+          TextField(
+            controller: _passwordController,
+            obscureText: true,
+            autocorrect: false,
+            decoration: const InputDecoration(
+              labelText: 'Пароль',
+              border: OutlineInputBorder(),
+            ),
+          ),
+        ],
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => _dismissKeyboardAndPop(),
+          child: const Text('Отмена'),
+        ),
+        FilledButton(
+          style: FilledButton.styleFrom(backgroundColor: const Color(0xFFC62828)),
+          onPressed: () => _dismissKeyboardAndPop(_passwordController.text),
+          child: const Text('Удалить аккаунт'),
+        ),
+      ],
+    );
   }
 }

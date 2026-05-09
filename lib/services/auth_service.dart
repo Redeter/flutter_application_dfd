@@ -6,6 +6,7 @@ import 'package:crypto/crypto.dart';
 import 'package:uuid/uuid.dart';
 
 import '../utils/pbkdf2_sha256.dart';
+import 'dev_data_seed_service.dart';
 import 'secure_kv_service.dart';
 
 class AuthUsernameTakenException implements Exception {
@@ -167,6 +168,38 @@ class AuthService {
   Future<void> logout() async {
     await SecureKvService.instance.delete(sessionUserIdKey);
     await SecureKvService.instance.writeString(rememberSessionKey, 'false');
+  }
+
+  /// Полное удаление текущего аккаунта на устройстве (локальные данные, учётная запись, пароль).
+  /// Возвращает `false`, если пароль неверный или нет активной сессии.
+  Future<bool> deleteAccount({required String password}) async {
+    final uid = await sessionUserId();
+    if (uid == null) return false;
+    if (!await _verifyPassword(userId: uid, password: password)) return false;
+
+    await DevDataSeedService.instance.wipeScopedDataForUser(uid);
+
+    final root = await _registryRoot();
+    final users = Map<String, dynamic>.from(root['users'] as Map? ?? {});
+    final displays = Map<String, dynamic>.from(root['displayNames'] as Map? ?? {});
+
+    String? normToRemove;
+    for (final e in users.entries) {
+      if (e.value == uid) {
+        normToRemove = e.key;
+        break;
+      }
+    }
+    if (normToRemove != null) users.remove(normToRemove);
+    displays.remove(uid);
+
+    root['users'] = users;
+    root['displayNames'] = displays;
+    await _saveRegistry(root);
+
+    await SecureKvService.instance.delete(credentialStorageKeyFor(uid));
+    await logout();
+    return true;
   }
 
   Future<bool> shouldAutoLogin() async {

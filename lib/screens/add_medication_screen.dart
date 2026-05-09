@@ -75,6 +75,10 @@ class _AddMedicationScreenState extends State<AddMedicationScreen> {
           TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Отмена')),
           FilledButton(
             onPressed: () => Navigator.pop(ctx, ctrl.text.trim()),
+            style: FilledButton.styleFrom(
+              backgroundColor: AppColors.dialogPrimary,
+              foregroundColor: AppColors.white,
+            ),
             child: const Text('Добавить'),
           ),
         ],
@@ -116,7 +120,7 @@ class _AddMedicationScreenState extends State<AddMedicationScreen> {
                     final picked = await showTimePickerModal(ctx, initial: time);
                     if (picked != null) setDlg(() => time = picked);
                   },
-                  icon: const Icon(Icons.access_time, color: AppColors.orange),
+                  icon: const Icon(Icons.access_time, color: AppColors.dialogPrimary),
                   label: Text(
                     '${time.hour.toString().padLeft(2, '0')}:${time.minute.toString().padLeft(2, '0')}',
                     style: GoogleFonts.alegreyaSans(fontWeight: FontWeight.w700),
@@ -133,7 +137,10 @@ class _AddMedicationScreenState extends State<AddMedicationScreen> {
               TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Отмена')),
               FilledButton(
                 onPressed: () => Navigator.pop(ctx, true),
-                style: FilledButton.styleFrom(backgroundColor: AppColors.orange),
+                style: FilledButton.styleFrom(
+                  backgroundColor: AppColors.dialogPrimary,
+                  foregroundColor: AppColors.white,
+                ),
                 child: const Text('Сохранить'),
               ),
             ],

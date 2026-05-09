@@ -283,8 +283,12 @@ class _NoteEditScreenState extends State<NoteEditScreen> {
             onPressed: () => Navigator.pop(ctx, false),
             child: const Text('Отмена'),
           ),
-          TextButton(
+          FilledButton(
             onPressed: () => Navigator.pop(ctx, true),
+            style: FilledButton.styleFrom(
+              backgroundColor: AppColors.dialogPrimary,
+              foregroundColor: AppColors.white,
+            ),
             child: const Text('Удалить'),
           ),
         ],

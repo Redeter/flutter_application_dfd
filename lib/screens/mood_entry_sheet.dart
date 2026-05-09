@@ -262,7 +262,7 @@ class _MoodEntrySheetState extends State<_MoodEntrySheet> {
             child: FilledButton(
               onPressed: _save,
               style: FilledButton.styleFrom(
-                backgroundColor: AppColors.orangeHandle,
+                backgroundColor: AppColors.dialogPrimary,
                 foregroundColor: AppColors.white,
                 padding: const EdgeInsets.symmetric(vertical: 16),
                 shape: RoundedRectangleBorder(

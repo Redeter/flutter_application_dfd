@@ -25,7 +25,7 @@ void main() {
     expect(s.medicationAdherenceRate, isNull);
   });
 
-  test('только заметки — регулярность и окно > 0', () {
+  test('только заметки — три сферы и окно > 0', () {
     final day = DateTime(2026, 1, 10);
     final data = AggregatedData(
       notes: [
@@ -42,7 +42,8 @@ void main() {
       appointments: const [],
     );
     final s = FoundationService.instance.compute(data, goals, statsPeriodCaption: cap);
-    expect(s.spheres.any((e) => e.id == 'consistency'), true);
+    expect(s.spheres.length, 3);
+    expect(s.spheres.any((e) => e.id == 'sleep'), true);
     expect(s.dataSourcesSummary.contains('заметок 1'), true);
   });
 

@@ -4,8 +4,8 @@ import '../models/aggregated_data.dart';
 import '../models/calendar_entry.dart';
 import '../models/state_entries.dart';
 
-/// Ключ одной схемы приёма: как в профиле «Принимаемые препараты»
-/// ([seriesId] при многодневной серии, иначе имя+дозировка — не уникальный [id] строки).
+/// Ключ одной схемы приёма для календарной статистики по режимам:
+/// [seriesId] при многодневной серии, иначе имя+дозировка.
 String medicationRegimenKey(Medication m) {
   final sid = m.seriesId;
   if (sid != null && sid.isNotEmpty) return sid;
@@ -29,6 +29,24 @@ int countDistinctActiveMedicationRegimens(AggregatedData data, DateTime today) {
     final md = _calendarDay(m.date);
     if (md.isBefore(d0)) continue;
     seen.add(medicationRegimenKey(m));
+  }
+  return seen.length;
+}
+
+/// Нормализованное название: одно уникальное имя = один препарат в счётчиках профиля и статистики.
+String medicationUniqueNameKey(Medication m) => m.name.trim().toLowerCase();
+
+/// Уникальные названия препаратов с хотя бы одним днём приёма не раньше [today]
+/// (совпадает с числом строк «Принимаемые препараты» в профиле).
+int countDistinctActiveMedicationNames(Iterable<Medication> medications, DateTime today) {
+  final d0 = _calendarDay(today);
+  final seen = <String>{};
+  for (final m in medications) {
+    final md = _calendarDay(m.date);
+    if (md.isBefore(d0)) continue;
+    final key = medicationUniqueNameKey(m);
+    if (key.isEmpty) continue;
+    seen.add(key);
   }
   return seen.length;
 }

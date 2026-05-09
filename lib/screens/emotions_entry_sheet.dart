@@ -154,7 +154,7 @@ class _EmotionsEntrySheetState extends State<_EmotionsEntrySheet> {
                     child: FilledButton(
                       onPressed: _save,
                       style: FilledButton.styleFrom(
-                        backgroundColor: AppColors.orangeHandle,
+                        backgroundColor: AppColors.dialogPrimary,
                         foregroundColor: AppColors.white,
                         padding: const EdgeInsets.symmetric(vertical: 16),
                         shape: RoundedRectangleBorder(

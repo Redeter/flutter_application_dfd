@@ -105,7 +105,6 @@ class _FoundationScreenState extends State<FoundationScreen> {
     var sleepWeight = _goals.sleepWeight;
     var moodWeight = _goals.moodWeight;
     var energyWeight = _goals.energyWeight;
-    var consistencyWeight = _goals.consistencyWeight;
     final saved = await showModalBottomSheet<bool>(
       context: context,
       isScrollControlled: true,
@@ -137,7 +136,7 @@ class _FoundationScreenState extends State<FoundationScreen> {
               return Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text('$label: x${value.toStringAsFixed(1)}'),
+                  Text(label),
                   Slider(
                     value: value,
                     min: 0.5,
@@ -183,13 +182,15 @@ class _FoundationScreenState extends State<FoundationScreen> {
                   weightSlider('Сон', sleepWeight, (v) => setSheetState(() => sleepWeight = v)),
                   weightSlider('Настроение', moodWeight, (v) => setSheetState(() => moodWeight = v)),
                   weightSlider('Энергия', energyWeight, (v) => setSheetState(() => energyWeight = v)),
-                  weightSlider('Регулярность', consistencyWeight, (v) => setSheetState(() => consistencyWeight = v)),
                   const SizedBox(height: 8),
                   LaconicTap(
                     onTap: () => Navigator.pop(context, true),
                     child: FilledButton(
                       onPressed: () => Navigator.pop(context, true),
-                      style: FilledButton.styleFrom(backgroundColor: AppColors.orange),
+                      style: FilledButton.styleFrom(
+                        backgroundColor: AppColors.dialogPrimary,
+                        foregroundColor: AppColors.white,
+                      ),
                       child: const Text('Сохранить'),
                     ),
                   ),
@@ -208,7 +209,6 @@ class _FoundationScreenState extends State<FoundationScreen> {
       sleepWeight: sleepWeight,
       moodWeight: moodWeight,
       energyWeight: energyWeight,
-      consistencyWeight: consistencyWeight,
     );
     await FoundationService.instance.saveGoals(next);
     if (!mounted) return;
@@ -345,7 +345,10 @@ class _FoundationScreenState extends State<FoundationScreen> {
                   onTap: () => Navigator.pop(ctx, 'sleep'),
                   child: FilledButton(
                     onPressed: () => Navigator.pop(ctx, 'sleep'),
-                    style: FilledButton.styleFrom(backgroundColor: AppColors.orange),
+                    style: FilledButton.styleFrom(
+                      backgroundColor: AppColors.dialogPrimary,
+                      foregroundColor: AppColors.white,
+                    ),
                     child: const Text('Сон'),
                   ),
                 ),
@@ -354,7 +357,10 @@ class _FoundationScreenState extends State<FoundationScreen> {
                   onTap: () => Navigator.pop(ctx, 'mood'),
                   child: FilledButton(
                     onPressed: () => Navigator.pop(ctx, 'mood'),
-                    style: FilledButton.styleFrom(backgroundColor: AppColors.orange),
+                    style: FilledButton.styleFrom(
+                      backgroundColor: AppColors.dialogPrimary,
+                      foregroundColor: AppColors.white,
+                    ),
                     child: const Text('Настроение'),
                   ),
                 ),
@@ -363,7 +369,10 @@ class _FoundationScreenState extends State<FoundationScreen> {
                   onTap: () => Navigator.pop(ctx, 'energy'),
                   child: FilledButton(
                     onPressed: () => Navigator.pop(ctx, 'energy'),
-                    style: FilledButton.styleFrom(backgroundColor: AppColors.orange),
+                    style: FilledButton.styleFrom(
+                      backgroundColor: AppColors.dialogPrimary,
+                      foregroundColor: AppColors.white,
+                    ),
                     child: const Text('Энергия'),
                   ),
                 ),
@@ -609,7 +618,7 @@ class _FoundationScreenState extends State<FoundationScreen> {
                         ),
                       ),
                     ],
-                    if (_score!.spheres.any((s) => !s.hasMetricSamples && s.id != 'consistency')) ...[
+                    if (_score!.spheres.any((s) => !s.hasMetricSamples)) ...[
                       const SizedBox(height: 10),
                       FilledButton.tonalIcon(
                         onPressed: () => showStateCategoriesSheet(context),
@@ -862,11 +871,9 @@ class _SphereTile extends StatelessWidget {
           ),
           const SizedBox(height: 6),
           Text(
-            sphere.id == 'consistency'
-                ? 'Регулярность: ${(sphere.current * 100).round()}% активных дней (заметки, «+», календарь).'
-                : (!sphere.hasMetricSamples
-                    ? 'Нет записей этой метрики в «+» — шкала обновится после первых данных. Цель: ${sphere.target.toStringAsFixed(1)}.'
-                    : 'Текущее: ${sphere.current.toStringAsFixed(1)} / Цель: ${sphere.target.toStringAsFixed(1)} • вес x${sphere.weight.toStringAsFixed(1)}'),
+            !sphere.hasMetricSamples
+                ? 'Нет записей этой метрики в «+» — шкала обновится после первых данных. Цель: ${sphere.target.toStringAsFixed(1)}.'
+                : 'Текущее: ${sphere.current.toStringAsFixed(1)} / Цель: ${sphere.target.toStringAsFixed(1)}',
             style: GoogleFonts.alegreyaSans(
               fontSize: 12,
               color: AppColors.textDark.withValues(alpha: 0.68),

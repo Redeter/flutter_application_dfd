@@ -361,21 +361,18 @@ class _CalendarScreenState extends State<CalendarScreen> {
         child: Material(
           elevation: 6,
           shadowColor: AppColors.orange.withValues(alpha: 0.45),
-          shape: const CircleBorder(),
+          color: Colors.transparent,
+          clipBehavior: Clip.antiAlias,
+          borderRadius: BorderRadius.circular(20),
           child: InkWell(
-            customBorder: const CircleBorder(),
+            borderRadius: BorderRadius.circular(20),
             onTap: () => _openAddMedication(),
-            child: Ink(
+            child: SizedBox(
               width: 64,
               height: 64,
-              decoration: const BoxDecoration(
-                shape: BoxShape.circle,
-                color: AppColors.orange,
-              ),
-              child: const Icon(
-                Icons.medication_outlined,
-                color: AppColors.white,
-                size: 32,
+              child: SvgPicture.asset(
+                'assets/icons/new pill button.svg',
+                fit: BoxFit.contain,
               ),
             ),
           ),

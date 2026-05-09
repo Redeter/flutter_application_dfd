@@ -28,7 +28,7 @@ class _DeleteConfirmDialog extends StatelessWidget {
         decoration: BoxDecoration(
           color: AppColors.cream,
           borderRadius: BorderRadius.circular(24),
-          border: Border.all(color: AppColors.orange, width: 2),
+          border: Border.all(color: AppColors.dialogPrimary, width: 2),
         ),
         child: Column(
           mainAxisSize: MainAxisSize.min,
@@ -60,7 +60,7 @@ class _DeleteConfirmDialog extends StatelessWidget {
     return LaconicTap(
       onTap: onPressed,
       child: Material(
-        color: AppColors.orange,
+        color: AppColors.dialogPrimary,
         borderRadius: BorderRadius.circular(24),
         child: InkWell(
           onTap: onPressed,
