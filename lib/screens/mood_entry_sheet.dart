@@ -45,7 +45,7 @@ class _MoodEntrySheetState extends State<_MoodEntrySheet> {
     return Container(
       height: MediaQuery.of(context).size.height * 0.85,
       decoration: const BoxDecoration(
-        color: AppColors.lavender,
+        color: AppColors.moodCategoryBackground,
         borderRadius: BorderRadius.vertical(top: Radius.circular(28)),
       ),
       child: Column(
@@ -56,7 +56,7 @@ class _MoodEntrySheetState extends State<_MoodEntrySheet> {
             child: Row(
               children: [
                 Icon(Icons.sentiment_satisfied_alt_rounded,
-                    color: AppColors.purple, size: 32),
+                    color: AppColors.moodAccent, size: 32),
                 const SizedBox(width: 12),
                 Text(
                   'НАСТРОЕНИЕ',
@@ -70,7 +70,7 @@ class _MoodEntrySheetState extends State<_MoodEntrySheet> {
                 IconButton(
                   onPressed: () => Navigator.pop(context),
                   icon: Icon(Icons.arrow_back_ios_new_rounded,
-                      color: AppColors.purple, size: 24),
+                      color: AppColors.moodAccent, size: 24),
                 ),
               ],
             ),
@@ -100,7 +100,7 @@ class _MoodEntrySheetState extends State<_MoodEntrySheet> {
       width: double.infinity,
       padding: const EdgeInsets.symmetric(vertical: 14),
       decoration: const BoxDecoration(
-        color: AppColors.orangeHandle,
+        color: AppColors.moodSheetHandle,
         borderRadius: BorderRadius.vertical(top: Radius.circular(28)),
       ),
       child: Center(
@@ -154,7 +154,7 @@ class _MoodEntrySheetState extends State<_MoodEntrySheet> {
         borderRadius: BorderRadius.circular(24),
         boxShadow: [
           BoxShadow(
-            color: AppColors.purple.withValues(alpha: 0.12),
+            color: AppColors.moodAccent.withValues(alpha: 0.12),
             blurRadius: 16,
             offset: const Offset(0, 4),
           ),
@@ -201,7 +201,7 @@ class _MoodEntrySheetState extends State<_MoodEntrySheet> {
         borderRadius: BorderRadius.circular(24),
         boxShadow: [
           BoxShadow(
-            color: AppColors.purple.withValues(alpha: 0.12),
+            color: AppColors.moodAccent.withValues(alpha: 0.12),
             blurRadius: 16,
             offset: const Offset(0, 4),
           ),
@@ -237,10 +237,10 @@ class _MoodEntrySheetState extends State<_MoodEntrySheet> {
                 child: Container(
                   padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
                   decoration: BoxDecoration(
-                    color: selected ? AppColors.orangeHandle : AppColors.white,
+                    color: selected ? AppColors.moodAccent : AppColors.white,
                     borderRadius: BorderRadius.circular(16),
                     border: Border.all(
-                      color: AppColors.orangeHandle,
+                      color: AppColors.moodAccent,
                       width: 2,
                     ),
                   ),
@@ -249,7 +249,7 @@ class _MoodEntrySheetState extends State<_MoodEntrySheet> {
                     style: GoogleFonts.alegreyaSans(
                       fontSize: 14,
                       fontWeight: FontWeight.w600,
-                      color: selected ? AppColors.white : AppColors.orangeHandle,
+                      color: selected ? AppColors.white : AppColors.moodAccent,
                     ),
                   ),
                 ),
@@ -262,7 +262,7 @@ class _MoodEntrySheetState extends State<_MoodEntrySheet> {
             child: FilledButton(
               onPressed: _save,
               style: FilledButton.styleFrom(
-                backgroundColor: AppColors.dialogPrimary,
+                backgroundColor: AppColors.moodAccent,
                 foregroundColor: AppColors.white,
                 padding: const EdgeInsets.symmetric(vertical: 16),
                 shape: RoundedRectangleBorder(

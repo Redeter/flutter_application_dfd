@@ -24,8 +24,8 @@ class _StateCategoriesSheet extends StatelessWidget {
   static const _items = [
     (
       label: 'Настроение',
-      color: AppColors.lavender,
-      iconColor: AppColors.purple,
+      color: AppColors.moodCategoryBackground,
+      iconColor: AppColors.moodAccent,
       icon: Icons.sentiment_satisfied_alt_rounded,
     ),
     (

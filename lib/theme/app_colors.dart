@@ -19,7 +19,17 @@ abstract final class AppColors {
   static const Color lightBlue = Color(0xFFE3F2FD);
   static const Color lightGreen = Color(0xFFE8F5E9);
   static const Color lightYellow = Color(0xFFFFF9E6);
-  static const Color purple = Color(0xFF000000);
+
+  /// Карточка «Сегодня» на статистике: светлый лиловый → более насыщенный фиолет (как в макете).
+  static const Color todayMetricGradientStart = Color(0xFFD8CAEB);
+  static const Color todayMetricGradientEnd = Color(0xFF9B86C9);
+
+  /// Фон плитки и листа «Настроение».
+  static const Color moodCategoryBackground = Color(0xFFF5F0FC);
+  /// Иконки, обводки и лёгкие тени в блоке настроения — в той же гамме, что и карточка «Сегодня».
+  static const Color moodAccent = Color(0xFF8E7CC8);
+  /// Верхняя «ручка» листа настроения.
+  static const Color moodSheetHandle = Color(0xFFB39DDB);
 
   // Календарь
   static const Color appointmentCardFrame = Color(0xFFEEC09D);

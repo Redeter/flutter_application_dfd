@@ -883,7 +883,10 @@ class _StatisticsScreenState extends State<StatisticsScreen> {
                         cardWidth,
                         'Сегодня',
                         Icons.schedule_rounded,
-                        [AppColors.lavender, Color(0xFF9E9E9E)],
+                        [
+                          AppColors.todayMetricGradientStart,
+                          AppColors.todayMetricGradientEnd,
+                        ],
                         body: _metricSingleStack(
                           '$dosesToday',
                           'слотов приёма на сегодня',
