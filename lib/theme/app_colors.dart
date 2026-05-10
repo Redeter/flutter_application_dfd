@@ -21,6 +21,10 @@ abstract final class AppColors {
   static const Color lightYellow = Color(0xFFFFF9E6);
   static const Color purple = Color(0xFF9B51E0);
 
+  /// Лист «Настроение» и тайл в выборе категории состояния (как в [mood_entry_sheet]).
+  static const Color moodCategoryBackground = lavender;
+  static const Color moodAccent = purple;
+
   // Календарь
   static const Color appointmentCardFrame = Color(0xFFEEC09D);
   static const Color headerPeach = Color(0xFFFBC490);

@@ -1,4 +1,6 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
+    <!-- Нужно для google_fonts (загрузка шрифтов в runtime); в debug это дублируется из src/debug. -->
+    <uses-permission android:name="android.permission.INTERNET" />
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
     <!-- Точное время для zonedSchedule(exactAllowWhileIdle); без этого на API 31+ — exact_alarms_not_permitted. -->
     <uses-permission android:name="android.permission.SCHEDULE_EXACT_ALARM" />
