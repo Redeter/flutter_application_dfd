@@ -463,8 +463,14 @@ class _StatisticsScreenState extends State<StatisticsScreen> {
           : (action == 'seed_negative'
               ? await DevDataSeedService.instance.generateNegative90Days()
               : await DevDataSeedService.instance.generateMixed90Days());
-      await NotificationService.instance.rescheduleCalendarNotifications();
+      // Сначала перезагрузка статистики из хранилища; перепланирование уведомлений
+      // может упасть на release/R8 — не блокировать отображение данных.
       await _load();
+      try {
+        await NotificationService.instance.rescheduleCalendarNotifications();
+      } catch (e, st) {
+        debugPrint('rescheduleCalendarNotifications: $e\n$st');
+      }
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(

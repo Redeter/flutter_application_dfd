@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:pdf/widgets.dart' as pw;
@@ -153,12 +155,20 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
     );
     if (confirm != true) return;
     await AuthService.instance.logout();
-    await NeuralInsightsService.instance.reloadForActiveUser();
     if (!mounted) return;
-    Navigator.of(context).pushAndRemoveUntil(
-      MaterialPageRoute(builder: (_) => const AuthGateScreen()),
-      (route) => false,
+    Navigator.of(context, rootNavigator: true).pushAndRemoveUntil<void>(
+      MaterialPageRoute<void>(builder: (_) => const AuthGateScreen()),
+      (_) => false,
     );
+
+    unawaited(Future<void>(() async {
+      try {
+        await NeuralInsightsService.instance.reloadForActiveUser();
+      } catch (_) {}
+      try {
+        await NotificationService.instance.rescheduleCalendarNotifications();
+      } catch (_) {}
+    }));
   }
 
   Future<void> _deleteAccount() async {
@@ -172,18 +182,37 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
     final ok = await AuthService.instance.deleteAccount(password: pwd);
     if (!mounted) return;
     if (!ok) {
+      // После успешного удаления сессия уже сброшена — повторный ввод даёт false до проверки пароля.
+      final session = await AuthService.instance.sessionUserId();
+      if (!mounted) return;
+      if (session == null) {
+        Navigator.of(context, rootNavigator: true).pushAndRemoveUntil<void>(
+          MaterialPageRoute<void>(builder: (_) => const AuthGateScreen()),
+          (_) => false,
+        );
+        return;
+      }
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Неверный пароль')),
       );
       return;
     }
-    await NeuralInsightsService.instance.reloadForActiveUser();
-    await NotificationService.instance.rescheduleCalendarNotifications();
-    if (!mounted) return;
-    Navigator.of(context).pushAndRemoveUntil(
-      MaterialPageRoute(builder: (_) => const AuthGateScreen()),
-      (route) => false,
+
+    // Сразу уходим на экран входа: перепланирование уведомлений / нейросеть
+    // не должны блокировать навигацию (в release там возможны исключения).
+    Navigator.of(context, rootNavigator: true).pushAndRemoveUntil<void>(
+      MaterialPageRoute<void>(builder: (_) => const AuthGateScreen()),
+      (_) => false,
     );
+
+    unawaited(Future<void>(() async {
+      try {
+        await NeuralInsightsService.instance.reloadForActiveUser();
+      } catch (_) {}
+      try {
+        await NotificationService.instance.rescheduleCalendarNotifications();
+      } catch (_) {}
+    }));
   }
 
   @override

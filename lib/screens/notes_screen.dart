@@ -40,10 +40,10 @@ class NotesScreen extends StatefulWidget {
   final bool embeddedInShell;
 
   @override
-  State<NotesScreen> createState() => _NotesScreenState();
+  State<NotesScreen> createState() => NotesScreenState();
 }
 
-class _NotesScreenState extends State<NotesScreen> {
+class NotesScreenState extends State<NotesScreen> {
   List<NoteItem> _notes = [];
 
   @override
@@ -51,6 +51,10 @@ class _NotesScreenState extends State<NotesScreen> {
     super.initState();
     _load();
   }
+
+  /// Вызывается из [AppShell] при переключении на вкладку: данные могли измениться
+  /// на другой вкладке (генерация статистики и т.д.), пока список был offstage.
+  void reloadFromShell() => _load();
 
   Future<void> _load() async {
     final list = await NotesStorage.instance.loadAll();
@@ -246,6 +250,19 @@ class _NotesScreenState extends State<NotesScreen> {
     return map;
   }
 
+  Widget _buildEmptyNotes() {
+    return Center(
+      child: Text(
+        'Нет заметок',
+        style: GoogleFonts.alegreyaSans(
+          fontSize: 20,
+          fontWeight: FontWeight.w600,
+          color: AppColors.textDark.withValues(alpha: 0.7),
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final keys = _grouped.keys.toList()
@@ -302,56 +319,73 @@ class _NotesScreenState extends State<NotesScreen> {
                   child: RefreshIndicator(
                     color: AppColors.orange,
                     onRefresh: _load,
-                    child: ListView.builder(
-                      physics: const AlwaysScrollableScrollPhysics(),
-                      padding: const EdgeInsets.fromLTRB(20, 8, 20, 100),
-                      itemCount: keys.length,
-                    itemBuilder: (context, sectionIndex) {
-                      final day = keys[sectionIndex];
-                      final items = _grouped[day]!;
-                      return Column(
-                        crossAxisAlignment: CrossAxisAlignment.stretch,
-                        children: [
-                          _DateDivider(label: _dateHeaderRu(day)),
-                          const SizedBox(height: 14),
-                          ...items.asMap().entries.map((e) {
-                            final globalIndex = _notes.indexOf(e.value);
-                            return Padding(
-                              padding: const EdgeInsets.only(bottom: 14),
-                              child: Dismissible(
-                                key: ValueKey('${e.value.date.toIso8601String()}-${e.value.title}-$globalIndex'),
-                                direction: DismissDirection.endToStart,
-                                background: Container(
-                                  alignment: Alignment.centerRight,
-                                  padding: const EdgeInsets.only(right: 16),
-                                  decoration: BoxDecoration(
-                                    color: Colors.redAccent.withValues(alpha: 0.85),
-                                    borderRadius: BorderRadius.circular(22),
-                                  ),
-                                  child: const Icon(
-                                    Icons.delete_outline_rounded,
-                                    color: Colors.white,
-                                    size: 24,
-                                  ),
-                                ),
-                                confirmDismiss: (_) async {
-                                  await _deleteNote(globalIndex);
-                                  return false;
-                                },
-                                child: _NoteCard(
-                                  note: e.value,
-                                  onEdit: () => _openEditor(
-                                    note: e.value,
-                                    index: globalIndex,
-                                  ),
-                                  onDelete: () => _deleteNote(globalIndex),
-                                ),
+                    child: LayoutBuilder(
+                      builder: (context, constraints) {
+                        if (keys.isEmpty) {
+                          return SingleChildScrollView(
+                            physics: const AlwaysScrollableScrollPhysics(),
+                            child: ConstrainedBox(
+                              constraints: BoxConstraints(
+                                minHeight: constraints.maxHeight,
                               ),
+                              child: _buildEmptyNotes(),
+                            ),
+                          );
+                        }
+                        return ListView.builder(
+                          physics: const AlwaysScrollableScrollPhysics(),
+                          padding: const EdgeInsets.fromLTRB(20, 8, 20, 100),
+                          itemCount: keys.length,
+                          itemBuilder: (context, sectionIndex) {
+                            final day = keys[sectionIndex];
+                            final items = _grouped[day]!;
+                            return Column(
+                              crossAxisAlignment: CrossAxisAlignment.stretch,
+                              children: [
+                                _DateDivider(label: _dateHeaderRu(day)),
+                                const SizedBox(height: 14),
+                                ...items.asMap().entries.map((e) {
+                                  final globalIndex = _notes.indexOf(e.value);
+                                  return Padding(
+                                    padding: const EdgeInsets.only(bottom: 14),
+                                    child: Dismissible(
+                                      key: ValueKey(
+                                        '${e.value.date.toIso8601String()}-${e.value.title}-$globalIndex',
+                                      ),
+                                      direction: DismissDirection.endToStart,
+                                      background: Container(
+                                        alignment: Alignment.centerRight,
+                                        padding: const EdgeInsets.only(right: 16),
+                                        decoration: BoxDecoration(
+                                          color: Colors.redAccent.withValues(alpha: 0.85),
+                                          borderRadius: BorderRadius.circular(22),
+                                        ),
+                                        child: const Icon(
+                                          Icons.delete_outline_rounded,
+                                          color: Colors.white,
+                                          size: 24,
+                                        ),
+                                      ),
+                                      confirmDismiss: (_) async {
+                                        await _deleteNote(globalIndex);
+                                        return false;
+                                      },
+                                      child: _NoteCard(
+                                        note: e.value,
+                                        onEdit: () => _openEditor(
+                                          note: e.value,
+                                          index: globalIndex,
+                                        ),
+                                        onDelete: () => _deleteNote(globalIndex),
+                                      ),
+                                    ),
+                                  );
+                                }),
+                              ],
                             );
-                          }),
-                        ],
-                      );
-                    },
+                          },
+                        );
+                      },
                     ),
                   ),
                 ),

@@ -37,27 +37,31 @@ class _RegistrationScreenState extends State<RegistrationScreen> {
     if (!isValid) return;
     setState(() => _loading = true);
     try {
-      await AuthService.instance.register(username: username, password: password);
-    } on AuthUsernameTakenException catch (e) {
-      if (!mounted) return;
-      setState(() => _loading = false);
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(e.message)),
+      try {
+        await AuthService.instance.register(username: username, password: password);
+      } on AuthUsernameTakenException catch (e) {
+        if (!mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(e.message)),
+        );
+        return;
+      }
+      await UserProfileService.instance.save(
+        UserProfile(
+          name: username,
+          doctorName: _doctorController.text.trim(),
+          conditions: _selectedConditions.toList(),
+          priorityFocus: _priorityFocus,
+        ),
       );
-      return;
+      try {
+        await NeuralInsightsService.instance.reloadForActiveUser();
+      } catch (_) {}
+      if (!mounted) return;
+      widget.onCompleted();
+    } finally {
+      if (mounted) setState(() => _loading = false);
     }
-    await UserProfileService.instance.save(
-      UserProfile(
-        name: username,
-        doctorName: _doctorController.text.trim(),
-        conditions: _selectedConditions.toList(),
-        priorityFocus: _priorityFocus,
-      ),
-    );
-    await NeuralInsightsService.instance.reloadForActiveUser();
-    if (!mounted) return;
-    setState(() => _loading = false);
-    widget.onCompleted();
   }
 
   @override
