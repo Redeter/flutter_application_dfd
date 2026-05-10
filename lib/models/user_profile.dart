@@ -21,13 +21,11 @@ enum PriorityStateFocus {
 class UserProfile {
   const UserProfile({
     this.name = '',
-    this.doctorName = '',
     this.conditions = const [],
     this.priorityFocus = PriorityStateFocus.mood,
   });
 
   final String name;
-  final String doctorName;
   final List<MentalCondition> conditions;
   final PriorityStateFocus priorityFocus;
 

@@ -17,7 +17,6 @@ class UserProfileService {
     try {
       final m = Map<String, dynamic>.from(jsonDecode(raw) as Map);
       final name = (m['name'] as String? ?? '').trim();
-      final doctorName = (m['doctorName'] as String? ?? '').trim();
       final conditions = (m['conditions'] as List<dynamic>? ?? [])
           .map((e) => MentalConditionX.fromCode('$e'))
           .whereType<MentalCondition>()
@@ -27,7 +26,6 @@ class UserProfileService {
       );
       return UserProfile(
         name: name,
-        doctorName: doctorName,
         conditions: conditions,
         priorityFocus: priorityFocus,
       );
@@ -42,7 +40,6 @@ class UserProfileService {
       key,
       jsonEncode({
         'name': profile.name.trim(),
-        'doctorName': profile.doctorName.trim(),
         'conditions': profile.conditions.map((e) => e.code).toList(),
         'priorityFocus': profile.priorityFocus.code,
       }),

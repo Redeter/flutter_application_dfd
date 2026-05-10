@@ -90,11 +90,11 @@ class _LoginScreenState extends State<LoginScreen> {
                   TextFormField(
                     controller: _usernameController,
                     cursorColor: Colors.black,
-                    decoration: _inputDecoration('Имя пользователя'),
+                    decoration: _inputDecoration('Логин'),
                     validator: (value) {
                       final usernameValue = (value ?? '').trim();
                       if (usernameValue.isEmpty) {
-                        return 'Введите имя пользователя';
+                        return 'Введите логин';
                       }
                       if (!_usernameRegExp.hasMatch(usernameValue)) {
                         return 'Логин: 3-32 символа, буквы/цифры/._-';

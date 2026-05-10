@@ -239,7 +239,6 @@ class _FoundationScreenState extends State<FoundationScreen> {
     await UserProfileService.instance.save(
       UserProfile(
         name: _profile.name,
-        doctorName: _profile.doctorName,
         conditions: _profile.conditions,
         priorityFocus:
             FoundationService.instance.inferPriorityFocusFromWeights(next),
@@ -434,7 +433,6 @@ class _FoundationScreenState extends State<FoundationScreen> {
     await UserProfileService.instance.save(
       UserProfile(
         name: _profile.name,
-        doctorName: _profile.doctorName,
         conditions: _profile.conditions,
         priorityFocus: PriorityStateFocusX.fromCode(pick),
       ),

@@ -10,7 +10,7 @@ import 'dev_data_seed_service.dart';
 import 'secure_kv_service.dart';
 
 class AuthUsernameTakenException implements Exception {
-  AuthUsernameTakenException([this.message = 'Это имя пользователя уже занято']);
+  AuthUsernameTakenException([this.message = 'Этот логин уже занят']);
   final String message;
 
   @override

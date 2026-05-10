@@ -29,8 +29,8 @@ class UserProfileScreen extends StatefulWidget {
 }
 
 class _UserProfileScreenState extends State<UserProfileScreen> {
+  final _loginReadOnlyController = TextEditingController();
   final _nameController = TextEditingController();
-  final _doctorController = TextEditingController();
   final _selected = <MentalCondition>{};
   PriorityStateFocus _priorityFocus = PriorityStateFocus.mood;
   List<Medication> _medications = const [];
@@ -48,6 +48,7 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
   }
 
   Future<void> _load() async {
+    final login = await AuthService.instance.username() ?? '';
     final profile = await UserProfileService.instance.load();
     final entries = await CalendarStorage.instance.loadAll();
     final medications = entries.whereType<Medication>().toList();
@@ -76,8 +77,8 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
 
     if (!mounted) return;
     setState(() {
+      _loginReadOnlyController.text = login;
       _nameController.text = profile.name;
-      _doctorController.text = profile.doctorName;
       _selected
         ..clear()
         ..addAll(profile.conditions);
@@ -117,7 +118,6 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
     await UserProfileService.instance.save(
       UserProfile(
         name: _nameController.text.trim(),
-        doctorName: _doctorController.text.trim(),
         conditions: _selected.toList(),
         priorityFocus: _priorityFocus,
       ),
@@ -217,8 +217,8 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
 
   @override
   void dispose() {
+    _loginReadOnlyController.dispose();
     _nameController.dispose();
-    _doctorController.dispose();
     super.dispose();
   }
 
@@ -283,9 +283,6 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
           pw.Text('Период: ${_fmtDate(from)} - ${_fmtDate(to)}'),
           pw.SizedBox(height: 14),
           pw.Text('Имя: ${_nameController.text.trim().isEmpty ? 'Не указано' : _nameController.text.trim()}'),
-          pw.Text(
-            'Врач: ${_doctorController.text.trim().isEmpty ? 'Не указано' : _doctorController.text.trim()}',
-          ),
           pw.SizedBox(height: 16),
           pw.Text(
             'Нейроанализ состояния',
@@ -394,11 +391,14 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
                   ),
                   const SizedBox(height: 12),
                   TextField(
-                    controller: _nameController,
+                    readOnly: true,
+                    enableInteractiveSelection: true,
+                    controller: _loginReadOnlyController,
                     decoration: InputDecoration(
-                      labelText: 'Имя',
+                      labelText: 'Логин',
+                      helperText: 'Задаётся при регистрации и не меняется',
                       filled: true,
-                      fillColor: AppColors.white,
+                      fillColor: AppColors.greyMuted.withValues(alpha: 0.35),
                       border: OutlineInputBorder(
                         borderRadius: BorderRadius.circular(12),
                         borderSide: BorderSide.none,
@@ -407,9 +407,18 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
                   ),
                   const SizedBox(height: 12),
                   TextField(
-                    controller: _doctorController,
+                    controller: _nameController,
+                    maxLength: 200,
+                    buildCounter: (
+                      context, {
+                      required currentLength,
+                      required isFocused,
+                      maxLength,
+                    }) =>
+                        null,
                     decoration: InputDecoration(
-                      labelText: 'Имя врача',
+                      labelText: 'Имя',
+                      helperText: 'Любые буквы и символы',
                       filled: true,
                       fillColor: AppColors.white,
                       border: OutlineInputBorder(

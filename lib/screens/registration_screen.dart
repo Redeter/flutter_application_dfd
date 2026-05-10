@@ -20,10 +20,10 @@ class RegistrationScreen extends StatefulWidget {
 }
 
 class _RegistrationScreenState extends State<RegistrationScreen> {
-  final _usernameController = TextEditingController();
+  final _loginController = TextEditingController();
+  final _displayNameController = TextEditingController();
   final _passwordController = TextEditingController();
   final _confirmPasswordController = TextEditingController();
-  final _doctorController = TextEditingController();
   final _formKey = GlobalKey<FormState>();
   static final RegExp _usernameRegExp = RegExp(r'^[a-zA-Z0-9._-]{3,32}$');
   final _selectedConditions = <MentalCondition>{};
@@ -31,14 +31,15 @@ class _RegistrationScreenState extends State<RegistrationScreen> {
   bool _loading = false;
 
   Future<void> _register() async {
-    final username = _usernameController.text.trim();
+    final login = _loginController.text.trim();
+    final displayName = _displayNameController.text.trim();
     final password = _passwordController.text;
     final isValid = _formKey.currentState?.validate() ?? false;
     if (!isValid) return;
     setState(() => _loading = true);
     try {
       try {
-        await AuthService.instance.register(username: username, password: password);
+        await AuthService.instance.register(username: login, password: password);
       } on AuthUsernameTakenException catch (e) {
         if (!mounted) return;
         ScaffoldMessenger.of(context).showSnackBar(
@@ -48,8 +49,7 @@ class _RegistrationScreenState extends State<RegistrationScreen> {
       }
       await UserProfileService.instance.save(
         UserProfile(
-          name: username,
-          doctorName: _doctorController.text.trim(),
+          name: displayName,
           conditions: _selectedConditions.toList(),
           priorityFocus: _priorityFocus,
         ),
@@ -66,10 +66,10 @@ class _RegistrationScreenState extends State<RegistrationScreen> {
 
   @override
   void dispose() {
-    _usernameController.dispose();
+    _loginController.dispose();
+    _displayNameController.dispose();
     _passwordController.dispose();
     _confirmPasswordController.dispose();
-    _doctorController.dispose();
     super.dispose();
   }
 
@@ -98,15 +98,35 @@ class _RegistrationScreenState extends State<RegistrationScreen> {
               ),
               const SizedBox(height: 12),
               TextFormField(
-                controller: _usernameController,
+                controller: _loginController,
+                autocorrect: false,
                 cursorColor: Colors.black,
-                decoration: _inputDecoration('Имя пользователя'),
+                decoration: _inputDecoration('Логин'),
                 validator: (value) {
-                  final usernameValue = (value ?? '').trim();
-                  if (usernameValue.isEmpty) return 'Введите имя пользователя';
-                  if (!_usernameRegExp.hasMatch(usernameValue)) {
-                    return 'Логин: 3-32 символа, буквы/цифры/._-';
+                  final loginValue = (value ?? '').trim();
+                  if (loginValue.isEmpty) return 'Введите логин';
+                  if (!_usernameRegExp.hasMatch(loginValue)) {
+                    return 'Логин: 3-32 символа, латиница/цифры/._-';
                   }
+                  return null;
+                },
+              ),
+              const SizedBox(height: 10),
+              TextFormField(
+                controller: _displayNameController,
+                cursorColor: Colors.black,
+                maxLength: 200,
+                buildCounter: (
+                  context, {
+                  required currentLength,
+                  required isFocused,
+                  maxLength,
+                }) =>
+                    null,
+                decoration: _inputDecoration('Имя (как к вам обращаться)'),
+                validator: (value) {
+                  final name = (value ?? '').trim();
+                  if (name.length > 200) return 'Не длиннее 200 символов';
                   return null;
                 },
               ),
@@ -138,12 +158,6 @@ class _RegistrationScreenState extends State<RegistrationScreen> {
                   }
                   return null;
                 },
-              ),
-              const SizedBox(height: 10),
-              TextFormField(
-                controller: _doctorController,
-                cursorColor: Colors.black,
-                decoration: _inputDecoration('Врач (если есть)'),
               ),
               const SizedBox(height: 14),
               Text(
