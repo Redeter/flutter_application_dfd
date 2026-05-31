@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "44511263447",
+    "project_id": "dfd-diary",
+    "storage_bucket": "dfd-diary.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:44511263447:android:28ca77777151fd83a50e92",
+        "android_client_info": {
+          "package_name": "com.example.flutter_application_dfd"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyDZuV3EoI9Q5wXl4j7CWY2-R0I0LZNHiDI"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

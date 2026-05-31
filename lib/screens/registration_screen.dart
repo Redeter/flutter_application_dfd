@@ -1,3 +1,4 @@
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 
@@ -44,6 +45,12 @@ class _RegistrationScreenState extends State<RegistrationScreen> {
         if (!mounted) return;
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(content: Text(e.message)),
+        );
+        return;
+      } on FirebaseAuthException catch (e) {
+        if (!mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(_registerErrorRu(e))),
         );
         return;
       }
@@ -220,6 +227,19 @@ class _RegistrationScreenState extends State<RegistrationScreen> {
         ),
       ),
     );
+  }
+
+  String _registerErrorRu(FirebaseAuthException e) {
+    switch (e.code) {
+      case 'email-already-in-use':
+        return 'Этот логин уже занят';
+      case 'weak-password':
+        return 'Пароль слишком слабый';
+      case 'network-request-failed':
+        return 'Нет сети. Проверьте подключение.';
+      default:
+        return 'Не удалось зарегистрироваться (${e.code})';
+    }
   }
 
   InputDecoration _inputDecoration(String label) {

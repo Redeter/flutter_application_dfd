@@ -1,7 +1,11 @@
+import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import 'firebase/firebase_bootstrap.dart';
+import 'firebase_options.dart';
+import 'services/auth_service.dart';
 import 'services/notification_service.dart';
 import 'services/storage_migration_service.dart';
 import 'screens/auth_gate_screen.dart';
@@ -15,6 +19,11 @@ import 'widgets/app_bottom_nav.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
+  await Firebase.initializeApp(
+    options: DefaultFirebaseOptions.currentPlatform,
+  );
+  await FirebaseBootstrap.init();
+  await AuthService.instance.enforceRememberPolicyOnColdStart();
   await SharedPreferences.getInstance();
   await StorageMigrationService.instance.ensureMigrated();
   await GoogleFonts.pendingFonts([

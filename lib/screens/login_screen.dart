@@ -1,3 +1,4 @@
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 import 'package:google_fonts/google_fonts.dart';
@@ -33,21 +34,35 @@ class _LoginScreenState extends State<LoginScreen> {
     final isValid = _formKey.currentState?.validate() ?? false;
     if (!isValid) return;
     setState(() => _loading = true);
-    final ok = await AuthService.instance.login(
-      username: username,
-      password: password,
-      rememberSession: _rememberMe,
-    );
-    if (!mounted) return;
-    setState(() => _loading = false);
-    if (ok) {
-      await NeuralInsightsService.instance.reloadForActiveUser();
-      widget.onSuccess();
-      return;
+    try {
+      final ok = await AuthService.instance.login(
+        username: username,
+        password: password,
+        rememberSession: _rememberMe,
+      );
+      if (!mounted) return;
+      setState(() => _loading = false);
+      if (ok) {
+        await NeuralInsightsService.instance.reloadForActiveUser();
+        widget.onSuccess();
+        return;
+      }
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Неверный логин или пароль')),
+      );
+    } on FirebaseAuthException catch (e) {
+      if (!mounted) return;
+      setState(() => _loading = false);
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(_authErrorRu(e))),
+      );
+    } catch (_) {
+      if (!mounted) return;
+      setState(() => _loading = false);
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Ошибка входа. Проверьте интернет.')),
+      );
     }
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('Неверный логин или пароль')),
-    );
   }
 
   @override
@@ -174,6 +189,17 @@ class _LoginScreenState extends State<LoginScreen> {
         ),
       ),
     );
+  }
+
+  String _authErrorRu(FirebaseAuthException e) {
+    switch (e.code) {
+      case 'network-request-failed':
+        return 'Нет сети. Проверьте подключение к интернету.';
+      case 'too-many-requests':
+        return 'Слишком много попыток. Подождите и попробуйте снова.';
+      default:
+        return 'Не удалось войти (${e.code})';
+    }
   }
 
   InputDecoration _inputDecoration(String label) {

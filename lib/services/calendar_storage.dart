@@ -1,6 +1,7 @@
 import 'dart:convert';
 
 import '../models/calendar_entry.dart';
+import 'firestore_repository.dart';
 import 'secure_kv_service.dart';
 import 'user_scoped_store.dart';
 
@@ -11,31 +12,43 @@ class CalendarStorage {
   static CalendarStorage get instance => _instance;
   static final _instance = CalendarStorage._();
 
+  List<CalendarEntry> _parseList(List<dynamic>? list) {
+    if (list == null) return [];
+    final result = <CalendarEntry>[];
+    for (final item in list) {
+      final map = item is Map<String, dynamic>
+          ? item
+          : item is Map
+              ? Map<String, dynamic>.from(item)
+              : null;
+      if (map == null) continue;
+
+      final type = map['type'] as String?;
+      switch (type) {
+        case 'medication':
+          result.add(Medication.fromJson(map));
+          break;
+        case 'appointment':
+          result.add(Appointment.fromJson(map));
+          break;
+      }
+    }
+    return result;
+  }
+
   Future<List<CalendarEntry>> loadAll() async {
+    final cloud = await FirestoreRepository.instance
+        .loadJsonList(FirestoreRepository.fieldCalendar);
+    if (cloud != null) {
+      return _parseList(cloud);
+    }
+
     final key = await UserScopedStore.scopedKey(_keyCalendar);
     final raw = await SecureKvService.instance.readString(key);
     if (raw == null || raw.isEmpty) return [];
 
     try {
-      final list = jsonDecode(raw) as List<dynamic>?;
-      if (list == null) return [];
-
-      final result = <CalendarEntry>[];
-      for (final item in list) {
-        final map = item as Map<String, dynamic>?;
-        if (map == null) continue;
-
-        final type = map['type'] as String?;
-        switch (type) {
-          case 'medication':
-            result.add(Medication.fromJson(map));
-            break;
-          case 'appointment':
-            result.add(Appointment.fromJson(map));
-            break;
-        }
-      }
-      return result;
+      return _parseList(jsonDecode(raw) as List<dynamic>?);
     } catch (_) {
       return [];
     }
@@ -84,9 +97,15 @@ class CalendarStorage {
   }
 
   Future<void> _write(List<CalendarEntry> list) async {
+    final encoded = list.map((e) => e.toJson()).toList();
+
+    await FirestoreRepository.instance.saveJsonList(
+      FirestoreRepository.fieldCalendar,
+      encoded.cast<Map<String, dynamic>>(),
+    );
+
     final key = await UserScopedStore.scopedKey(_keyCalendar);
-    final encoded = jsonEncode(list.map((e) => e.toJson()).toList());
-    await SecureKvService.instance.writeString(key, encoded);
+    await SecureKvService.instance.writeString(key, jsonEncode(encoded));
   }
 
   Future<List<CalendarEntry>> loadForDate(DateTime date) async {

@@ -1,0 +1,17 @@
+// Опубликовано в Firebase Console → Firestore → Rules (dfd-diary).
+// При изменении: править здесь и снова Publish в консоли.
+
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // Данные пользователя: заметки, состояние, календарь, профиль (поля в users/{uid})
+    match /users/{userId} {
+      allow read, write: if request.auth != null && request.auth.uid == userId;
+    }
+    // Статьи пока не используем в UI; правило оставлено на будущее (только чтение)
+    match /articles/{articleId} {
+      allow read: if true;
+      allow write: if false;
+    }
+  }
+}
