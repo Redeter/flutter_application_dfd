@@ -4,6 +4,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import '../models/aggregated_data.dart';
 import '../models/calendar_entry.dart';
+import '../constants/privacy_copy.dart';
 import '../models/foundation_score.dart';
 import '../models/foundation_sphere.dart';
 import '../models/state_entries.dart';
@@ -366,8 +367,7 @@ class FoundationService {
         'В расчёте: записей «+» $stateCount · календарь $calendarCount (заметки не учитываются)';
 
     const missionTitle = 'Фундамент — не диагноз';
-    const missionBody =
-        'Локальная сводка по записям «+» и календарю. Не заменяет врача. Данные остаются на устройстве.';
+    const missionBody = PrivacyCopy.foundationMissionBody;
 
     return FoundationScore(
       totalBricks: totalBricks,

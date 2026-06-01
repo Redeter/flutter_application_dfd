@@ -7,7 +7,7 @@ import '../models/insight_result.dart';
 import '../models/state_entries.dart';
 import 'user_scoped_store.dart';
 
-/// Локальный анализ без облака. Извлекает ключевые слова, формирует резюме
+/// Локальный анализ советов на устройстве (записи синхронизируются с Firebase отдельно).
 /// и рекомендации. Паттерны сохраняются и «обучают» систему под пользователя.
 class LocalInsightsService {
   LocalInsightsService._();

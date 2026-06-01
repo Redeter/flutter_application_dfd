@@ -12,6 +12,12 @@ class CalendarStorage {
   static CalendarStorage get instance => _instance;
   static final _instance = CalendarStorage._();
 
+  List<CalendarEntry>? _cache;
+
+  void clearCache() {
+    _cache = null;
+  }
+
   List<CalendarEntry> _parseList(List<dynamic>? list) {
     if (list == null) return [];
     final result = <CalendarEntry>[];
@@ -36,20 +42,32 @@ class CalendarStorage {
     return result;
   }
 
-  Future<List<CalendarEntry>> loadAll() async {
+  Future<List<CalendarEntry>> loadAll({bool forceRemote = false}) async {
+    if (!forceRemote && _cache != null) {
+      return List<CalendarEntry>.from(_cache!);
+    }
+
     final cloud = await FirestoreRepository.instance
         .loadJsonList(FirestoreRepository.fieldCalendar);
     if (cloud != null) {
-      return _parseList(cloud);
+      final parsed = _parseList(cloud);
+      _cache = parsed;
+      return List<CalendarEntry>.from(parsed);
     }
 
     final key = await UserScopedStore.scopedKey(_keyCalendar);
     final raw = await SecureKvService.instance.readString(key);
-    if (raw == null || raw.isEmpty) return [];
+    if (raw == null || raw.isEmpty) {
+      _cache = const [];
+      return [];
+    }
 
     try {
-      return _parseList(jsonDecode(raw) as List<dynamic>?);
+      final parsed = _parseList(jsonDecode(raw) as List<dynamic>?);
+      _cache = parsed;
+      return List<CalendarEntry>.from(parsed);
     } catch (_) {
+      _cache = const [];
       return [];
     }
   }
@@ -98,14 +116,15 @@ class CalendarStorage {
 
   Future<void> _write(List<CalendarEntry> list) async {
     final encoded = list.map((e) => e.toJson()).toList();
+    _cache = List<CalendarEntry>.from(list);
+
+    final key = await UserScopedStore.scopedKey(_keyCalendar);
+    await SecureKvService.instance.writeString(key, jsonEncode(encoded));
 
     await FirestoreRepository.instance.saveJsonList(
       FirestoreRepository.fieldCalendar,
       encoded.cast<Map<String, dynamic>>(),
     );
-
-    final key = await UserScopedStore.scopedKey(_keyCalendar);
-    await SecureKvService.instance.writeString(key, jsonEncode(encoded));
   }
 
   Future<List<CalendarEntry>> loadForDate(DateTime date) async {

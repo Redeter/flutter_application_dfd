@@ -9,6 +9,7 @@ import '../models/user_profile.dart';
 import '../services/foundation_service.dart';
 import '../services/user_profile_service.dart';
 import '../widgets/foundation_sphere_checkboxes.dart';
+import '../constants/privacy_copy.dart';
 import '../theme/app_colors.dart';
 import '../theme/peach_app_bar.dart';
 import '../widgets/app_bottom_nav.dart';
@@ -295,7 +296,7 @@ class _FoundationScreenState extends State<FoundationScreen> {
       SnackBar(
         content: Text(
           confirmed
-              ? 'Отметка на сегодня сохранена на устройстве'
+              ? 'Отметка на сегодня сохранена'
               : 'Отметка снята',
         ),
         behavior: SnackBarBehavior.floating,
@@ -494,7 +495,7 @@ class _FoundationScreenState extends State<FoundationScreen> {
               ),
               subtitle: Text(
                 _questDone
-                    ? 'Запись только на этом устройстве; завтра сбросится.'
+                    ? PrivacyCopy.foundationQuestLocalOnly
                     : 'Отметьте, когда шаг сделан — учитывается в серии дней ниже.',
                 style: GoogleFonts.alegreyaSans(
                   fontSize: 12,

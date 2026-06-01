@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
@@ -17,28 +19,105 @@ import 'screens/statistics_screen.dart';
 import 'theme/app_colors.dart';
 import 'widgets/app_bottom_nav.dart';
 
-void main() async {
+void main() {
   WidgetsFlutterBinding.ensureInitialized();
-  await Firebase.initializeApp(
-    options: DefaultFirebaseOptions.currentPlatform,
-  );
-  await FirebaseBootstrap.init();
-  await AuthService.instance.enforceRememberPolicyOnColdStart();
-  await SharedPreferences.getInstance();
-  await StorageMigrationService.instance.ensureMigrated();
-  await GoogleFonts.pendingFonts([
-    GoogleFonts.alegreyaSansSc(),
-    GoogleFonts.alegreyaSansScTextTheme(ThemeData.light().textTheme),
-    GoogleFonts.alegreyaSans(fontWeight: FontWeight.w800),
-    GoogleFonts.alegreyaSans(fontSize: 15, height: 1.45),
-  ]);
-  WidgetsBinding.instance.addPostFrameCallback((_) {
-    unawaited(_bootstrapNotifications());
-  });
-  runApp(const MyApp());
+  runApp(const _BootstrapApp());
 }
 
 void unawaited(Future<void> f) {}
+
+/// Быстрый первый кадр: тяжёлая инициализация не блокирует белый splash Android.
+class _BootstrapApp extends StatelessWidget {
+  const _BootstrapApp();
+
+  static final Future<void> _ready = _initializeApp();
+
+  static Future<void> _initializeApp() async {
+    await Firebase.initializeApp(
+      options: DefaultFirebaseOptions.currentPlatform,
+    );
+    await FirebaseBootstrap.init();
+    await AuthService.instance.enforceRememberPolicyOnColdStart();
+    await SharedPreferences.getInstance();
+    await StorageMigrationService.instance.ensureMigrated();
+    unawaited(_preloadFonts());
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      unawaited(_bootstrapNotifications());
+    });
+  }
+
+  static Future<void> _preloadFonts() async {
+    try {
+      await GoogleFonts.pendingFonts([
+        GoogleFonts.alegreyaSansSc(),
+        GoogleFonts.alegreyaSansScTextTheme(ThemeData.light().textTheme),
+        GoogleFonts.alegreyaSans(fontWeight: FontWeight.w800),
+        GoogleFonts.alegreyaSans(fontSize: 15, height: 1.45),
+      ]).timeout(const Duration(seconds: 10));
+    } catch (_) {
+      // Без интернета используем системный шрифт — приложение должно стартовать.
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return FutureBuilder<void>(
+      future: _ready,
+      builder: (context, snapshot) {
+        if (snapshot.hasError) {
+          return MaterialApp(
+            debugShowCheckedModeBanner: false,
+            home: Scaffold(
+              backgroundColor: AppColors.cream,
+              body: SafeArea(
+                child: Padding(
+                  padding: const EdgeInsets.all(24),
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      const Icon(Icons.error_outline, size: 48),
+                      const SizedBox(height: 16),
+                      const Text(
+                        'Не удалось запустить приложение',
+                        textAlign: TextAlign.center,
+                        style: TextStyle(
+                          fontSize: 18,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                      const SizedBox(height: 12),
+                      Text(
+                        '${snapshot.error}',
+                        textAlign: TextAlign.center,
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+          );
+        }
+
+        if (snapshot.connectionState != ConnectionState.done) {
+          return MaterialApp(
+            debugShowCheckedModeBanner: false,
+            theme: ThemeData(
+              scaffoldBackgroundColor: AppColors.cream,
+              colorScheme: ColorScheme.fromSeed(seedColor: AppColors.orange),
+            ),
+            home: const Scaffold(
+              body: Center(
+                child: CircularProgressIndicator(color: AppColors.orange),
+              ),
+            ),
+          );
+        }
+
+        return const MyApp();
+      },
+    );
+  }
+}
 
 Future<void> _bootstrapNotifications() async {
   await NotificationService.instance.init();

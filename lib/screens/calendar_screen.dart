@@ -146,10 +146,18 @@ class _CalendarScreenState extends State<CalendarScreen> {
 
   DateTime _dayOnly(DateTime d) => DateTime(d.year, d.month, d.day);
 
-  Future<void> _loadEntries() async {
+  Future<void> _loadEntries({bool forceRemote = false}) async {
     final day = _dayOnly(_selectedDate);
-    final list = await CalendarStorage.instance.loadForDate(day);
-    final all = await CalendarStorage.instance.loadAll();
+    final all = await CalendarStorage.instance.loadAll(forceRemote: forceRemote);
+    final list = all.where((e) {
+      final ed = DateTime(e.date.year, e.date.month, e.date.day);
+      return ed == day;
+    }).toList()
+      ..sort((a, b) {
+        final ta = a.time.hour * 60 + a.time.minute;
+        final tb = b.time.hour * 60 + b.time.minute;
+        return ta.compareTo(tb);
+      });
     final marked = all
         .whereType<Appointment>()
         .map((a) => DateTime(a.date.year, a.date.month, a.date.day))
@@ -160,6 +168,27 @@ class _CalendarScreenState extends State<CalendarScreen> {
       _entries = list;
       _appointmentMarkedDays = marked;
     });
+  }
+
+  void _applyMedicationUpdate(Medication updated) {
+    setState(() {
+      _entries = _entries
+          .map((e) => e.id == updated.id ? updated : e)
+          .toList();
+    });
+  }
+
+  Future<void> _persistMedication(Medication updated) async {
+    try {
+      await CalendarStorage.instance.save(updated);
+      unawaited(NotificationService.instance.rescheduleCalendarNotifications());
+    } catch (_) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Не удалось сохранить. Проверьте интернет.')),
+      );
+      await _loadEntries(forceRemote: true);
+    }
   }
 
   /// Сначала обновляем список на экране, затем пересчитываем пуши в фоне — карточка меняется сразу.
@@ -264,10 +293,9 @@ class _CalendarScreenState extends State<CalendarScreen> {
       skipped.add(false);
     }
     skipped[doseIndex] = false;
-    await CalendarStorage.instance.save(
-      m.copyWith(takenAtPerDose: list, skippedPerDose: skipped),
-    );
-    await _reloadAfterCalendarMutation();
+    final updated = m.copyWith(takenAtPerDose: list, skippedPerDose: skipped);
+    _applyMedicationUpdate(updated);
+    unawaited(_persistMedication(updated));
   }
 
   Future<void> _skipMedication(Medication m, int doseIndex) async {
@@ -278,8 +306,9 @@ class _CalendarScreenState extends State<CalendarScreen> {
       skipped.add(false);
     }
     skipped[doseIndex] = true;
-    await CalendarStorage.instance.save(m.copyWith(skippedPerDose: skipped));
-    await _reloadAfterCalendarMutation();
+    final updated = m.copyWith(skippedPerDose: skipped);
+    _applyMedicationUpdate(updated);
+    unawaited(_persistMedication(updated));
   }
 
   Future<void> _markDoseTakenAtChosenTime(Medication m, int doseIndex) async {
@@ -299,10 +328,9 @@ class _CalendarScreenState extends State<CalendarScreen> {
       skipped.add(false);
     }
     skipped[doseIndex] = false;
-    await CalendarStorage.instance.save(
-      m.copyWith(takenAtPerDose: list, skippedPerDose: skipped),
-    );
-    await _reloadAfterCalendarMutation();
+    final updated = m.copyWith(takenAtPerDose: list, skippedPerDose: skipped);
+    _applyMedicationUpdate(updated);
+    unawaited(_persistMedication(updated));
   }
 
   void _onNavTab(BottomNavTab tab) {

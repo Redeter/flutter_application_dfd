@@ -6,6 +6,7 @@ import '../neural/neural_insights_service.dart';
 import '../services/auth_service.dart';
 import 'app_shell.dart';
 import 'login_screen.dart';
+import '../widgets/pin_lock_gate.dart';
 
 class AuthGateScreen extends StatefulWidget {
   const AuthGateScreen({super.key});
@@ -36,14 +37,16 @@ class _AuthGateScreenState extends State<AuthGateScreen> {
               unawaited(NeuralInsightsService.instance.reloadForActiveUser());
             });
           }
-          return const AppShell();
+          return const PinLockGate(child: AppShell());
         }
 
         return LoginScreen(
           onSuccess: () {
             Navigator.pushReplacement(
               context,
-              MaterialPageRoute(builder: (_) => const AppShell()),
+              MaterialPageRoute(
+                builder: (_) => const PinLockGate(child: AppShell()),
+              ),
             );
           },
         );

@@ -19,7 +19,7 @@ import 'user_profile_service.dart';
 import 'user_scoped_store.dart';
 
 /// Агрегирует все данные и получает инсайты для экрана статистики.
-/// Анализ выполняется локально на устройстве — данные никуда не отправляются.
+/// Выводы строятся локально на устройстве; записи синхронизируются с Firebase.
 class InsightsService {
   static const _keyAbMode = 'insights_ab_mode';
   static const _keyAbUpdatedAt = 'insights_ab_updated_at';

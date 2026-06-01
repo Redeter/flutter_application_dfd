@@ -2,6 +2,7 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 
+import '../constants/privacy_copy.dart';
 import '../models/foundation_score.dart';
 import '../models/foundation_sphere.dart';
 import '../models/user_profile.dart';
@@ -215,6 +216,11 @@ class _RegistrationScreenState extends State<RegistrationScreen> {
               FoundationSphereCheckboxes(
                 priorities: _spherePriorities,
                 onChanged: (next) => setState(() => _spherePriorities = next),
+              ),
+              const SizedBox(height: 14),
+              Text(
+                PrivacyCopy.registrationHint,
+                style: AppTypography.fieldHelper,
               ),
               const SizedBox(height: 14),
               FilledButton(

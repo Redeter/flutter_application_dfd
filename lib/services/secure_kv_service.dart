@@ -5,7 +5,13 @@ class SecureKvService {
   SecureKvService._();
   static final SecureKvService instance = SecureKvService._();
 
-  static const _secure = FlutterSecureStorage();
+  /// EncryptedSharedPreferences стабильнее на части Samsung/Release-сборок.
+  static const _secure = FlutterSecureStorage(
+    aOptions: AndroidOptions(
+      encryptedSharedPreferences: true,
+      resetOnError: true,
+    ),
+  );
 
   Future<String?> readString(String key) async {
     return _secure.read(key: key);

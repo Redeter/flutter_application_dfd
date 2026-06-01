@@ -4,8 +4,22 @@
 
 - `android/app/google-services.json`
 - `lib/firebase_options.dart`
-- Auth (логин → `логин@dfd-diary.app`), Firestore, Analytics, Crashlytics, FCM init
+- Auth (email/пароль), Firestore, Analytics, Crashlytics, FCM init
 - Правила: `firestore.rules` (скопировать в консоль)
+- Записи пользователя в Firestore — **в зашифрованном виде** (клиентское AES-256-GCM)
+
+## Что куда попадает
+
+| Данные | Локально | Firebase |
+|--------|----------|----------|
+| Заметки, состояние, календарь, профиль | Secure Storage (копия) | Firestore, зашифровано |
+| PIN | Secure Storage (хеш) | нет |
+| Модель советов, настройки UI | SharedPreferences | нет |
+| Вход | — | Firebase Auth |
+| Статистика использования | — | Firebase Analytics (обезличенно) |
+| Сбои приложения | — | Firebase Crashlytics |
+
+Советы в «Статистике» считаются **на устройстве**; текст заметок не отправляется во внешние ИИ.
 
 ## Один раз в консоли
 

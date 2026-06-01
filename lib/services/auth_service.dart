@@ -3,8 +3,10 @@ import 'package:firebase_core/firebase_core.dart';
 
 import '../utils/email_validation.dart';
 import 'dev_data_seed_service.dart';
+import 'firestore_crypto_service.dart';
 import 'firestore_repository.dart';
 import 'secure_kv_service.dart';
+import 'pin_lock_service.dart';
 
 class AuthEmailTakenException implements Exception {
   AuthEmailTakenException([this.message = 'Этот адрес почты уже зарегистрирован']);
@@ -100,7 +102,9 @@ class AuthService {
     if (cred.user?.uid == null) {
       throw StateError('Не удалось создать пользователя Firebase');
     }
-    await _setRememberSession(false);
+    // После регистрации пользователь уже в сессии — сохраняем её, как при «Запомнить меня».
+    await _setRememberSession(true);
+    await _bootstrapFirestoreCrypto(password);
   }
 
   Future<bool> login({
@@ -112,6 +116,7 @@ class AuthService {
     try {
       await _auth.signInWithEmailAndPassword(email: norm, password: password);
       await _setRememberSession(rememberSession);
+      await _bootstrapFirestoreCrypto(password);
       return true;
     } on FirebaseAuthException catch (e) {
       if (e.code == 'user-not-found' ||
@@ -131,6 +136,8 @@ class AuthService {
     }
     await _auth.signOut();
     await _setRememberSession(false);
+    FirestoreCryptoService.instance.lock();
+    await PinLockService.instance.onLogout();
   }
 
   Future<bool> deleteAccount({required String password}) async {
@@ -164,7 +171,20 @@ class AuthService {
     if (user == null) return false;
     final remember =
         await SecureKvService.instance.readString(rememberSessionKey);
-    return remember == 'true';
+    if (remember != 'true') return false;
+    final cryptoReady =
+        await FirestoreCryptoService.instance.ensureForActiveSession();
+    if (!cryptoReady) {
+      await _auth.signOut();
+      await _setRememberSession(false);
+      return false;
+    }
+    return true;
+  }
+
+  Future<void> _bootstrapFirestoreCrypto(String password) async {
+    await FirestoreCryptoService.instance.unlockWithPassword(password);
+    await FirestoreRepository.instance.migratePlaintextToEncrypted();
   }
 
   Future<void> _setRememberSession(bool remember) async {

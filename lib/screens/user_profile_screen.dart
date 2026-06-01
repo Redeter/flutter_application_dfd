@@ -7,6 +7,7 @@ import 'package:printing/printing.dart';
 
 import '../models/aggregated_data.dart';
 import '../models/calendar_entry.dart';
+import '../constants/privacy_copy.dart';
 import '../models/foundation_sphere.dart';
 import '../models/user_profile.dart';
 import '../services/calendar_storage.dart';
@@ -15,9 +16,11 @@ import '../services/insights_service.dart';
 import '../neural/neural_insights_service.dart';
 import '../services/auth_service.dart';
 import '../services/notification_service.dart';
+import '../services/pin_lock_service.dart';
 import '../services/user_profile_service.dart';
 import 'auth_gate_screen.dart';
 import 'condition_details_screen.dart';
+import 'pin_lock_screen.dart';
 import '../theme/app_colors.dart';
 import '../theme/app_typography.dart';
 import '../utils/stats_helpers.dart';
@@ -44,6 +47,7 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
   bool _loading = true;
   bool _eveningReminderEnabled = false;
   TimeOfDay _eveningReminderTime = const TimeOfDay(hour: 20, minute: 30);
+  bool _pinEnabled = false;
 
   @override
   void initState() {
@@ -78,6 +82,7 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
         await FoundationService.instance.isQuestEveningReminderEnabled();
     final (rh, rm) =
         await FoundationService.instance.getQuestEveningReminderClock();
+    final pinEnabled = await PinLockService.instance.isEnabled();
 
     if (!mounted) return;
     setState(() {
@@ -93,6 +98,7 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
       _appointments = appointments;
       _eveningReminderEnabled = reminderOn;
       _eveningReminderTime = TimeOfDay(hour: rh, minute: rm);
+      _pinEnabled = pinEnabled;
       _loading = false;
     });
   }
@@ -133,6 +139,99 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
       const SnackBar(content: Text('Профиль сохранен')),
     );
     Navigator.pop(context);
+  }
+
+  Future<void> _showPrivacyDetails() async {
+    await showDialog<void>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: Text(
+          'Конфиденциальность',
+          style: GoogleFonts.alegreyaSans(fontWeight: FontWeight.w800),
+        ),
+        content: SingleChildScrollView(
+          child: Text(
+            PrivacyCopy.profileSectionBody,
+            style: GoogleFonts.alegreyaSans(
+              fontSize: 14,
+              height: 1.45,
+              color: AppColors.textDark.withValues(alpha: 0.85),
+            ),
+          ),
+        ),
+        actions: [
+          FilledButton(
+            onPressed: () => Navigator.pop(ctx),
+            style: FilledButton.styleFrom(
+              backgroundColor: AppColors.dialogPrimary,
+              foregroundColor: AppColors.white,
+            ),
+            child: const Text('Понятно'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Future<void> _setupPin() async {
+    await Navigator.of(context, rootNavigator: true).push<void>(
+      MaterialPageRoute<void>(
+        builder: (_) => PinLockScreen(
+          flow: PinLockFlow.create,
+          onSuccess: () => Navigator.pop(context),
+          onCancel: () => Navigator.pop(context),
+        ),
+      ),
+    );
+  }
+
+  Future<void> _disablePin() async {
+    await Navigator.of(context, rootNavigator: true).push<void>(
+      MaterialPageRoute<void>(
+        builder: (_) => PinLockScreen(
+          flow: PinLockFlow.verifyToDisable,
+          onSuccess: () => Navigator.pop(context),
+          onCancel: () => Navigator.pop(context),
+        ),
+      ),
+    );
+  }
+
+  Future<void> _changePin() async {
+    await Navigator.of(context, rootNavigator: true).push<void>(
+      MaterialPageRoute<void>(
+        builder: (_) => PinLockScreen(
+          flow: PinLockFlow.change,
+          onSuccess: () => Navigator.pop(context),
+          onCancel: () => Navigator.pop(context),
+        ),
+      ),
+    );
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text('PIN-код изменён')),
+    );
+  }
+
+  Future<void> _onPinToggle(bool? value) async {
+    if (value == true) {
+      await _setupPin();
+    } else if (_pinEnabled) {
+      await _disablePin();
+    }
+    if (!mounted) return;
+    final enabled = await PinLockService.instance.isEnabled();
+    if (!mounted) return;
+    setState(() => _pinEnabled = enabled);
+    if (value == true && enabled) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('PIN-код включён')),
+      );
+    } else if (value == false && !enabled) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('PIN-код отключён')),
+      );
+    }
   }
 
   Future<void> _logout() async {
@@ -717,6 +816,38 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
                     ),
                   ),
                   const SizedBox(height: 14),
+                  _sectionCard(
+                    title: 'Конфиденциальность',
+                    child: OutlinedButton(
+                      onPressed: _showPrivacyDetails,
+                      child: const Text('Как хранятся данные'),
+                    ),
+                  ),
+                  const SizedBox(height: 14),
+                  _sectionCard(
+                    title: 'PIN-код',
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        SwitchListTile(
+                          contentPadding: EdgeInsets.zero,
+                          value: _pinEnabled,
+                          onChanged: _onPinToggle,
+                          activeColor: AppColors.orange,
+                          title: Text(
+                            'Запрашивать PIN при входе',
+                            style: AppTypography.checkboxTileTitle(),
+                          ),
+                        ),
+                        if (_pinEnabled)
+                          OutlinedButton(
+                            onPressed: _changePin,
+                            child: const Text('Изменить PIN-код'),
+                          ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(height: 14),
                   LaconicTap(
                     onTap: _save,
                     child: FilledButton(
@@ -929,9 +1060,7 @@ class _DeleteAccountPasswordDialogState extends State<_DeleteAccountPasswordDial
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           Text(
-            'Будут безвозвратно удалены все локальные данные этого аккаунта на этом устройстве '
-            '(заметки, календарь, записи состояния, профиль и модели анализа). '
-            'Восстановить их будет нельзя.',
+            PrivacyCopy.deleteAccountWarning,
             style: GoogleFonts.alegreyaSans(fontSize: 14),
           ),
           const SizedBox(height: 14),

@@ -5,6 +5,7 @@ import 'package:flutter/services.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:google_fonts/google_fonts.dart';
 
+import '../constants/privacy_copy.dart';
 import '../models/aggregated_data.dart';
 import '../models/insight_result.dart';
 import '../models/local_quality_metrics.dart';
@@ -72,55 +73,82 @@ class _StatisticsScreenState extends State<StatisticsScreen> {
       context: context,
       barrierDismissible: false,
       builder: (ctx) => StatefulBuilder(
-        builder: (ctx, setDialogState) => AlertDialog(
-          title: Text(
-            'Важно перед использованием',
-            style: GoogleFonts.alegreyaSans(fontWeight: FontWeight.w800),
-          ),
-          content: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                'Раздел статистики использует только ваши записи на устройстве — без отправки в облако. '
-                'Это не диагноз и не замена терапии или врача.\n\n'
-                'Советы — мягкие ориентиры по наблюдаемым паттернам (сон, энергия, настроение, заметки). '
-                'При стойком ухудшении состояния обратитесь к специалисту.',
-                style: GoogleFonts.alegreyaSans(fontSize: 15, height: 1.45),
+        builder: (ctx, setDialogState) {
+          final screen = MediaQuery.sizeOf(ctx);
+          final maxDialogHeight = screen.height * 0.82;
+          final bodyStyle = GoogleFonts.alegreyaSans(fontSize: 15, height: 1.45);
+          return Dialog(
+            insetPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 24),
+            child: ConstrainedBox(
+              constraints: BoxConstraints(
+                maxWidth: 480,
+                maxHeight: maxDialogHeight,
               ),
-              const SizedBox(height: 12),
-              CheckboxListTile(
-                value: accepted,
-                onChanged: (value) {
-                  setDialogState(() => accepted = value ?? false);
-                },
-                contentPadding: EdgeInsets.zero,
-                side: const BorderSide(color: Colors.black54),
-                activeColor: Colors.black,
-                checkColor: Colors.white,
-                controlAffinity: ListTileControlAffinity.leading,
-                title: const Text('Я согласен(на) и понимаю ограничения анализа'),
+              child: SizedBox(
+                height: maxDialogHeight,
+                child: Padding(
+                  padding: const EdgeInsets.fromLTRB(24, 20, 24, 16),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                    Text(
+                      'Важно перед использованием',
+                      style: GoogleFonts.alegreyaSans(
+                        fontWeight: FontWeight.w800,
+                        fontSize: 20,
+                      ),
+                    ),
+                    const SizedBox(height: 12),
+                    Expanded(
+                      child: SingleChildScrollView(
+                        child: Text(
+                          PrivacyCopy.statisticsConsentBody,
+                          style: bodyStyle,
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    CheckboxListTile(
+                      value: accepted,
+                      onChanged: (value) {
+                        setDialogState(() => accepted = value ?? false);
+                      },
+                      contentPadding: EdgeInsets.zero,
+                      dense: true,
+                      visualDensity: VisualDensity.compact,
+                      side: const BorderSide(color: Colors.black54),
+                      activeColor: Colors.black,
+                      checkColor: Colors.white,
+                      controlAffinity: ListTileControlAffinity.leading,
+                      title: Text(
+                        'Я согласен(на) и понимаю ограничения анализа',
+                        style: bodyStyle.copyWith(fontSize: 14),
+                      ),
+                    ),
+                    const SizedBox(height: 12),
+                    FilledButton(
+                      onPressed: !accepted
+                          ? null
+                          : () async {
+                              await prefs.setBool(dialogKey, true);
+                              if (ctx.mounted) Navigator.pop(ctx);
+                            },
+                      style: FilledButton.styleFrom(
+                        backgroundColor: AppColors.dialogPrimary,
+                        foregroundColor: AppColors.white,
+                        disabledBackgroundColor: AppColors.greyMuted,
+                        disabledForegroundColor: AppColors.white,
+                        minimumSize: const Size.fromHeight(48),
+                      ),
+                      child: const Text('Я согласен(на)'),
+                    ),
+                  ],
+                ),
               ),
-            ],
-          ),
-          actions: [
-            FilledButton(
-              onPressed: !accepted
-                  ? null
-                  : () async {
-                      await prefs.setBool(dialogKey, true);
-                      if (ctx.mounted) Navigator.pop(ctx);
-                    },
-              style: FilledButton.styleFrom(
-                backgroundColor: AppColors.dialogPrimary,
-                foregroundColor: AppColors.white,
-                disabledBackgroundColor: AppColors.greyMuted,
-                disabledForegroundColor: AppColors.white,
-              ),
-              child: const Text('Я согласен(на)'),
             ),
-          ],
-        ),
+            ),
+          );
+        },
       ),
     );
   }
@@ -1289,7 +1317,7 @@ class _StatisticsScreenState extends State<StatisticsScreen> {
                   borderRadius: BorderRadius.circular(8),
                 ),
                 child: Text(
-                  'на устройстве',
+                  PrivacyCopy.insightLocalAnalysisBadge,
                   style: GoogleFonts.alegreyaSans(
                     fontSize: 11,
                     color: AppColors.textDark.withValues(alpha: 0.8),
@@ -1496,7 +1524,7 @@ class _StatisticsScreenState extends State<StatisticsScreen> {
           ),
           const SizedBox(height: 8),
           Text(
-            'Советы строятся локально по вашим отметкам — не диагноз и не терапия; при ухудшении состояния обратитесь к специалисту.',
+            PrivacyCopy.recommendationsFooter,
             style: GoogleFonts.alegreyaSans(
               fontSize: 12,
               height: 1.35,
@@ -2447,7 +2475,7 @@ class _StatisticsScreenState extends State<StatisticsScreen> {
                 size: 64, color: AppColors.orange.withValues(alpha: 0.5)),
             const SizedBox(height: 16),
             Text(
-              'Добавьте заметки, записи о состоянии (кнопка +), препараты и визиты. Анализ выполняется локально — чем больше данных, тем точнее выводы',
+              PrivacyCopy.statisticsEmptyHint,
               textAlign: TextAlign.center,
               style: GoogleFonts.alegreyaSans(
                 fontSize: 16,
