@@ -1,18 +1,21 @@
+import 'foundation_sphere.dart';
+
 class FoundationHistoryDayDetail {
   const FoundationHistoryDayDetail({
     required this.windowEndDay,
     required this.bricks,
-    required this.notesCount,
     required this.stateCount,
     required this.calendarCount,
+    required this.dailyScorePercent,
   });
 
-  /// Конец 14‑дневного окна, по которому посчитан столбик истории.
   final DateTime windowEndDay;
   final int bricks;
-  final int notesCount;
   final int stateCount;
   final int calendarCount;
+
+  /// Дневной прогресс по активным сферам, %.
+  final int dailyScorePercent;
 }
 
 class FoundationScore {
@@ -53,7 +56,7 @@ class FoundationScore {
   final List<FoundationSphereScore> spheres;
   final String nextStep;
 
-  /// Сфера, от которой отталкивается текст [nextStep] (`sleep` / `mood` / `energy`).
+  /// Сфера подсказки «шаг на сегодня».
   final String nextStepSphereId;
 
   final int brickDelta7d;
@@ -112,21 +115,29 @@ class FoundationSphereScore {
     required this.target,
     required this.current,
     required this.progress,
-    required this.confidence,
-    required this.weight,
+    required this.priority,
     required this.brickContribution,
-    this.hasMetricSamples = true,
+    required this.loggedToday,
+    required this.detailLine,
+    this.isConfigurable = true,
   });
 
   final String id;
   final String label;
+
+  /// Целевое значение или число слотов (приёмы пищи / препараты).
   final double target;
   final double current;
+
+  /// Прогресс за сегодня (0–1).
   final double progress;
-  final double confidence;
-  final double weight;
+  final int priority;
   final int brickContribution;
-  final bool hasMetricSamples;
+  final bool loggedToday;
+  final String detailLine;
+
+  /// false для «Приём препаратов» — цель из календаря.
+  final bool isConfigurable;
 }
 
 class FoundationGoals {
@@ -134,33 +145,33 @@ class FoundationGoals {
     this.sleepTarget = 7.5,
     this.moodTarget = 7.0,
     this.energyTarget = 7.0,
-    this.sleepWeight = 1.0,
-    this.moodWeight = 1.0,
-    this.energyWeight = 1.0,
+    this.snackTarget = 1,
+    this.priorities = const FoundationSpherePriorities(),
   });
+
+  static const mainMealsTarget = 3;
 
   final double sleepTarget;
   final double moodTarget;
   final double energyTarget;
-  final double sleepWeight;
-  final double moodWeight;
-  final double energyWeight;
+
+  /// Целевое число перекусов в день (основные приёмы всегда 3).
+  final int snackTarget;
+  final FoundationSpherePriorities priorities;
 
   FoundationGoals copyWith({
     double? sleepTarget,
     double? moodTarget,
     double? energyTarget,
-    double? sleepWeight,
-    double? moodWeight,
-    double? energyWeight,
+    int? snackTarget,
+    FoundationSpherePriorities? priorities,
   }) {
     return FoundationGoals(
       sleepTarget: sleepTarget ?? this.sleepTarget,
       moodTarget: moodTarget ?? this.moodTarget,
       energyTarget: energyTarget ?? this.energyTarget,
-      sleepWeight: sleepWeight ?? this.sleepWeight,
-      moodWeight: moodWeight ?? this.moodWeight,
-      energyWeight: energyWeight ?? this.energyWeight,
+      snackTarget: snackTarget ?? this.snackTarget,
+      priorities: priorities ?? this.priorities,
     );
   }
 }

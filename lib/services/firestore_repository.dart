@@ -16,6 +16,9 @@ class FirestoreRepository {
   static const fieldProfileName = 'profileName';
   static const fieldProfileConditions = 'profileConditions';
   static const fieldProfilePriority = 'profilePriority';
+  static const fieldProfileSpherePriorities = 'profileSpherePriorities';
+  static const fieldProfileEmail = 'profileEmail';
+  /// Устаревшее поле (логин → synthetic email). Только для чтения старых документов.
   static const fieldLoginUsername = 'loginUsername';
 
   bool get _useCloud {
@@ -71,14 +74,18 @@ class FirestoreRepository {
     required String name,
     required List<String> conditions,
     required String priorityFocus,
-    String? loginUsername,
+    Map<String, int>? spherePriorities,
+    String? profileEmail,
   }) async {
     if (!_useCloud) return;
     await _mergeUser({
       fieldProfileName: name,
       fieldProfileConditions: conditions,
       fieldProfilePriority: priorityFocus,
-      if (loginUsername != null) fieldLoginUsername: loginUsername,
+      if (spherePriorities != null)
+        fieldProfileSpherePriorities: spherePriorities,
+      if (profileEmail != null && profileEmail.isNotEmpty)
+        fieldProfileEmail: profileEmail,
     });
   }
 

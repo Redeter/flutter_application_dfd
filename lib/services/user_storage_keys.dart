@@ -36,6 +36,7 @@ class UserStorageKeys {
     'stats_dashboard_unlocked_via_center_plus_v1',
     'insights_personal_lexicon_v1',
     'foundation_goals_v1',
+    'foundation_goals_v2',
     'foundation_quest_done_date_v1',
   ];
 

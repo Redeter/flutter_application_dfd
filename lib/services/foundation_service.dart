@@ -3,7 +3,9 @@ import 'dart:convert';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../models/aggregated_data.dart';
+import '../models/calendar_entry.dart';
 import '../models/foundation_score.dart';
+import '../models/foundation_sphere.dart';
 import '../models/state_entries.dart';
 import '../models/user_profile.dart';
 import 'user_scoped_store.dart';
@@ -12,10 +14,14 @@ class FoundationService {
   FoundationService._();
   static final FoundationService instance = FoundationService._();
 
-  static const _keyGoals = 'foundation_goals_v1';
+  static const totalBricks = 72;
+  static const trackingDays = 14;
+  static const historyDays = 30;
+
+  static const _keyGoals = 'foundation_goals_v2';
+  static const _keyGoalsLegacy = 'foundation_goals_v1';
   static const prefsKeyQuestDoneDate = 'foundation_quest_done_date_v1';
   static const _prefsSmoothOverall = 'foundation_overall_display_smooth_v1';
-  static const _prefsWeightSurveyDone = 'foundation_weight_survey_v1';
   static const prefsKeyQuestCompletedDays = 'foundation_quest_completed_days_v1';
   static const prefsKeyEveningReminderEnabled =
       'foundation_quest_evening_reminder_enabled_v1';
@@ -24,7 +30,6 @@ class FoundationService {
   static const prefsKeyEveningReminderMinute =
       'foundation_quest_evening_reminder_m_v1';
 
-  /// Сброс «квеста дня» при полном wipe данных (цели/веса в [prefsKeyGoals] не трогаем).
   Future<void> clearQuestDoneDate() async {
     final prefs = await SharedPreferences.getInstance();
     final qKey = await UserScopedStore.scopedKey(prefsKeyQuestDoneDate);
@@ -34,17 +39,32 @@ class FoundationService {
   Future<FoundationGoals> loadGoals() async {
     final prefs = await SharedPreferences.getInstance();
     final gKey = await UserScopedStore.scopedKey(_keyGoals);
-    final raw = prefs.getString(gKey);
+    var raw = prefs.getString(gKey);
+    if (raw == null || raw.isEmpty) {
+      final legacyKey = await UserScopedStore.scopedKey(_keyGoalsLegacy);
+      raw = prefs.getString(legacyKey);
+    }
     if (raw == null || raw.isEmpty) return const FoundationGoals();
     try {
       final m = Map<String, dynamic>.from(jsonDecode(raw) as Map);
+      FoundationSpherePriorities priorities;
+      if (m['priorities'] is Map) {
+        priorities = FoundationSpherePriorities.fromJson(
+          Map<String, dynamic>.from(m['priorities'] as Map),
+        );
+      } else {
+        priorities = FoundationSpherePriorities.migrateFromLegacy(
+          sleepWeight: (m['sleepWeight'] as num?)?.toDouble(),
+          moodWeight: (m['moodWeight'] as num?)?.toDouble(),
+          energyWeight: (m['energyWeight'] as num?)?.toDouble(),
+        );
+      }
       return FoundationGoals(
         sleepTarget: (m['sleepTarget'] as num?)?.toDouble() ?? 7.5,
         moodTarget: (m['moodTarget'] as num?)?.toDouble() ?? 7.0,
         energyTarget: (m['energyTarget'] as num?)?.toDouble() ?? 7.0,
-        sleepWeight: (m['sleepWeight'] as num?)?.toDouble() ?? 1.0,
-        moodWeight: (m['moodWeight'] as num?)?.toDouble() ?? 1.0,
-        energyWeight: (m['energyWeight'] as num?)?.toDouble() ?? 1.0,
+        snackTarget: ((m['snackTarget'] as num?)?.toInt() ?? 1).clamp(0, 5),
+        priorities: priorities,
       );
     } catch (_) {
       return const FoundationGoals();
@@ -60,11 +80,15 @@ class FoundationService {
         'sleepTarget': goals.sleepTarget,
         'moodTarget': goals.moodTarget,
         'energyTarget': goals.energyTarget,
-        'sleepWeight': goals.sleepWeight,
-        'moodWeight': goals.moodWeight,
-        'energyWeight': goals.energyWeight,
+        'snackTarget': goals.snackTarget,
+        'priorities': goals.priorities.toJson(),
       }),
     );
+  }
+
+  Future<void> syncGoalsPrioritiesFromProfile(FoundationSpherePriorities p) async {
+    final current = await loadGoals();
+    await saveGoals(current.copyWith(priorities: p));
   }
 
   Future<bool> isQuestDoneToday() async {
@@ -117,7 +141,6 @@ class FoundationService {
     await prefs.setString(key, jsonEncode(sorted));
   }
 
-  /// Добавляет сегодняшнюю дату в историю отметок, если стоит только legacy-флаг «квест выполнен».
   Future<void> ensureQuestHistorySyncedWithLegacyFlag() async {
     final prefs = await SharedPreferences.getInstance();
     final qKey = await UserScopedStore.scopedKey(prefsKeyQuestDoneDate);
@@ -137,7 +160,6 @@ class FoundationService {
     }
   }
 
-  /// Серия календарных дней с отметкой (включая сегодня, если отмечено).
   Future<int> loadQuestCompletionStreak() async {
     await ensureQuestHistorySyncedWithLegacyFlag();
     final set = await _loadCompletedDayKeys();
@@ -186,44 +208,55 @@ class FoundationService {
     );
   }
 
-  /// Есть ли за сегодня запись «+», закрывающая шаг по правилам профиля и сферы подсказки.
+  static DateTime dayOnly(DateTime d) => DateTime(d.year, d.month, d.day);
+
   bool todayStepSatisfiedByPlusData({
     required AggregatedData data,
     required UserProfile profile,
     required String nextStepSphereId,
+    required FoundationGoals goals,
   }) {
-    DateTime cal(DateTime x) => DateTime(x.year, x.month, x.day);
-    final today = cal(DateTime.now());
-    bool sameDay(DateTime x) => cal(x) == today;
-
-    bool hasSleep() =>
-        data.stateEntries.any((e) => e is SleepEntry && sameDay(e.createdAt));
-    bool hasMood() =>
-        data.stateEntries.any((e) => e is MoodEntry && sameDay(e.createdAt));
-    bool hasEnergy() =>
-        data.stateEntries.any((e) => e is EnergyEntry && sameDay(e.createdAt));
-    bool hasEmotions() =>
-        data.stateEntries.any((e) => e is EmotionsEntry && sameDay(e.createdAt));
-    bool hasNote() => data.notes.any((n) => sameDay(n.date));
+    final today = dayOnly(DateTime.now());
+    final dayData = _subsetForSingleDay(data, today);
+    final p = _sphereProgressForDay(
+      data: dayData,
+      day: today,
+      goals: goals,
+      sphereId: nextStepSphereId,
+    );
+    if (p != null && p > 0) return true;
 
     if (profile.hasConditions) {
       if (profile.conditions.contains(MentalCondition.bipolar)) {
-        return hasSleep();
+        return _sphereProgressForDay(
+              data: dayData,
+              day: today,
+              goals: goals,
+              sphereId: FoundationSphereIds.sleep,
+            ) !=
+            null;
       }
       if (profile.conditions.contains(MentalCondition.anxiety)) {
-        return hasMood() || hasEmotions();
+        return _sphereProgressForDay(
+                  data: dayData,
+                  day: today,
+                  goals: goals,
+                  sphereId: FoundationSphereIds.mood,
+                ) !=
+                null ||
+            dayData.stateEntries.any((e) => e is EmotionsEntry);
       }
       if (profile.conditions.contains(MentalCondition.depression)) {
-        return hasNote() || hasMood();
+        return _sphereProgressForDay(
+              data: dayData,
+              day: today,
+              goals: goals,
+              sphereId: FoundationSphereIds.mood,
+            ) !=
+            null;
       }
     }
-
-    return switch (nextStepSphereId) {
-      'sleep' => hasSleep(),
-      'mood' => hasMood(),
-      'energy' => hasEnergy(),
-      _ => false,
-    };
+    return false;
   }
 
   FoundationScore compute(
@@ -231,151 +264,119 @@ class FoundationService {
     FoundationGoals goals, {
     required String statsPeriodCaption,
   }) {
-    final hasAnySignal = data.notes.isNotEmpty ||
-        data.stateEntries.isNotEmpty ||
-        data.medications.isNotEmpty ||
-        data.appointments.isNotEmpty;
-    final hasStateOrNotes =
-        data.notes.isNotEmpty || data.stateEntries.isNotEmpty;
-    final hasSleepSamples =
-        data.stateEntries.whereType<SleepEntry>().isNotEmpty;
-    final hasMoodSamples =
-        data.stateEntries.whereType<MoodEntry>().isNotEmpty;
-    final hasEnergySamples =
-        data.stateEntries.whereType<EnergyEntry>().isNotEmpty;
-    final days = _observationDays(data).toDouble();
-    final activeDays = _activeDays(data).toDouble();
-    final consistency = days <= 0 ? 0.0 : (activeDays / days).clamp(0.0, 1.0);
-    final reliability = (days / 14).clamp(0.0, 1.0);
-    final baseConfidence = (0.6 * reliability + 0.4 * consistency).clamp(0.0, 1.0);
+    final today = dayOnly(DateTime.now());
+    final priorities = goals.priorities;
 
-    final sleepAvg = _avgSleep(data);
-    final moodAvg = _avgMood(data);
-    final energyAvg = _avgEnergy(data);
-
-    var confidenceCap = false;
-    if (days < 7) {
-      confidenceCap = true;
+    final dailyScores = <double>[];
+    for (var i = 0; i < trackingDays; i++) {
+      final day = today.subtract(Duration(days: i));
+      dailyScores.add(
+        dailyFoundationScore(
+          data: data,
+          day: day,
+          goals: goals,
+        ),
+      );
     }
-    final effectiveConfidence = confidenceCap ? baseConfidence.clamp(0.0, 0.65) : baseConfidence;
-
-    final rawSpheres = <FoundationSphereScore>[
-      FoundationSphereScore(
-        id: 'sleep',
-        label: 'Сон',
-        target: goals.sleepTarget,
-        current: sleepAvg,
-        progress: _ratio(sleepAvg, goals.sleepTarget),
-        confidence: effectiveConfidence,
-        weight: goals.sleepWeight,
-        brickContribution: 0,
-        hasMetricSamples: hasSleepSamples,
-      ),
-      FoundationSphereScore(
-        id: 'mood',
-        label: 'Настроение',
-        target: goals.moodTarget,
-        current: moodAvg,
-        progress: _ratio(moodAvg, goals.moodTarget),
-        confidence: effectiveConfidence,
-        weight: goals.moodWeight,
-        brickContribution: 0,
-        hasMetricSamples: hasMoodSamples,
-      ),
-      FoundationSphereScore(
-        id: 'energy',
-        label: 'Энергия',
-        target: goals.energyTarget,
-        current: energyAvg,
-        progress: _ratio(energyAvg, goals.energyTarget),
-        confidence: effectiveConfidence,
-        weight: goals.energyWeight,
-        brickContribution: 0,
-        hasMetricSamples: hasEnergySamples,
-      ),
-    ];
-
-    final weightedSum = rawSpheres.fold<double>(
-      0,
-      (acc, s) => acc + (s.progress * s.confidence * s.weight),
-    );
-    final totalWeight = rawSpheres.fold<double>(0, (acc, s) => acc + s.weight);
-    final overall = totalWeight == 0 ? 0.0 : (weightedSum / totalWeight).clamp(0.0, 1.0);
-    const totalBricks = 40;
+    final overall =
+        dailyScores.isEmpty ? 0.0 : dailyScores.reduce((a, b) => a + b) / dailyScores.length;
     final filled = (overall * totalBricks).round().clamp(0, totalBricks);
 
-    final spheres = rawSpheres
-        .map((s) => FoundationSphereScore(
-              id: s.id,
-              label: s.label,
-              target: s.target,
-              current: s.current,
-              progress: s.progress,
-              confidence: s.confidence,
-              weight: s.weight,
-              brickContribution: ((s.progress * s.confidence * s.weight) /
-                      (totalWeight == 0 ? 1 : totalWeight) *
-                      totalBricks)
-                  .round(),
-              hasMetricSamples: s.hasMetricSamples,
-            ))
-        .toList();
+    final todayData = _subsetForSingleDay(data, today);
+    final sphereScores = _buildTodaySphereScores(
+      data: data,
+      todayData: todayData,
+      today: today,
+      goals: goals,
+      totalBricks: totalBricks,
+      overall: overall,
+    );
 
-    final weakest = [...spheres]
+    final visibleSpheres = sphereScores.where((s) => s.priority > 0).toList();
+
+    final weakest = [...visibleSpheres]
       ..sort((a, b) {
-        final ca = a.progress * a.confidence;
-        final cb = b.progress * b.confidence;
-        final c = ca.compareTo(cb);
+        final c = a.progress.compareTo(b.progress);
         if (c != 0) return c;
         return a.id.compareTo(b.id);
       });
-    final next = _nextStepFor(weakest.first.id);
-    final previousWeek = _subset(data, fromDaysAgo: 14, toDaysAgo: 7);
-    final currentWeek = _subset(data, fromDaysAgo: 7, toDaysAgo: 0);
-    final prevFilled = _computeBricks(previousWeek, goals);
-    final currFilled = _computeBricks(currentWeek, goals);
-    final delta7 = currFilled - prevFilled;
-    final (cracks, cracksWhy) = _riskCracksWithExplanation(data);
-    final (history, historyDetails) =
-        _history30dWithDetails(data, goals, totalBricks);
-    final calendarCount = data.medications.length + data.appointments.length;
-    final dataSourcesSummary =
-        'В расчёте: заметок ${data.notes.length} · записей состояния ${data.stateEntries.length} · календарь $calendarCount';
+    final nextSphereId =
+        weakest.isEmpty ? FoundationSphereIds.mood : weakest.first.id;
 
-    final (medRate, medCaption) = _medicationAdherence(data);
-    final streak = _consecutiveDaysWithNoteOrState(data);
+    final prevWeekScores = <double>[];
+    final currWeekScores = <double>[];
+    for (var i = 7; i < 14; i++) {
+      prevWeekScores.add(
+        dailyFoundationScore(
+          data: data,
+          day: today.subtract(Duration(days: i)),
+          goals: goals,
+        ),
+      );
+    }
+    for (var i = 0; i < 7; i++) {
+      currWeekScores.add(
+        dailyFoundationScore(
+          data: data,
+          day: today.subtract(Duration(days: i)),
+          goals: goals,
+        ),
+      );
+    }
+    final prevAvg = prevWeekScores.isEmpty
+        ? 0.0
+        : prevWeekScores.reduce((a, b) => a + b) / prevWeekScores.length;
+    final currAvg = currWeekScores.isEmpty
+        ? 0.0
+        : currWeekScores.reduce((a, b) => a + b) / currWeekScores.length;
+    final delta7 =
+        ((currAvg - prevAvg) * totalBricks).round();
+
+    final (cracks, cracksWhy) = _riskCracksWithExplanation(data);
+    final (history, historyDetails) = _history30d(data, goals);
+
+    final hasState = data.stateEntries.isNotEmpty;
+    final hasMed = data.medications.isNotEmpty;
+    final hasAnySignal = hasState || hasMed;
+
+    final daysWithLog = _daysWithFoundationActivity(data, goals);
+    final confidenceCap = daysWithLog < 3;
+
+    final (medRate, medCaption) = _medicationAdherenceToday(data, today);
+    final streak = _consecutiveDaysWithStateOrMed(data, goals);
     final weeklySub = streak == 0
-        ? 'Начните с одного дня с заметкой или записью через «+».'
-        : '${_pluralDaysRu(streak)} подряд с заметкой или «+».';
+        ? 'Начните с одного дня с отметками через «+» или календарь.'
+        : '${_pluralDaysRu(streak)} подряд с записями в приложении.';
 
     final String hint;
     if (!hasAnySignal) {
       hint =
-          'Пока нет данных — фундамент обнулён. Добавьте заметки, записи через «+» или план в календаре.';
-    } else if (!hasStateOrNotes &&
-        (data.medications.isNotEmpty || data.appointments.isNotEmpty)) {
-      hint =
-          'Календарь дополняет картину. Сон, настроение и энергия заполняются записями через центральную «+».';
+          'Пока нет данных — отмечайте сон, настроение, энергию, питание в «+» и приёмы в календаре.';
     } else if (confidenceCap) {
       hint =
-          'Фундамент показывает тренд, но данных пока мало: это предварительная оценка.';
+          'За последние $trackingDays дней мало отметок — прогресс растёт, когда заходите каждый день. Пропущенные дни снижают фундамент.';
     } else {
       hint =
-          'Кирпичи — по заметкам, записям состояния и календарю за последние недели.';
+          'Фундамент за $trackingDays дней: средний дневной прогресс по активным сферам. Пропущенный день — 0% за этот день.';
     }
+
+    final stateCount = data.stateEntries.length;
+    final calendarCount = data.medications.length + data.appointments.length;
+    final dataSourcesSummary =
+        'В расчёте: записей «+» $stateCount · календарь $calendarCount (заметки не учитываются)';
 
     const missionTitle = 'Фундамент — не диагноз';
     const missionBody =
-        'Это локальная сводка по вашим заметкам, записям «+» и календарю. Она не заменяет врача и не уходит с устройства, пока вы сами не делитесь данными.';
+        'Локальная сводка по записям «+» и календарю. Не заменяет врача. Данные остаются на устройстве.';
 
     return FoundationScore(
       totalBricks: totalBricks,
       filledBricks: filled,
       overallProgress: overall,
       rawOverallProgress: overall,
-      spheres: spheres,
-      nextStep: next,
-      nextStepSphereId: weakest.first.id,
+      spheres: visibleSpheres,
+      nextStep: _nextStepFor(nextSphereId),
+      nextStepSphereId: nextSphereId,
       brickDelta7d: delta7,
       riskCracks: cracks,
       riskCracksExplanation: cracksWhy,
@@ -386,12 +387,280 @@ class FoundationService {
       dataSourcesSummary: dataSourcesSummary,
       missionTitle: missionTitle,
       missionBody: missionBody,
-      weeklyFocusTitle: 'Цель недели',
+      weeklyFocusTitle: 'Регулярность',
       weeklyFocusSubtitle: weeklySub,
       medicationAdherenceRate: medRate,
       medicationAdherenceCaption: medCaption,
       statsPeriodCaption: statsPeriodCaption,
     );
+  }
+
+  /// Дневной прогресс 0–1 по активным сферам (приоритет > 0).
+  static double dailyFoundationScore({
+    required AggregatedData data,
+    required DateTime day,
+    required FoundationGoals goals,
+  }) {
+    final dayData = _subsetForSingleDay(data, dayOnly(day));
+    final p = goals.priorities;
+    var weighted = 0.0;
+    var sumPriority = 0;
+    for (final id in FoundationSphereIds.ordered) {
+      final pr = p.forId(id);
+      if (pr <= 0) continue;
+      final prog = _sphereProgressForDay(
+        data: dayData,
+        day: dayOnly(day),
+        goals: goals,
+        sphereId: id,
+      );
+      if (prog == null) continue;
+      weighted += prog * pr;
+      sumPriority += pr;
+    }
+    if (sumPriority == 0) return 0;
+    return (weighted / sumPriority).clamp(0.0, 1.0);
+  }
+
+  static double? _sphereProgressForDay({
+    required AggregatedData data,
+    required DateTime day,
+    required FoundationGoals goals,
+    required String sphereId,
+  }) {
+    final pr = goals.priorities.forId(sphereId);
+    if (pr <= 0) return null;
+
+    switch (sphereId) {
+      case FoundationSphereIds.sleep:
+        final entries = data.stateEntries.whereType<SleepEntry>().toList();
+        if (entries.isEmpty) return 0;
+        final e = entries.first;
+        return _ratio(e.quality.toDouble(), goals.sleepTarget);
+      case FoundationSphereIds.mood:
+        final entries = data.stateEntries.whereType<MoodEntry>().toList();
+        if (entries.isEmpty) return 0;
+        return _ratio(entries.first.value.toDouble(), goals.moodTarget);
+      case FoundationSphereIds.energy:
+        final entries = data.stateEntries.whereType<EnergyEntry>().toList();
+        if (entries.isEmpty) return 0;
+        return _ratio(entries.first.level.toDouble(), goals.energyTarget);
+      case FoundationSphereIds.nutrition:
+        final entries = data.stateEntries.whereType<NutritionEntry>().toList();
+        if (entries.isEmpty) return 0;
+        final e = entries.first;
+        final target = FoundationGoals.mainMealsTarget + goals.snackTarget;
+        final marked = e.meals.length + e.snackCount.clamp(0, goals.snackTarget);
+        if (target <= 0) return 0;
+        return (marked / target).clamp(0.0, 1.0);
+      case FoundationSphereIds.medication:
+        final meds = _medicationsOnDay(data, day);
+        if (meds.isEmpty) return null;
+        return _medicationProgress(meds);
+      default:
+        return null;
+    }
+  }
+
+  List<FoundationSphereScore> _buildTodaySphereScores({
+    required AggregatedData data,
+    required AggregatedData todayData,
+    required DateTime today,
+    required FoundationGoals goals,
+    required int totalBricks,
+    required double overall,
+  }) {
+    final scores = <FoundationSphereScore>[];
+    for (final id in FoundationSphereIds.ordered) {
+      final priority = goals.priorities.forId(id);
+      if (priority <= 0) continue;
+
+      final progress =
+          _sphereProgressForDay(
+            data: todayData,
+            day: today,
+            goals: goals,
+            sphereId: id,
+          ) ??
+          0.0;
+
+      final (target, current, detail, logged, configurable) =
+          _sphereTodayDetails(id, todayData, today, goals, data);
+
+      final sumPri = goals.priorities.activeWeightSum;
+      scores.add(
+        FoundationSphereScore(
+          id: id,
+          label: id.foundationLabel,
+          target: target,
+          current: current,
+          progress: progress,
+          priority: priority,
+          brickContribution: sumPri == 0
+              ? 0
+              : ((progress * totalBricks * priority) / sumPri).round(),
+          loggedToday: logged,
+          detailLine: detail,
+          isConfigurable: configurable,
+        ),
+      );
+    }
+    return scores;
+  }
+
+  (
+    double target,
+    double current,
+    String detail,
+    bool logged,
+    bool configurable,
+  ) _sphereTodayDetails(
+    String id,
+    AggregatedData todayData,
+    DateTime today,
+    FoundationGoals goals,
+    AggregatedData allData,
+  ) {
+    switch (id) {
+      case FoundationSphereIds.sleep:
+        final sleepList = todayData.stateEntries.whereType<SleepEntry>().toList();
+        final e = sleepList.isEmpty ? null : sleepList.first;
+        if (e == null) {
+          return (
+            goals.sleepTarget,
+            0,
+            'Сегодня нет записи — отметьте сон в «+»',
+            false,
+            true,
+          );
+        }
+        return (
+          goals.sleepTarget,
+          e.quality.toDouble(),
+          'Качество ${e.quality} / цель ${goals.sleepTarget.toStringAsFixed(1)}',
+          true,
+          true,
+        );
+      case FoundationSphereIds.mood:
+        final moodList = todayData.stateEntries.whereType<MoodEntry>().toList();
+        final e = moodList.isEmpty ? null : moodList.first;
+        if (e == null) {
+          return (
+            goals.moodTarget,
+            0,
+            'Сегодня нет записи — отметьте настроение в «+»',
+            false,
+            true,
+          );
+        }
+        return (
+          goals.moodTarget,
+          e.value.toDouble(),
+          'Оценка ${e.value} / цель ${goals.moodTarget.toStringAsFixed(1)}',
+          true,
+          true,
+        );
+      case FoundationSphereIds.energy:
+        final energyList = todayData.stateEntries.whereType<EnergyEntry>().toList();
+        final e = energyList.isEmpty ? null : energyList.first;
+        if (e == null) {
+          return (
+            goals.energyTarget,
+            0,
+            'Сегодня нет записи — отметьте энергию в «+»',
+            false,
+            true,
+          );
+        }
+        return (
+          goals.energyTarget,
+          e.level.toDouble(),
+          'Уровень ${e.level} / цель ${goals.energyTarget.toStringAsFixed(1)}',
+          true,
+          true,
+        );
+      case FoundationSphereIds.nutrition:
+        final nutList = todayData.stateEntries.whereType<NutritionEntry>().toList();
+        final e = nutList.isEmpty ? null : nutList.first;
+        final targetSlots =
+            FoundationGoals.mainMealsTarget + goals.snackTarget;
+        if (e == null) {
+          return (
+            targetSlots.toDouble(),
+            0,
+            'Цель: ${FoundationGoals.mainMealsTarget} приёма + ${goals.snackTarget} перекус(ов)',
+            false,
+            true,
+          );
+        }
+        final marked = e.meals.length + e.snackCount.clamp(0, goals.snackTarget);
+        return (
+          targetSlots.toDouble(),
+          marked.toDouble(),
+          'Отмечено $marked из $targetSlots (${e.meals.length} основных, перекусов ${e.snackCount})',
+          marked > 0,
+          true,
+        );
+      case FoundationSphereIds.medication:
+        final meds = _medicationsOnDay(allData, today);
+        var expected = 0;
+        var taken = 0;
+        for (final m in meds) {
+          final slots = m.schedule.isEmpty ? 1 : m.schedule.length;
+          expected += slots;
+          taken += _takenSlots(m);
+        }
+        if (expected == 0) {
+          return (
+            0,
+            0,
+            'На сегодня нет приёмов в календаре — добавьте препарат',
+            false,
+            false,
+          );
+        }
+        return (
+          expected.toDouble(),
+          taken.toDouble(),
+          'Отмечено $taken из $expected приёмов (календарь)',
+          taken > 0,
+          false,
+        );
+      default:
+        return (0, 0, '', false, true);
+    }
+  }
+
+  static List<Medication> _medicationsOnDay(AggregatedData data, DateTime day) {
+    final d = dayOnly(day);
+    return data.medications
+        .where((m) => dayOnly(m.date) == d)
+        .toList();
+  }
+
+  static int _takenSlots(Medication m) {
+    if (m.schedule.isEmpty) {
+      return m.takenAtPerDose.isNotEmpty && m.takenAtPerDose[0] != null ? 1 : 0;
+    }
+    var taken = 0;
+    for (var i = 0; i < m.schedule.length; i++) {
+      if (i < m.takenAtPerDose.length && m.takenAtPerDose[i] != null) {
+        taken++;
+      }
+    }
+    return taken;
+  }
+
+  static double _medicationProgress(List<Medication> meds) {
+    var expected = 0;
+    var taken = 0;
+    for (final m in meds) {
+      final slots = m.schedule.isEmpty ? 1 : m.schedule.length;
+      expected += slots;
+      taken += _takenSlots(m);
+    }
+    if (expected == 0) return 0;
+    return (taken / expected).clamp(0.0, 1.0);
   }
 
   Future<FoundationScore> applyDisplaySmoothing(FoundationScore raw) async {
@@ -413,107 +682,26 @@ class FoundationService {
     );
   }
 
-  Future<bool> isWeightSurveyDone() async {
-    final prefs = await SharedPreferences.getInstance();
-    final wKey = await UserScopedStore.scopedKey(_prefsWeightSurveyDone);
-    return prefs.getBool(wKey) ?? false;
-  }
-
-  Future<void> markWeightSurveyDone() async {
-    final prefs = await SharedPreferences.getInstance();
-    final wKey = await UserScopedStore.scopedKey(_prefsWeightSurveyDone);
-    await prefs.setBool(wKey, true);
-  }
-
-  /// Первичный выбор «что важнее» — чуть сдвигает веса сфер.
-  /// Приоритет из профиля / экрана целей: сдвиг весов сфер, цели по цифрам не трогаем.
-  Future<void> applyPresetWeightsForPrimary(String sphereId) async {
-    final current = await loadGoals();
-    final FoundationGoals g;
-    switch (sphereId) {
-      case 'sleep':
-        g = current.copyWith(
-          sleepWeight: 1.55,
-          moodWeight: 0.88,
-          energyWeight: 0.88,
-        );
-      case 'mood':
-        g = current.copyWith(
-          sleepWeight: 0.9,
-          moodWeight: 1.55,
-          energyWeight: 0.9,
-        );
-      case 'energy':
-        g = current.copyWith(
-          sleepWeight: 0.9,
-          moodWeight: 0.9,
-          energyWeight: 1.55,
-        );
-      default:
-        g = current;
-    }
-    await saveGoals(g);
-    await markWeightSurveyDone();
-  }
-
-  static String? sphereIdForPriorityFocus(PriorityStateFocus focus) {
-    return switch (focus) {
-      PriorityStateFocus.sleep => 'sleep',
-      PriorityStateFocus.mood => 'mood',
-      PriorityStateFocus.energy => 'energy',
-      _ => null,
-    };
-  }
-
-  /// Синхронизация весов с приоритетом из личного кабинета (сон / настроение / энергия).
-  Future<void> syncGoalsWeightsFromProfilePriority(PriorityStateFocus focus) async {
-    final id = sphereIdForPriorityFocus(focus);
-    if (id == null) return;
-    await applyPresetWeightsForPrimary(id);
-  }
-
-  PriorityStateFocus inferPriorityFocusFromWeights(FoundationGoals g) {
-    final maxW =
-        [g.sleepWeight, g.moodWeight, g.energyWeight].reduce((a, b) => a > b ? a : b);
-    if (g.sleepWeight >= maxW) return PriorityStateFocus.sleep;
-    if (g.moodWeight >= maxW) return PriorityStateFocus.mood;
-    return PriorityStateFocus.energy;
-  }
-
   String _nextStepFor(String sphereId) {
     switch (sphereId) {
-      case 'sleep':
-        return 'Шаг на сегодня: отметьте сон через «+» или лягте спать на 30 минут раньше.';
-      case 'mood':
-        return 'Шаг на сегодня: короткая заметка или настроение в «+» — что поддержало день.';
-      case 'energy':
-        return 'Шаг на сегодня: запись энергии в «+» или 20 минут прогулки.';
+      case FoundationSphereIds.sleep:
+        return 'Шаг на сегодня: отметьте сон через «+».';
+      case FoundationSphereIds.mood:
+        return 'Шаг на сегодня: отметьте настроение в «+».';
+      case FoundationSphereIds.energy:
+        return 'Шаг на сегодня: отметьте энергию в «+».';
+      case FoundationSphereIds.nutrition:
+        return 'Шаг на сегодня: отметьте приёмы пищи в «+».';
+      case FoundationSphereIds.medication:
+        return 'Шаг на сегодня: отметьте приём препаратов в календаре.';
       default:
-        return 'Шаг на сегодня: «+» — запись состояния или заметка; при необходимости отметьте календарь.';
+        return 'Шаг на сегодня: отметьте данные в «+» или календаре.';
     }
   }
 
-  double _ratio(double current, double target) {
+  static double _ratio(double current, double target) {
     if (target <= 0) return 0;
     return (current / target).clamp(0.0, 1.0);
-  }
-
-  int _computeBricks(AggregatedData data, FoundationGoals goals) {
-    final days = _observationDays(data).toDouble();
-    final activeDays = _activeDays(data).toDouble();
-    final consistency = days <= 0 ? 0.0 : (activeDays / days).clamp(0.0, 1.0);
-    final reliability = (days / 14).clamp(0.0, 1.0);
-    final conf = (0.6 * reliability + 0.4 * consistency).clamp(0.0, days < 7 ? 0.65 : 1.0);
-    final spheres = [
-      _ratio(_avgSleep(data), goals.sleepTarget) * conf * goals.sleepWeight,
-      _ratio(_avgMood(data), goals.moodTarget) * conf * goals.moodWeight,
-      _ratio(_avgEnergy(data), goals.energyTarget) * conf * goals.energyWeight,
-    ];
-    final totalWeight =
-        goals.sleepWeight + goals.moodWeight + goals.energyWeight;
-    final overall =
-        totalWeight == 0 ? 0.0 : (spheres.reduce((a, b) => a + b) / totalWeight).clamp(0.0, 1.0);
-    return (overall * 40).round().clamp(0, 40);
   }
 
   (int cracks, String? explanation) _riskCracksWithExplanation(AggregatedData data) {
@@ -526,90 +714,82 @@ class FoundationService {
     if (lowMood >= 4 || lowEnergy >= 4) {
       return (
         2,
-        'Среди 5 последних оценок настроения и энергии много значений ниже 5 — это сигнал «трещины» для осторожности, не диагноз.',
+        'Среди 5 последних оценок много значений ниже 5 — сигнал для осторожности, не диагноз.',
       );
     }
     if (lowMood >= 3 || lowEnergy >= 3) {
       return (
         1,
-        'Несколько последних отметок ниже 5 — лёгкий риск; стабилизируйте сон и ритм, при ухудшении обратитесь к врачу.',
+        'Несколько последних отметок ниже 5 — при ухудшении обратитесь к врачу.',
       );
     }
     return (0, null);
   }
 
-  (List<int>, List<FoundationHistoryDayDetail>) _history30dWithDetails(
+  (List<int>, List<FoundationHistoryDayDetail>) _history30d(
     AggregatedData data,
     FoundationGoals goals,
-    int totalBricks,
   ) {
     final out = <int>[];
     final details = <FoundationHistoryDayDetail>[];
-    final today = DateTime.now();
-    final todayNorm = DateTime(today.year, today.month, today.day);
-    for (var day = 29; day >= 0; day--) {
-      final snap = _subset(data, fromDaysAgo: day + 14, toDaysAgo: day);
-      final b = _computeBricks(snap, goals).clamp(0, totalBricks);
-      out.add(b);
-      final end = todayNorm.subtract(Duration(days: day));
+    final today = dayOnly(DateTime.now());
+    for (var day = historyDays - 1; day >= 0; day--) {
+      final d = today.subtract(Duration(days: day));
+      final score = dailyFoundationScore(data: data, day: d, goals: goals);
+      final bricks = (score * totalBricks).round().clamp(0, totalBricks);
+      out.add(bricks);
+      final snap = _subsetForSingleDay(data, d);
       details.add(
         FoundationHistoryDayDetail(
-          windowEndDay: end,
-          bricks: b,
-          notesCount: snap.notes.length,
+          windowEndDay: d,
+          bricks: bricks,
           stateCount: snap.stateEntries.length,
           calendarCount: snap.medications.length + snap.appointments.length,
+          dailyScorePercent: (score * 100).round(),
         ),
       );
     }
     return (out, details);
   }
 
-  (double? rate, String caption) _medicationAdherence(AggregatedData d) {
-    if (d.medications.isEmpty) {
-      return (null, '');
-    }
+  (double? rate, String caption) _medicationAdherenceToday(
+    AggregatedData d,
+    DateTime today,
+  ) {
+    final meds = _medicationsOnDay(d, today);
+    if (meds.isEmpty) return (null, '');
+    final progress = _medicationProgress(meds);
     var expected = 0;
     var taken = 0;
-    for (final m in d.medications) {
+    for (final m in meds) {
       final slots = m.schedule.isEmpty ? 1 : m.schedule.length;
       expected += slots;
-      if (m.schedule.isEmpty) {
-        if (m.takenAtPerDose.isNotEmpty && m.takenAtPerDose[0] != null) {
-          taken += 1;
-        }
-      } else {
-        for (var i = 0; i < m.schedule.length; i++) {
-          if (i < m.takenAtPerDose.length && m.takenAtPerDose[i] != null) {
-            taken++;
-          }
-        }
-      }
+      taken += _takenSlots(m);
     }
-    if (expected == 0) {
-      return (null, '');
-    }
-    final r = taken / expected;
     return (
-      r,
-      'Приёмы в календаре: отмечено $taken из $expected слотов (${(r * 100).round()}%).',
+      progress,
+      'Сегодня в календаре: $taken из $expected приёмов (${(progress * 100).round()}%).',
     );
   }
 
-  int _consecutiveDaysWithNoteOrState(AggregatedData d) {
-    DateTime norm(DateTime t) => DateTime(t.year, t.month, t.day);
-    final active = <DateTime>{};
-    for (final n in d.notes) {
-      active.add(norm(n.date));
+  int _daysWithFoundationActivity(AggregatedData data, FoundationGoals goals) {
+    final today = dayOnly(DateTime.now());
+    var count = 0;
+    for (var i = 0; i < trackingDays; i++) {
+      final day = today.subtract(Duration(days: i));
+      if (dailyFoundationScore(data: data, day: day, goals: goals) > 0) {
+        count++;
+      }
     }
-    for (final s in d.stateEntries) {
-      active.add(norm(s.createdAt));
-    }
-    final today = norm(DateTime.now());
+    return count;
+  }
+
+  int _consecutiveDaysWithStateOrMed(AggregatedData d, FoundationGoals goals) {
+    final today = dayOnly(DateTime.now());
     var streak = 0;
     for (var i = 0; i < 400; i++) {
       final day = today.subtract(Duration(days: i));
-      if (active.contains(day)) {
+      if (dailyFoundationScore(data: d, day: day, goals: goals) > 0) {
         streak++;
       } else {
         break;
@@ -626,83 +806,15 @@ class FoundationService {
     return '$n дней';
   }
 
-  AggregatedData _subset(
-    AggregatedData data, {
-    required int fromDaysAgo,
-    required int toDaysAgo,
-  }) {
-    DateTime dayOnly(DateTime d) => DateTime(d.year, d.month, d.day);
-    final today = dayOnly(DateTime.now());
-    final from = today.subtract(Duration(days: fromDaysAgo));
-    final to = today.subtract(Duration(days: toDaysAgo));
-    bool inRange(DateTime d) {
-      final day = dayOnly(d);
-      return !day.isBefore(from) && !day.isAfter(to);
-    }
+  static AggregatedData _subsetForSingleDay(AggregatedData data, DateTime day) {
+    final d = dayOnly(day);
+    bool same(DateTime t) => dayOnly(t) == d;
     return AggregatedData(
-      notes: data.notes.where((n) => inRange(n.date)).toList(),
-      stateEntries: data.stateEntries.where((s) => inRange(s.createdAt)).toList(),
-      medications: data.medications.where((m) => inRange(m.date)).toList(),
-      appointments: data.appointments.where((a) => inRange(a.date)).toList(),
+      notes: const [],
+      stateEntries:
+          data.stateEntries.where((s) => same(s.createdAt)).toList(),
+      medications: data.medications.where((m) => same(m.date)).toList(),
+      appointments: data.appointments.where((a) => same(a.date)).toList(),
     );
-  }
-
-  double _avgMood(AggregatedData d) {
-    final list = d.stateEntries.whereType<MoodEntry>().map((e) => e.value.toDouble()).toList();
-    if (list.isEmpty) return 0;
-    return list.reduce((a, b) => a + b) / list.length;
-  }
-
-  double _avgSleep(AggregatedData d) {
-    final list = d.stateEntries.whereType<SleepEntry>().map((e) => e.quality.toDouble()).toList();
-    if (list.isEmpty) return 0;
-    return list.reduce((a, b) => a + b) / list.length;
-  }
-
-  double _avgEnergy(AggregatedData d) {
-    final list = d.stateEntries.whereType<EnergyEntry>().map((e) => e.level.toDouble()).toList();
-    if (list.isEmpty) return 0;
-    return list.reduce((a, b) => a + b) / list.length;
-  }
-
-  int _observationDays(AggregatedData d) {
-    DateTime? first;
-    DateTime? last;
-    void consider(DateTime t) {
-      first = first == null || t.isBefore(first!) ? t : first;
-      last = last == null || t.isAfter(last!) ? t : last;
-    }
-
-    for (final n in d.notes) {
-      consider(n.date);
-    }
-    for (final s in d.stateEntries) {
-      consider(s.createdAt);
-    }
-    for (final m in d.medications) {
-      consider(DateTime(m.date.year, m.date.month, m.date.day));
-    }
-    for (final a in d.appointments) {
-      consider(DateTime(a.date.year, a.date.month, a.date.day));
-    }
-    if (first == null || last == null) return 0;
-    return last!.difference(first!).inDays + 1;
-  }
-
-  int _activeDays(AggregatedData d) {
-    final days = <DateTime>{};
-    for (final n in d.notes) {
-      days.add(DateTime(n.date.year, n.date.month, n.date.day));
-    }
-    for (final s in d.stateEntries) {
-      days.add(DateTime(s.createdAt.year, s.createdAt.month, s.createdAt.day));
-    }
-    for (final m in d.medications) {
-      days.add(DateTime(m.date.year, m.date.month, m.date.day));
-    }
-    for (final a in d.appointments) {
-      days.add(DateTime(a.date.year, a.date.month, a.date.day));
-    }
-    return days.length;
   }
 }

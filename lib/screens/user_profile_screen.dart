@@ -7,6 +7,7 @@ import 'package:printing/printing.dart';
 
 import '../models/aggregated_data.dart';
 import '../models/calendar_entry.dart';
+import '../models/foundation_sphere.dart';
 import '../models/user_profile.dart';
 import '../services/calendar_storage.dart';
 import '../services/foundation_service.dart';
@@ -18,6 +19,7 @@ import '../services/user_profile_service.dart';
 import 'auth_gate_screen.dart';
 import 'condition_details_screen.dart';
 import '../theme/app_colors.dart';
+import '../theme/app_typography.dart';
 import '../utils/stats_helpers.dart';
 import '../widgets/laconic_tap.dart';
 
@@ -29,10 +31,12 @@ class UserProfileScreen extends StatefulWidget {
 }
 
 class _UserProfileScreenState extends State<UserProfileScreen> {
-  final _loginReadOnlyController = TextEditingController();
+  final _emailReadOnlyController = TextEditingController();
   final _nameController = TextEditingController();
   final _selected = <MentalCondition>{};
   PriorityStateFocus _priorityFocus = PriorityStateFocus.mood;
+  FoundationSpherePriorities _spherePriorities =
+      const FoundationSpherePriorities();
   List<Medication> _medications = const [];
   List<Appointment> _appointments = const [];
   DateTime _reportFrom = DateTime.now().subtract(const Duration(days: 30));
@@ -48,7 +52,7 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
   }
 
   Future<void> _load() async {
-    final login = await AuthService.instance.username() ?? '';
+    final email = await AuthService.instance.userEmail() ?? '';
     final profile = await UserProfileService.instance.load();
     final entries = await CalendarStorage.instance.loadAll();
     final medications = entries.whereType<Medication>().toList();
@@ -77,12 +81,13 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
 
     if (!mounted) return;
     setState(() {
-      _loginReadOnlyController.text = login;
+      _emailReadOnlyController.text = email;
       _nameController.text = profile.name;
       _selected
         ..clear()
         ..addAll(profile.conditions);
       _priorityFocus = profile.priorityFocus;
+      _spherePriorities = profile.spherePriorities;
       _medications = activeMap.values.toList()
         ..sort((a, b) => a.name.compareTo(b.name));
       _appointments = appointments;
@@ -120,10 +125,9 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
         name: _nameController.text.trim(),
         conditions: _selected.toList(),
         priorityFocus: _priorityFocus,
+        spherePriorities: _spherePriorities,
       ),
     );
-    await FoundationService.instance
-        .syncGoalsWeightsFromProfilePriority(_priorityFocus);
     if (!mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(
       const SnackBar(content: Text('Профиль сохранен')),
@@ -217,7 +221,7 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
 
   @override
   void dispose() {
-    _loginReadOnlyController.dispose();
+    _emailReadOnlyController.dispose();
     _nameController.dispose();
     super.dispose();
   }
@@ -316,14 +320,8 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
             style: pw.TextStyle(fontWeight: pw.FontWeight.bold),
           ),
           pw.SizedBox(height: 6),
-          pw.Text(
-            'Сон: цель ${goals.sleepTarget.toStringAsFixed(1)}, факт ${foundation.spheres.firstWhere((s) => s.id == 'sleep').current.toStringAsFixed(1)}',
-          ),
-          pw.Text(
-            'Настроение: цель ${goals.moodTarget.toStringAsFixed(1)}, факт ${foundation.spheres.firstWhere((s) => s.id == 'mood').current.toStringAsFixed(1)}',
-          ),
-          pw.Text(
-            'Энергия: цель ${goals.energyTarget.toStringAsFixed(1)}, факт ${foundation.spheres.firstWhere((s) => s.id == 'energy').current.toStringAsFixed(1)}',
+          ...foundation.spheres.map(
+            (s) => pw.Text('${s.label}: ${s.detailLine}'),
           ),
           pw.Text(
             'Общий прогресс: ${(foundation.overallProgress * 100).round()}%',
@@ -389,25 +387,44 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
                       color: AppColors.textDark.withValues(alpha: 0.8),
                     ),
                   ),
-                  const SizedBox(height: 12),
+                  const SizedBox(height: 20),
+                  Text('Почта', style: AppTypography.fieldLabel),
+                  const SizedBox(height: 10),
                   TextField(
                     readOnly: true,
                     enableInteractiveSelection: true,
-                    controller: _loginReadOnlyController,
+                    style: AppTypography.formField,
+                    controller: _emailReadOnlyController,
                     decoration: InputDecoration(
-                      labelText: 'Логин',
-                      helperText: 'Задаётся при регистрации и не меняется',
                       filled: true,
                       fillColor: AppColors.greyMuted.withValues(alpha: 0.35),
+                      contentPadding: const EdgeInsets.symmetric(
+                        horizontal: 16,
+                        vertical: 14,
+                      ),
                       border: OutlineInputBorder(
                         borderRadius: BorderRadius.circular(12),
                         borderSide: BorderSide.none,
                       ),
                     ),
                   ),
-                  const SizedBox(height: 12),
+                  const SizedBox(height: 8),
+                  Padding(
+                    padding: const EdgeInsets.only(left: 4),
+                    child: Text(
+                      'Используется для входа, изменить нельзя',
+                      style: AppTypography.fieldHelper,
+                    ),
+                  ),
+                  const SizedBox(height: 22),
+                  Text('Имя', style: AppTypography.fieldLabel),
+                  const SizedBox(height: 10),
                   TextField(
                     controller: _nameController,
+                    style: AppTypography.formField,
+                    textCapitalization: TextCapitalization.none,
+                    keyboardType: TextInputType.name,
+                    autocorrect: false,
                     maxLength: 200,
                     buildCounter: (
                       context, {
@@ -417,41 +434,34 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
                     }) =>
                         null,
                     decoration: InputDecoration(
-                      labelText: 'Имя',
-                      helperText: 'Любые буквы и символы',
                       filled: true,
                       fillColor: AppColors.white,
+                      contentPadding: const EdgeInsets.symmetric(
+                        horizontal: 16,
+                        vertical: 14,
+                      ),
                       border: OutlineInputBorder(
                         borderRadius: BorderRadius.circular(12),
                         borderSide: BorderSide.none,
                       ),
                     ),
                   ),
-                  const SizedBox(height: 12),
-                  DropdownButtonFormField<PriorityStateFocus>(
-                    value: _priorityFocus,
-                    decoration: InputDecoration(
-                      labelText: 'Приоритет наблюдения',
-                      filled: true,
-                      fillColor: AppColors.white,
-                      border: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(12),
-                        borderSide: BorderSide.none,
-                      ),
+                  const SizedBox(height: 8),
+                  Padding(
+                    padding: const EdgeInsets.only(left: 4),
+                    child: Text(
+                      'Любые буквы и символы',
+                      style: AppTypography.fieldHelper,
                     ),
-                    items: PriorityStateFocus.values
-                        .map(
-                          (e) => DropdownMenuItem(
-                            value: e,
-                            child: Text(e.label),
-                          ),
-                        )
-                        .toList(),
-                    onChanged: (v) {
-                      if (v != null) {
-                        setState(() => _priorityFocus = v);
-                      }
-                    },
+                  ),
+                  const SizedBox(height: 16),
+                  Text(
+                    'Приоритеты сфер (сон, настроение, энергия, питание, препараты) настраиваются на вкладке «Цели».',
+                    style: GoogleFonts.alegreyaSans(
+                      fontSize: 13,
+                      height: 1.35,
+                      color: AppColors.textDark.withValues(alpha: 0.75),
+                    ),
                   ),
                   const SizedBox(height: 12),
                   Container(
@@ -615,11 +625,16 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
                               Expanded(
                                 child: CheckboxListTile(
                                   value: selected,
-                                  activeColor: AppColors.orange,
+                                  activeColor: AppCheckboxStyle.activeColor,
+                                  checkColor: AppCheckboxStyle.checkColor,
+                                  side: AppCheckboxStyle.side,
                                   controlAffinity:
                                       ListTileControlAffinity.leading,
                                   contentPadding: EdgeInsets.zero,
-                                  title: Text(c.label),
+                                  title: Text(
+                                    c.label,
+                                    style: AppTypography.checkboxTileTitle(),
+                                  ),
                                   onChanged: (v) {
                                     setState(() {
                                       if (v == true) {

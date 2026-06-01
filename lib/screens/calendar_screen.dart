@@ -31,6 +31,44 @@ const _months = [
 String _formatDate(DateTime d) => '${d.day} ${_months[d.month - 1]}';
 const double _kCalendarCardLeadingIconExtent = 44;
 
+const _kMedCardHeaderIconConstraints = BoxConstraints(minWidth: 32, minHeight: 32);
+
+/// Компактная цветная полоска с удалением и редактированием.
+Widget _medicationCardHeaderBar({
+  required VoidCallback onDelete,
+  required VoidCallback onEdit,
+  Color iconColor = AppColors.white,
+  Color barColor = AppColors.appointmentCardFrame,
+  BorderRadius borderRadius = const BorderRadius.vertical(top: Radius.circular(16)),
+}) {
+  return Container(
+    padding: const EdgeInsets.fromLTRB(4, 0, 0, 0),
+    decoration: BoxDecoration(
+      color: barColor,
+      borderRadius: borderRadius,
+    ),
+    child: Row(
+      mainAxisAlignment: MainAxisAlignment.end,
+      children: [
+        IconButton(
+          onPressed: onDelete,
+          padding: EdgeInsets.zero,
+          constraints: _kMedCardHeaderIconConstraints,
+          visualDensity: VisualDensity.compact,
+          icon: Icon(Icons.delete_outline, color: iconColor, size: 20),
+        ),
+        IconButton(
+          onPressed: onEdit,
+          padding: EdgeInsets.zero,
+          constraints: _kMedCardHeaderIconConstraints,
+          visualDensity: VisualDensity.compact,
+          icon: Icon(Icons.edit_outlined, color: iconColor, size: 20),
+        ),
+      ],
+    ),
+  );
+}
+
 
 
 /// Одна строка списка дня: приём врача или один слот препарата.
@@ -605,26 +643,10 @@ class _MedicationDoseCard extends StatelessWidget {
           mainAxisSize: MainAxisSize.min,
           children: [
             Padding(
-              padding: const EdgeInsets.fromLTRB(0, 0, 0, 4),
-              child: Container(
-                padding: const EdgeInsets.fromLTRB(16, 10, 8, 6),
-                decoration: const BoxDecoration(
-                  color: AppColors.appointmentCardFrame,
-                  borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
-                ),
-                child: Row(
-                  mainAxisAlignment: MainAxisAlignment.end,
-                  children: [
-                    IconButton(
-                      onPressed: onDelete,
-                      icon: const Icon(Icons.delete_outline, color: AppColors.white, size: 22),
-                    ),
-                    IconButton(
-                      onPressed: onEdit,
-                      icon: const Icon(Icons.edit_outlined, color: AppColors.white, size: 22),
-                    ),
-                  ],
-                ),
+              padding: const EdgeInsets.fromLTRB(0, 0, 0, 2),
+              child: _medicationCardHeaderBar(
+                onDelete: onDelete,
+                onEdit: onEdit,
               ),
             ),
             Container(
@@ -710,19 +732,13 @@ class _MedicationDoseCard extends StatelessWidget {
           mainAxisSize: MainAxisSize.min,
           children: [
             Padding(
-              padding: const EdgeInsets.fromLTRB(4, 4, 4, 0),
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.end,
-                children: [
-                  IconButton(
-                    onPressed: onDelete,
-                    icon: const Icon(Icons.delete_outline, color: AppColors.textDark, size: 22),
-                  ),
-                  IconButton(
-                    onPressed: onEdit,
-                    icon: const Icon(Icons.edit_outlined, color: AppColors.textDark, size: 22),
-                  ),
-                ],
+              padding: const EdgeInsets.fromLTRB(2, 2, 2, 0),
+              child: _medicationCardHeaderBar(
+                onDelete: onDelete,
+                onEdit: onEdit,
+                iconColor: AppColors.textDark,
+                barColor: AppColors.greyMuted.withValues(alpha: 0.35),
+                borderRadius: const BorderRadius.vertical(top: Radius.circular(14)),
               ),
             ),
             Padding(
@@ -823,25 +839,10 @@ class _MedicationDoseCard extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          Container(
-            padding: const EdgeInsets.fromLTRB(16, 12, 8, 8),
-            decoration: BoxDecoration(
-              color: AppColors.appointmentCardFrame,
-              borderRadius: const BorderRadius.vertical(top: Radius.circular(21)),
-            ),
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.end,
-              children: [
-                IconButton(
-                  onPressed: onDelete,
-                  icon: const Icon(Icons.delete_outline, color: AppColors.white),
-                ),
-                IconButton(
-                  onPressed: onEdit,
-                  icon: const Icon(Icons.edit_outlined, color: AppColors.white),
-                ),
-              ],
-            ),
+          _medicationCardHeaderBar(
+            onDelete: onDelete,
+            onEdit: onEdit,
+            borderRadius: const BorderRadius.vertical(top: Radius.circular(21)),
           ),
           Container(
             margin: const EdgeInsets.fromLTRB(6, 0, 6, 6),

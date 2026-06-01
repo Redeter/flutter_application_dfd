@@ -2,11 +2,17 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 
+import '../models/foundation_score.dart';
+import '../models/foundation_sphere.dart';
 import '../models/user_profile.dart';
 import '../neural/neural_insights_service.dart';
 import '../services/auth_service.dart';
+import '../services/foundation_service.dart';
 import '../services/user_profile_service.dart';
+import '../utils/email_validation.dart';
+import '../widgets/foundation_sphere_checkboxes.dart';
 import '../theme/app_colors.dart';
+import '../theme/app_typography.dart';
 
 class RegistrationScreen extends StatefulWidget {
   const RegistrationScreen({
@@ -21,18 +27,18 @@ class RegistrationScreen extends StatefulWidget {
 }
 
 class _RegistrationScreenState extends State<RegistrationScreen> {
-  final _loginController = TextEditingController();
+  final _emailController = TextEditingController();
   final _displayNameController = TextEditingController();
   final _passwordController = TextEditingController();
   final _confirmPasswordController = TextEditingController();
   final _formKey = GlobalKey<FormState>();
-  static final RegExp _usernameRegExp = RegExp(r'^[a-zA-Z0-9._-]{3,32}$');
   final _selectedConditions = <MentalCondition>{};
-  PriorityStateFocus _priorityFocus = PriorityStateFocus.mood;
+  FoundationSpherePriorities _spherePriorities =
+      const FoundationSpherePriorities();
   bool _loading = false;
 
   Future<void> _register() async {
-    final login = _loginController.text.trim();
+    final email = _emailController.text.trim();
     final displayName = _displayNameController.text.trim();
     final password = _passwordController.text;
     final isValid = _formKey.currentState?.validate() ?? false;
@@ -40,8 +46,8 @@ class _RegistrationScreenState extends State<RegistrationScreen> {
     setState(() => _loading = true);
     try {
       try {
-        await AuthService.instance.register(username: login, password: password);
-      } on AuthUsernameTakenException catch (e) {
+        await AuthService.instance.register(email: email, password: password);
+      } on AuthEmailTakenException catch (e) {
         if (!mounted) return;
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(content: Text(e.message)),
@@ -58,8 +64,12 @@ class _RegistrationScreenState extends State<RegistrationScreen> {
         UserProfile(
           name: displayName,
           conditions: _selectedConditions.toList(),
-          priorityFocus: _priorityFocus,
+          priorityFocus: PriorityStateFocus.mood,
+          spherePriorities: _spherePriorities,
         ),
+      );
+      await FoundationService.instance.saveGoals(
+        FoundationGoals(priorities: _spherePriorities),
       );
       try {
         await NeuralInsightsService.instance.reloadForActiveUser();
@@ -73,7 +83,7 @@ class _RegistrationScreenState extends State<RegistrationScreen> {
 
   @override
   void dispose() {
-    _loginController.dispose();
+    _emailController.dispose();
     _displayNameController.dispose();
     _passwordController.dispose();
     _confirmPasswordController.dispose();
@@ -105,22 +115,24 @@ class _RegistrationScreenState extends State<RegistrationScreen> {
               ),
               const SizedBox(height: 12),
               TextFormField(
-                controller: _loginController,
+                controller: _emailController,
+                style: AppTypography.formField,
+                textCapitalization: TextCapitalization.none,
+                keyboardType: TextInputType.emailAddress,
                 autocorrect: false,
+                enableSuggestions: false,
+                autofillHints: const [AutofillHints.email],
                 cursorColor: Colors.black,
-                decoration: _inputDecoration('Логин'),
-                validator: (value) {
-                  final loginValue = (value ?? '').trim();
-                  if (loginValue.isEmpty) return 'Введите логин';
-                  if (!_usernameRegExp.hasMatch(loginValue)) {
-                    return 'Логин: 3-32 символа, латиница/цифры/._-';
-                  }
-                  return null;
-                },
+                decoration: _inputDecoration('Почта'),
+                validator: validateEmailField,
               ),
               const SizedBox(height: 10),
               TextFormField(
                 controller: _displayNameController,
+                style: AppTypography.formField,
+                textCapitalization: TextCapitalization.none,
+                keyboardType: TextInputType.name,
+                autocorrect: false,
                 cursorColor: Colors.black,
                 maxLength: 200,
                 buildCounter: (
@@ -140,7 +152,10 @@ class _RegistrationScreenState extends State<RegistrationScreen> {
               const SizedBox(height: 10),
               TextFormField(
                 controller: _passwordController,
+                style: AppTypography.formField,
+                textCapitalization: TextCapitalization.none,
                 obscureText: true,
+                autofillHints: const [AutofillHints.newPassword],
                 cursorColor: Colors.black,
                 decoration: _inputDecoration('Пароль'),
                 validator: (value) {
@@ -155,7 +170,10 @@ class _RegistrationScreenState extends State<RegistrationScreen> {
               const SizedBox(height: 10),
               TextFormField(
                 controller: _confirmPasswordController,
+                style: AppTypography.formField,
+                textCapitalization: TextCapitalization.none,
                 obscureText: true,
+                autofillHints: const [AutofillHints.newPassword],
                 cursorColor: Colors.black,
                 decoration: _inputDecoration('Подтвердите пароль'),
                 validator: (value) {
@@ -183,32 +201,20 @@ class _RegistrationScreenState extends State<RegistrationScreen> {
                       }
                     });
                   },
-                  side: const BorderSide(color: Colors.black54),
-                  activeColor: Colors.black,
-                  checkColor: Colors.white,
-                  title: Text(condition.label),
+                  side: AppCheckboxStyle.side,
+                  activeColor: AppCheckboxStyle.activeColor,
+                  checkColor: AppCheckboxStyle.checkColor,
+                  title: Text(
+                    condition.label,
+                    style: AppTypography.checkboxTileTitle(),
+                  ),
                   controlAffinity: ListTileControlAffinity.leading,
                 ),
               ),
               const SizedBox(height: 8),
-              DropdownButtonFormField<PriorityStateFocus>(
-                value: _priorityFocus,
-                dropdownColor: AppColors.cream,
-                iconEnabledColor: Colors.black54,
-                decoration: _inputDecoration('Приоритет наблюдения'),
-                items: PriorityStateFocus.values
-                    .map(
-                      (f) => DropdownMenuItem(
-                        value: f,
-                        child: Text(f.label),
-                      ),
-                    )
-                    .toList(),
-                onChanged: (value) {
-                  if (value != null) {
-                    setState(() => _priorityFocus = value);
-                  }
-                },
+              FoundationSphereCheckboxes(
+                priorities: _spherePriorities,
+                onChanged: (next) => setState(() => _spherePriorities = next),
               ),
               const SizedBox(height: 14),
               FilledButton(
@@ -232,7 +238,9 @@ class _RegistrationScreenState extends State<RegistrationScreen> {
   String _registerErrorRu(FirebaseAuthException e) {
     switch (e.code) {
       case 'email-already-in-use':
-        return 'Этот логин уже занят';
+        return 'Этот адрес почты уже зарегистрирован';
+      case 'invalid-email':
+        return 'Некорректный адрес почты';
       case 'weak-password':
         return 'Пароль слишком слабый';
       case 'network-request-failed':

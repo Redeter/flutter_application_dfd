@@ -28,9 +28,11 @@ class UnifiedHorizontalDateStrip extends StatelessWidget {
   final double horizontalPadding;
   final double separatorWidth;
 
-  /// Чуть выше компактного режима — даты не «слипаются».
-  static const double defaultStripHeight = 96;
+  /// С запасом под тень круга и оранжевой «таблетки» (тень не входит в layout).
+  static const double defaultStripHeight = 106;
   static const double _kCircle = 40;
+  /// Нижний отступ под boxShadow круга / выбранной даты.
+  static const double _kShadowBottomInset = 8;
 
   static const Color selectedPillOrange = Color(0xFFF5A261);
 
@@ -45,6 +47,7 @@ class UnifiedHorizontalDateStrip extends StatelessWidget {
     return SizedBox(
       height: stripHeight,
       child: ListView.separated(
+        clipBehavior: Clip.none,
         scrollDirection: Axis.horizontal,
         padding: EdgeInsets.symmetric(horizontal: horizontalPadding),
         itemCount: days.length,
@@ -112,31 +115,36 @@ class _DayCircle extends StatelessWidget {
           ),
         ),
         const SizedBox(height: 7),
-        Container(
-          width: circleSize,
-          height: circleSize,
-          decoration: BoxDecoration(
-            shape: BoxShape.circle,
-            color: AppColors.white,
-            border: Border.all(
-              color: marked ? AppColors.orange : const Color(0xFFFFE0C8),
-              width: marked ? 2.2 : 1.6,
-            ),
-            boxShadow: [
-              BoxShadow(
-                color: Colors.black.withValues(alpha: 0.05),
-                blurRadius: 4,
-                offset: const Offset(0, 2),
-              ),
-            ],
+        Padding(
+          padding: const EdgeInsets.only(
+            bottom: UnifiedHorizontalDateStrip._kShadowBottomInset,
           ),
-          child: Center(
-            child: Text(
-              '${day.day}',
-              style: GoogleFonts.alegreyaSans(
-                fontSize: 17,
-                fontWeight: FontWeight.w700,
-                color: AppColors.textDark,
+          child: Container(
+            width: circleSize,
+            height: circleSize,
+            decoration: BoxDecoration(
+              shape: BoxShape.circle,
+              color: AppColors.white,
+              border: Border.all(
+                color: marked ? AppColors.orange : const Color(0xFFFFE0C8),
+                width: marked ? 2.2 : 1.6,
+              ),
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black.withValues(alpha: 0.05),
+                  blurRadius: 4,
+                  offset: const Offset(0, 2),
+                ),
+              ],
+            ),
+            child: Center(
+              child: Text(
+                '${day.day}',
+                style: GoogleFonts.alegreyaSans(
+                  fontSize: 17,
+                  fontWeight: FontWeight.w700,
+                  color: AppColors.textDark,
+                ),
               ),
             ),
           ),
@@ -176,8 +184,12 @@ class _SelectedDatePill extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.fromLTRB(12, 8, 12, 10),
+    return Padding(
+      padding: const EdgeInsets.only(
+        bottom: UnifiedHorizontalDateStrip._kShadowBottomInset,
+      ),
+      child: Container(
+      padding: const EdgeInsets.fromLTRB(12, 8, 12, 12),
       decoration: BoxDecoration(
         color: UnifiedHorizontalDateStrip.selectedPillOrange,
         borderRadius: BorderRadius.circular(18),
@@ -243,6 +255,7 @@ class _SelectedDatePill extends StatelessWidget {
           ),
         ],
       ),
+    ),
     );
   }
 }
@@ -282,54 +295,59 @@ class _TodayUnselectedFrame extends StatelessWidget {
             ),
           ),
           const SizedBox(height: 7),
-          Stack(
-            clipBehavior: Clip.none,
-            children: [
-              Container(
-            width: circleSize,
-            height: circleSize,
-            decoration: BoxDecoration(
-              shape: BoxShape.circle,
-              color: AppColors.white,
-              border: Border.all(
-                color: marked ? AppColors.orange : const Color(0xFFFFE0C8),
-                width: marked ? 2.2 : 1.6,
-              ),
-              boxShadow: [
-                BoxShadow(
-                  color: Colors.black.withValues(alpha: 0.05),
-                  blurRadius: 4,
-                  offset: const Offset(0, 2),
-                ),
-              ],
+          Padding(
+            padding: const EdgeInsets.only(
+              bottom: UnifiedHorizontalDateStrip._kShadowBottomInset,
             ),
-            child: Center(
-              child: Text(
-                '${day.day}',
-                style: GoogleFonts.alegreyaSans(
-                  fontSize: 19,
-                  fontWeight: FontWeight.w800,
-                  color: AppColors.textDark,
-                ),
-              ),
-            ),
-          ),
-              if (marked)
-                const Positioned(
-                  right: 0,
-                  bottom: -2,
-                  child: SizedBox(
-                    width: 8,
-                    height: 8,
-                    child: DecoratedBox(
-                      decoration: BoxDecoration(
-                        color: AppColors.orange,
-                        shape: BoxShape.circle,
+            child: Stack(
+              clipBehavior: Clip.none,
+              children: [
+                Container(
+                  width: circleSize,
+                  height: circleSize,
+                  decoration: BoxDecoration(
+                    shape: BoxShape.circle,
+                    color: AppColors.white,
+                    border: Border.all(
+                      color: marked ? AppColors.orange : const Color(0xFFFFE0C8),
+                      width: marked ? 2.2 : 1.6,
+                    ),
+                    boxShadow: [
+                      BoxShadow(
+                        color: Colors.black.withValues(alpha: 0.05),
+                        blurRadius: 4,
+                        offset: const Offset(0, 2),
+                      ),
+                    ],
+                  ),
+                  child: Center(
+                    child: Text(
+                      '${day.day}',
+                      style: GoogleFonts.alegreyaSans(
+                        fontSize: 19,
+                        fontWeight: FontWeight.w800,
+                        color: AppColors.textDark,
                       ),
                     ),
                   ),
                 ),
-            ],
+                if (marked)
+                  const Positioned(
+                    right: 0,
+                    bottom: -2,
+                    child: SizedBox(
+                      width: 8,
+                      height: 8,
+                      child: DecoratedBox(
+                        decoration: BoxDecoration(
+                          color: AppColors.orange,
+                          shape: BoxShape.circle,
+                        ),
+                      ),
+                    ),
+                  ),
+              ],
+            ),
           ),
         ],
       ),

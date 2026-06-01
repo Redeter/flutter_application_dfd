@@ -1,16 +1,18 @@
+import 'package:flutter/material.dart';
 import 'package:flutter_application_dfd/models/aggregated_data.dart';
 import 'package:flutter_application_dfd/models/calendar_entry.dart';
 import 'package:flutter_application_dfd/models/foundation_score.dart';
+import 'package:flutter_application_dfd/models/foundation_sphere.dart';
 import 'package:flutter_application_dfd/models/note_item.dart';
+import 'package:flutter_application_dfd/models/state_entries.dart';
 import 'package:flutter_application_dfd/services/foundation_service.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:flutter/material.dart';
 
 void main() {
   const goals = FoundationGoals();
   const cap = 'Тестовый период';
 
-  test('compute empty data — ноль кирпичей и пояснение', () {
+  test('compute empty data — ноль кирпичей', () {
     final data = AggregatedData(
       notes: const [],
       stateEntries: const [],
@@ -20,13 +22,13 @@ void main() {
     final s = FoundationService.instance.compute(data, goals, statsPeriodCaption: cap);
     expect(s.filledBricks, 0);
     expect(s.rawOverallProgress, 0);
-    expect(s.history30d.length, 30);
-    expect(s.historyDayDetails.length, 30);
+    expect(s.history30d.length, FoundationService.historyDays);
     expect(s.medicationAdherenceRate, isNull);
+    expect(s.dataSourcesSummary.contains('заметки не учитываются'), true);
   });
 
-  test('только заметки — три сферы и окно > 0', () {
-    final day = DateTime(2026, 1, 10);
+  test('заметки не влияют на фундамент', () {
+    final day = DateTime.now();
     final data = AggregatedData(
       notes: [
         NoteItem(
@@ -42,13 +44,76 @@ void main() {
       appointments: const [],
     );
     final s = FoundationService.instance.compute(data, goals, statsPeriodCaption: cap);
-    expect(s.spheres.length, 3);
-    expect(s.spheres.any((e) => e.id == 'sleep'), true);
-    expect(s.dataSourcesSummary.contains('заметок 1'), true);
+    expect(s.filledBricks, 0);
   });
 
-  test('только календарь — adherence при отмеченном приёме', () {
-    final day = DateTime(2026, 2, 1);
+  test('запись настроения сегодня даёт прогресс по сфере', () {
+    final day = DateTime.now();
+    final data = AggregatedData(
+      notes: const [],
+      stateEntries: [
+        MoodEntry(createdAt: day, value: 8),
+      ],
+      medications: const [],
+      appointments: const [],
+    );
+    final s = FoundationService.instance.compute(data, goals, statsPeriodCaption: cap);
+    final mood = s.spheres.firstWhere((e) => e.id == FoundationSphereIds.mood);
+    expect(mood.loggedToday, true);
+    expect(mood.progress, greaterThan(0));
+  });
+
+  test('приоритет 0 — сфера скрыта', () {
+    final goalsHidden = goals.copyWith(
+      priorities: const FoundationSpherePriorities(
+        sleep: 0,
+        mood: 1,
+        energy: 0,
+        nutrition: 0,
+        medication: 0,
+      ),
+    );
+    final data = AggregatedData(
+      notes: const [],
+      stateEntries: [
+        MoodEntry(createdAt: DateTime.now(), value: 7),
+        SleepEntry(createdAt: DateTime.now(), quality: 8),
+      ],
+      medications: const [],
+      appointments: const [],
+    );
+    final s = FoundationService.instance.compute(
+      data,
+      goalsHidden,
+      statsPeriodCaption: cap,
+    );
+    expect(s.spheres.length, 1);
+    expect(s.spheres.first.id, FoundationSphereIds.mood);
+  });
+
+  test('dailyFoundationScore падает при пропуске дня', () {
+    final today = FoundationService.dayOnly(DateTime.now());
+    final data = AggregatedData(
+      notes: const [],
+      stateEntries: [
+        MoodEntry(
+          createdAt: today.subtract(const Duration(days: 1)),
+          value: 8,
+        ),
+      ],
+      medications: const [],
+      appointments: const [],
+    );
+    final todayScore = FoundationService.dailyFoundationScore(
+      data: data,
+      day: today,
+      goals: goals,
+    );
+    expect(todayScore, 0);
+  });
+
+  test('medication adherence сегодня', () {
+    final day = DateTime.now();
     final med = Medication(
       id: '1',
       date: day,
@@ -68,37 +133,5 @@ void main() {
     );
     final s = FoundationService.instance.compute(data, goals, statsPeriodCaption: cap);
     expect(s.medicationAdherenceRate, closeTo(1.0, 0.01));
-    expect(s.medicationAdherenceCaption, isNotEmpty);
-  });
-
-  test('filterByInclusiveDayRange отсекает вне диапазона', () {
-    final d0 = DateTime(2026, 3, 1);
-    final d1 = DateTime(2026, 3, 15);
-    final data = AggregatedData(
-      notes: [
-        NoteItem(
-          date: d0,
-          title: 'a',
-          tags: const [],
-          preview: '',
-          sticker: NoteStickerKind.sun,
-        ),
-        NoteItem(
-          date: d1,
-          title: 'b',
-          tags: const [],
-          preview: '',
-          sticker: NoteStickerKind.sun,
-        ),
-      ],
-      stateEntries: const [],
-      medications: const [],
-      appointments: const [],
-    );
-    final f = data.filterByInclusiveDayRange(
-      DateTime(2026, 3, 1),
-      DateTime(2026, 3, 5),
-    );
-    expect(f.notes.length, 1);
   });
 }

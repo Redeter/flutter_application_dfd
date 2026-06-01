@@ -4,9 +4,11 @@ import 'package:google_fonts/google_fonts.dart';
 
 import '../models/aggregated_data.dart';
 import '../models/foundation_score.dart';
+import '../models/foundation_sphere.dart';
 import '../models/user_profile.dart';
 import '../services/foundation_service.dart';
 import '../services/user_profile_service.dart';
+import '../widgets/foundation_sphere_checkboxes.dart';
 import '../theme/app_colors.dart';
 import '../theme/peach_app_bar.dart';
 import '../widgets/app_bottom_nav.dart';
@@ -61,14 +63,6 @@ class _FoundationScreenState extends State<FoundationScreen> {
   bool _questDone = false;
   int _questStreak = 0;
 
-  /// Не перезаписываем ручные веса из шестерёнки при каждом заходе на вкладку.
-  bool _weightsLookUnset(FoundationGoals g) {
-    const eps = 0.021;
-    return (g.sleepWeight - 1.0).abs() < eps &&
-        (g.moodWeight - 1.0).abs() < eps &&
-        (g.energyWeight - 1.0).abs() < eps;
-  }
-
   @override
   void initState() {
     super.initState();
@@ -98,9 +92,9 @@ class _FoundationScreenState extends State<FoundationScreen> {
   Future<void> _load() async {
     final profile = await UserProfileService.instance.load();
     var goals = await FoundationService.instance.loadGoals();
-    if (_weightsLookUnset(goals)) {
+    if (goals.priorities.activeWeightSum == 0) {
       await FoundationService.instance
-          .syncGoalsWeightsFromProfilePriority(profile.priorityFocus);
+          .syncGoalsPrioritiesFromProfile(profile.spherePriorities);
       goals = await FoundationService.instance.loadGoals();
     }
     await FoundationService.instance.ensureQuestHistorySyncedWithLegacyFlag();
@@ -123,13 +117,39 @@ class _FoundationScreenState extends State<FoundationScreen> {
     });
   }
 
+  Future<void> _applySpherePriorities(FoundationSpherePriorities next) async {
+    final merged = _goals.copyWith(priorities: next);
+    await FoundationService.instance.saveGoals(merged);
+    await UserProfileService.instance.save(
+      _profile.copyWith(spherePriorities: next),
+    );
+    if (!mounted) return;
+    setState(() => _goals = merged);
+    await _recomputeScore();
+  }
+
+  Widget _buildSphereSelectionCard() {
+    return Container(
+      padding: const EdgeInsets.fromLTRB(12, 8, 12, 4),
+      decoration: BoxDecoration(
+        color: AppColors.white,
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: AppColors.orange.withValues(alpha: 0.2)),
+      ),
+      child: FoundationSphereCheckboxes(
+        dense: true,
+        priorities: _goals.priorities,
+        onChanged: _applySpherePriorities,
+      ),
+    );
+  }
+
   Future<void> _editGoals() async {
     var sleep = _goals.sleepTarget;
     var mood = _goals.moodTarget;
     var energy = _goals.energyTarget;
-    var sleepWeight = _goals.sleepWeight;
-    var moodWeight = _goals.moodWeight;
-    var energyWeight = _goals.energyWeight;
+    var snackTarget = _goals.snackTarget;
+    final priorities = _goals.priorities;
     final saved = await showModalBottomSheet<bool>(
       context: context,
       isScrollControlled: true,
@@ -137,7 +157,7 @@ class _FoundationScreenState extends State<FoundationScreen> {
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(18)),
       ),
-      builder: (_) {
+      builder: (sheetContext) {
         return StatefulBuilder(
           builder: (context, setSheetState) {
             Widget slider(String label, double value, ValueChanged<double> onChanged) {
@@ -157,69 +177,75 @@ class _FoundationScreenState extends State<FoundationScreen> {
               );
             }
 
-            Widget weightSlider(String label, double value, ValueChanged<double> onChanged) {
-              return Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(label),
-                  Slider(
-                    value: value,
-                    min: 0.5,
-                    max: 2.0,
-                    divisions: 15,
-                    onChanged: onChanged,
-                    activeColor: AppColors.orange,
-                  ),
-                ],
-              );
-            }
-
+            final maxH = MediaQuery.of(sheetContext).size.height * 0.88;
             return Padding(
-              padding: EdgeInsets.fromLTRB(
-                16,
-                16,
-                16,
-                16 + MediaQuery.of(context).viewInsets.bottom,
+              padding: EdgeInsets.only(
+                bottom: MediaQuery.of(sheetContext).viewInsets.bottom,
               ),
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  Text(
-                    'Цели фундамента',
-                    style: GoogleFonts.alegreyaSans(
-                      fontSize: 18,
-                      fontWeight: FontWeight.w800,
-                    ),
-                  ),
-                  const SizedBox(height: 10),
-                  slider('Сон', sleep, (v) => setSheetState(() => sleep = v)),
-                  slider('Настроение', mood, (v) => setSheetState(() => mood = v)),
-                  slider('Энергия', energy, (v) => setSheetState(() => energy = v)),
-                  const SizedBox(height: 4),
-                  Text(
-                    'Важность сфер',
-                    style: GoogleFonts.alegreyaSans(
-                      fontSize: 14,
-                      fontWeight: FontWeight.w700,
-                    ),
-                  ),
-                  weightSlider('Сон', sleepWeight, (v) => setSheetState(() => sleepWeight = v)),
-                  weightSlider('Настроение', moodWeight, (v) => setSheetState(() => moodWeight = v)),
-                  weightSlider('Энергия', energyWeight, (v) => setSheetState(() => energyWeight = v)),
-                  const SizedBox(height: 8),
-                  LaconicTap(
-                    onTap: () => Navigator.pop(context, true),
-                    child: FilledButton(
-                      onPressed: () => Navigator.pop(context, true),
-                      style: FilledButton.styleFrom(
-                        backgroundColor: AppColors.dialogPrimary,
-                        foregroundColor: AppColors.white,
+              child: ConstrainedBox(
+                constraints: BoxConstraints(maxHeight: maxH),
+                child: SingleChildScrollView(
+                  padding: const EdgeInsets.fromLTRB(16, 16, 16, 20),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      Text(
+                        'Цели фундамента',
+                        style: GoogleFonts.alegreyaSans(
+                          fontSize: 18,
+                          fontWeight: FontWeight.w800,
+                        ),
                       ),
-                      child: const Text('Сохранить'),
-                    ),
+                      const SizedBox(height: 10),
+                      if (priorities.isActive(FoundationSphereIds.sleep))
+                        slider('Сон', sleep, (v) => setSheetState(() => sleep = v)),
+                      if (priorities.isActive(FoundationSphereIds.mood))
+                        slider(
+                          'Настроение',
+                          mood,
+                          (v) => setSheetState(() => mood = v),
+                        ),
+                      if (priorities.isActive(FoundationSphereIds.energy))
+                        slider(
+                          'Энергия',
+                          energy,
+                          (v) => setSheetState(() => energy = v),
+                        ),
+                      if (priorities.isActive(FoundationSphereIds.nutrition)) ...[
+                        const SizedBox(height: 8),
+                        Text(
+                          'Перекусов в день (основные приёмы: ${FoundationGoals.mainMealsTarget})',
+                          style: GoogleFonts.alegreyaSans(
+                            fontSize: 13,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                        Slider(
+                          value: snackTarget.toDouble(),
+                          min: 0,
+                          max: 5,
+                          divisions: 5,
+                          label: '$snackTarget',
+                          activeColor: AppColors.orange,
+                          onChanged: (v) =>
+                              setSheetState(() => snackTarget = v.round()),
+                        ),
+                      ],
+                      const SizedBox(height: 12),
+                      LaconicTap(
+                        onTap: () => Navigator.pop(context, true),
+                        child: FilledButton(
+                          onPressed: () => Navigator.pop(context, true),
+                          style: FilledButton.styleFrom(
+                            backgroundColor: AppColors.dialogPrimary,
+                            foregroundColor: AppColors.white,
+                          ),
+                          child: const Text('Сохранить'),
+                        ),
+                      ),
+                    ],
                   ),
-                ],
+                ),
               ),
             );
           },
@@ -231,18 +257,12 @@ class _FoundationScreenState extends State<FoundationScreen> {
       sleepTarget: sleep,
       moodTarget: mood,
       energyTarget: energy,
-      sleepWeight: sleepWeight,
-      moodWeight: moodWeight,
-      energyWeight: energyWeight,
+      snackTarget: snackTarget,
+      priorities: priorities,
     );
     await FoundationService.instance.saveGoals(next);
     await UserProfileService.instance.save(
-      UserProfile(
-        name: _profile.name,
-        conditions: _profile.conditions,
-        priorityFocus:
-            FoundationService.instance.inferPriorityFocusFromWeights(next),
-      ),
+      _profile.copyWith(spherePriorities: priorities),
     );
     final updatedProfile = await UserProfileService.instance.load();
     if (!mounted) return;
@@ -291,35 +311,6 @@ class _FoundationScreenState extends State<FoundationScreen> {
     await _load();
   }
 
-  void _showPrivacyDialog() {
-    showDialog<void>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: Text(
-          'Конфиденциальность',
-          style: GoogleFonts.alegreyaSans(fontWeight: FontWeight.w800),
-        ),
-        content: SingleChildScrollView(
-          child: Text(
-            'Фундамент и статистика считаются только на этом устройстве. '
-            'Данные не отправляются на сервер, если вы сами не экспортируете их.',
-            style: GoogleFonts.alegreyaSans(
-              fontSize: 14,
-              height: 1.35,
-              color: AppColors.textDark.withValues(alpha: 0.88),
-            ),
-          ),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx),
-            child: const Text('Понятно'),
-          ),
-        ],
-      ),
-    );
-  }
-
   void _showHistoryDayDetail(FoundationHistoryDayDetail d) {
     final day = d.windowEndDay;
     showDialog<void>(
@@ -330,9 +321,9 @@ class _FoundationScreenState extends State<FoundationScreen> {
           style: GoogleFonts.alegreyaSans(fontWeight: FontWeight.w800),
         ),
         content: Text(
-          'Окно 14 дней, заканчивающееся в этот день: кирпичей ${d.bricks}.\n'
-          'В окне: заметок ${d.notesCount}, записей «+» ${d.stateCount}, '
-          'записей календаря ${d.calendarCount}.',
+          'День ${d.windowEndDay.day}.${d.windowEndDay.month}: '
+          'прогресс ${d.dailyScorePercent}%, кирпичей ${d.bricks}.\n'
+          'Записей «+» ${d.stateCount}, календарь ${d.calendarCount}.',
           style: GoogleFonts.alegreyaSans(
             fontSize: 14,
             height: 1.35,
@@ -343,163 +334,6 @@ class _FoundationScreenState extends State<FoundationScreen> {
           TextButton(
             onPressed: () => Navigator.pop(ctx),
             child: const Text('Закрыть'),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Future<void> _pickSpherePriorityManually() async {
-    final pick = await showModalBottomSheet<String>(
-      context: context,
-      backgroundColor: AppColors.white,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(18)),
-      ),
-      builder: (ctx) {
-        return SafeArea(
-          child: Padding(
-            padding: const EdgeInsets.fromLTRB(20, 16, 20, 24),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                Text(
-                  'Что для вас сейчас важнее?',
-                  textAlign: TextAlign.center,
-                  style: GoogleFonts.alegreyaSans(
-                    fontSize: 18,
-                    fontWeight: FontWeight.w800,
-                  ),
-                ),
-                const SizedBox(height: 6),
-                Text(
-                  'Мы слегка сдвинем веса сфер; цели по цифрам можно настроить в шестерёнке.',
-                  textAlign: TextAlign.center,
-                  style: GoogleFonts.alegreyaSans(
-                    fontSize: 13,
-                    color: AppColors.textDark.withValues(alpha: 0.72),
-                  ),
-                ),
-                const SizedBox(height: 16),
-                LaconicTap(
-                  onTap: () => Navigator.pop(ctx, 'sleep'),
-                  child: FilledButton(
-                    onPressed: () => Navigator.pop(ctx, 'sleep'),
-                    style: FilledButton.styleFrom(
-                      backgroundColor: AppColors.dialogPrimary,
-                      foregroundColor: AppColors.white,
-                    ),
-                    child: const Text('Сон'),
-                  ),
-                ),
-                const SizedBox(height: 8),
-                LaconicTap(
-                  onTap: () => Navigator.pop(ctx, 'mood'),
-                  child: FilledButton(
-                    onPressed: () => Navigator.pop(ctx, 'mood'),
-                    style: FilledButton.styleFrom(
-                      backgroundColor: AppColors.dialogPrimary,
-                      foregroundColor: AppColors.white,
-                    ),
-                    child: const Text('Настроение'),
-                  ),
-                ),
-                const SizedBox(height: 8),
-                LaconicTap(
-                  onTap: () => Navigator.pop(ctx, 'energy'),
-                  child: FilledButton(
-                    onPressed: () => Navigator.pop(ctx, 'energy'),
-                    style: FilledButton.styleFrom(
-                      backgroundColor: AppColors.dialogPrimary,
-                      foregroundColor: AppColors.white,
-                    ),
-                    child: const Text('Энергия'),
-                  ),
-                ),
-                const SizedBox(height: 8),
-                TextButton(
-                  onPressed: () => Navigator.pop(ctx),
-                  child: const Text('Отмена'),
-                ),
-              ],
-            ),
-          ),
-        );
-      },
-    );
-    if (pick == null || !mounted) return;
-    if (pick != 'sleep' && pick != 'mood' && pick != 'energy') return;
-    await UserProfileService.instance.save(
-      UserProfile(
-        name: _profile.name,
-        conditions: _profile.conditions,
-        priorityFocus: PriorityStateFocusX.fromCode(pick),
-      ),
-    );
-    await FoundationService.instance.applyPresetWeightsForPrimary(pick);
-    final goals = await FoundationService.instance.loadGoals();
-    final refreshed = await UserProfileService.instance.load();
-    if (!mounted) return;
-    setState(() {
-      _goals = goals;
-      _profile = refreshed;
-    });
-    await _recomputeScore();
-  }
-
-  Widget _buildMissionAndLinks() {
-    final s = _score!;
-    return Container(
-      padding: const EdgeInsets.fromLTRB(14, 6, 14, 10),
-      decoration: BoxDecoration(
-        color: AppColors.white,
-        borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: AppColors.orange.withValues(alpha: 0.22)),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          Theme(
-            data: Theme.of(context).copyWith(dividerColor: Colors.transparent),
-            child: ExpansionTile(
-              tilePadding: EdgeInsets.zero,
-              title: Text(
-                s.missionTitle,
-                style: GoogleFonts.alegreyaSans(
-                  fontSize: 15,
-                  fontWeight: FontWeight.w800,
-                ),
-              ),
-              subtitle: Text(
-                'Подробнее · что это значит',
-                style: GoogleFonts.alegreyaSans(
-                  fontSize: 12,
-                  color: AppColors.textDark.withValues(alpha: 0.62),
-                ),
-              ),
-              children: [
-                Padding(
-                  padding: const EdgeInsets.only(bottom: 10),
-                  child: Text(
-                    s.missionBody,
-                    style: GoogleFonts.alegreyaSans(
-                      fontSize: 13,
-                      height: 1.35,
-                      color: AppColors.textDark.withValues(alpha: 0.82),
-                    ),
-                  ),
-                ),
-              ],
-            ),
-          ),
-          Align(
-            alignment: Alignment.centerLeft,
-            child: TextButton.icon(
-              onPressed: _showPrivacyDialog,
-              icon: const Icon(Icons.lock_outline, size: 18),
-              label: const Text('Конфиденциальность'),
-            ),
           ),
         ],
       ),
@@ -559,6 +393,7 @@ class _FoundationScreenState extends State<FoundationScreen> {
       data: widget.data,
       profile: _profile,
       nextStepSphereId: _score!.nextStepSphereId,
+      goals: _goals,
     );
     return Container(
       padding: const EdgeInsets.fromLTRB(14, 14, 8, 8),
@@ -685,13 +520,13 @@ class _FoundationScreenState extends State<FoundationScreen> {
   String _profileAdjustedNextStep(String base) {
     if (!_profile.hasConditions) return base;
     if (_profile.conditions.contains(MentalCondition.bipolar)) {
-      return 'Шаг на сегодня: стабилизируйте сон и ритм дня, затем коротко отметьте состояние.';
+      return 'Шаг на сегодня: отметьте сон в «+» и держите ритм дня.';
     }
     if (_profile.conditions.contains(MentalCondition.anxiety)) {
-      return 'Шаг на сегодня: 3 минуты спокойного дыхания + отметить основной триггер.';
+      return 'Шаг на сегодня: настроение или эмоции в «+» после короткой паузы.';
     }
     if (_profile.conditions.contains(MentalCondition.depression)) {
-      return 'Шаг на сегодня: один маленький выполнимый шаг и короткая заметка после.';
+      return 'Шаг на сегодня: отметьте настроение в «+» — один маленький шаг за раз.';
     }
     return base;
   }
@@ -796,27 +631,11 @@ class _FoundationScreenState extends State<FoundationScreen> {
                         data: widget.data,
                         profile: _profile,
                         nextStepSphereId: _score!.nextStepSphereId,
+                        goals: _goals,
                       ),
                     ),
                     const SizedBox(height: 10),
-                    OutlinedButton.icon(
-                      onPressed: _loading ? null : _pickSpherePriorityManually,
-                      icon: const Icon(Icons.flag_outlined, size: 20),
-                      label: Text(
-                        'Приоритет сфер',
-                        style: GoogleFonts.alegreyaSans(
-                          fontWeight: FontWeight.w700,
-                          fontSize: 14,
-                        ),
-                      ),
-                      style: OutlinedButton.styleFrom(
-                        foregroundColor: AppColors.dialogPrimary,
-                        side: BorderSide(color: AppColors.orange.withValues(alpha: 0.45)),
-                        padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 14),
-                      ),
-                    ),
-                    const SizedBox(height: 10),
-                    _buildMissionAndLinks(),
+                    _buildSphereSelectionCard(),
                     const SizedBox(height: 10),
                     _buildWeeklyCard(),
                     const SizedBox(height: 8),
@@ -829,14 +648,6 @@ class _FoundationScreenState extends State<FoundationScreen> {
                           fontSize: 12,
                           color: AppColors.textDark.withValues(alpha: 0.72),
                         ),
-                      ),
-                    ],
-                    if (_score!.spheres.any((s) => !s.hasMetricSamples)) ...[
-                      const SizedBox(height: 10),
-                      FilledButton.tonalIcon(
-                        onPressed: () => showStateCategoriesSheet(context),
-                        icon: const Icon(Icons.add_rounded),
-                        label: const Text('Добавить запись («+»)'),
                       ),
                     ],
                     const SizedBox(height: 10),
@@ -880,7 +691,7 @@ class _FoundationHero extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final pct = (score.overallProgress * 100).round();
-    const rows = [12, 10, 8, 6, 4];
+    const rows = [18, 16, 14, 12, 12];
     var filledLeft = score.filledBricks;
     return Container(
       padding: const EdgeInsets.fromLTRB(14, 12, 14, 14),
@@ -944,20 +755,13 @@ class _FoundationHero extends StatelessWidget {
                   color: const Color(0xFFE8F5E9),
                   borderRadius: BorderRadius.circular(20),
                 ),
-                child: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Icon(Icons.check_rounded, size: 16, color: Colors.green.shade800),
-                    const SizedBox(width: 6),
-                    Text(
-                      'Шаг закрыт записью «+»',
-                      style: GoogleFonts.alegreyaSans(
-                        fontSize: 12,
-                        fontWeight: FontWeight.w700,
-                        color: Colors.green.shade900,
-                      ),
-                    ),
-                  ],
+                child: Text(
+                  'Шаг закрыт записью «+»',
+                  style: GoogleFonts.alegreyaSans(
+                    fontSize: 12,
+                    fontWeight: FontWeight.w700,
+                    color: Colors.green.shade900,
+                  ),
                 ),
               ),
             ),
@@ -973,7 +777,9 @@ class _FoundationHero extends StatelessWidget {
                   borderRadius: BorderRadius.circular(20),
                 ),
                 child: Text(
-                  'Серия отметок: $questStreak ${_foundationPluralDaysRu(questStreak)} подряд',
+                  'Серия: $questStreak ${_foundationPluralDaysRu(questStreak)}',
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
                   style: GoogleFonts.alegreyaSans(
                     fontSize: 12,
                     fontWeight: FontWeight.w700,
@@ -1026,27 +832,42 @@ class _FoundationHero extends StatelessWidget {
             ),
           ],
           const SizedBox(height: 10),
-          ...rows.map((count) {
-            return Padding(
-              padding: const EdgeInsets.only(bottom: 4),
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: List.generate(count, (i) {
-                  final isFilled = filledLeft > 0;
-                  if (isFilled) filledLeft--;
-                  return Container(
-                    width: 14,
-                    height: 8,
-                    margin: const EdgeInsets.symmetric(horizontal: 1.5),
-                    decoration: BoxDecoration(
-                      color: isFilled ? AppColors.orange : AppColors.greyMuted.withValues(alpha: 0.6),
-                      borderRadius: BorderRadius.circular(2),
+          LayoutBuilder(
+            builder: (context, constraints) {
+              const brickH = 10.0;
+              const gap = 2.0;
+              return Column(
+                children: rows.map((count) {
+                  final totalGap = count > 1 ? (count - 1) * gap : 0.0;
+                  final brickW =
+                      ((constraints.maxWidth - totalGap) / count).clamp(5.0, 16.0);
+                  return Padding(
+                    padding: const EdgeInsets.only(bottom: 4),
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: List.generate(count, (i) {
+                        final isFilled = filledLeft > 0;
+                        if (isFilled) filledLeft--;
+                        return Padding(
+                          padding: EdgeInsets.only(left: i == 0 ? 0 : gap),
+                          child: Container(
+                            width: brickW,
+                            height: brickH,
+                            decoration: BoxDecoration(
+                              color: isFilled
+                                  ? AppColors.orange
+                                  : AppColors.greyMuted.withValues(alpha: 0.6),
+                              borderRadius: BorderRadius.circular(2),
+                            ),
+                          ),
+                        );
+                      }),
                     ),
                   );
-                }),
-              ),
-            );
-          }),
+                }).toList(),
+              );
+            },
+          ),
           const SizedBox(height: 10),
           Text(
             score.dataSourcesSummary,
@@ -1073,6 +894,7 @@ class _FoundationHero extends StatelessWidget {
 
   Widget _heroPill(String text, Color color) {
     return Container(
+      constraints: const BoxConstraints(maxWidth: 280),
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 5),
       decoration: BoxDecoration(
         color: color,
@@ -1080,6 +902,9 @@ class _FoundationHero extends StatelessWidget {
       ),
       child: Text(
         text,
+        textAlign: TextAlign.center,
+        maxLines: 2,
+        overflow: TextOverflow.ellipsis,
         style: GoogleFonts.alegreyaSans(
           fontSize: 11,
           color: AppColors.textDark.withValues(alpha: 0.82),
@@ -1095,7 +920,7 @@ class _SphereTile extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final progress = (sphere.progress * sphere.confidence).clamp(0.0, 1.0);
+    final progress = sphere.progress.clamp(0.0, 1.0);
     return Container(
       margin: const EdgeInsets.only(bottom: 10),
       padding: const EdgeInsets.all(12),
@@ -1106,37 +931,24 @@ class _SphereTile extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Row(
-            children: [
-              Text(
-                sphere.label,
-                style: GoogleFonts.alegreyaSans(fontSize: 15, fontWeight: FontWeight.w700),
-              ),
-              const Spacer(),
-              Text(
-                '${(progress * 100).round()}% • +${sphere.brickContribution} кирп.',
-                style: GoogleFonts.alegreyaSans(
-                  fontSize: 13,
-                  color: AppColors.textDark.withValues(alpha: 0.72),
-                ),
-              ),
-            ],
+          Text(
+            sphere.label,
+            style: GoogleFonts.alegreyaSans(fontSize: 15, fontWeight: FontWeight.w700),
           ),
           const SizedBox(height: 6),
           LinearProgressIndicator(
             value: progress,
             color: AppColors.orange,
             backgroundColor: AppColors.greyMuted.withValues(alpha: 0.35),
-            minHeight: 7,
+            minHeight: 8,
             borderRadius: BorderRadius.circular(8),
           ),
           const SizedBox(height: 6),
           Text(
-            !sphere.hasMetricSamples
-                ? 'Нет записей этой метрики в «+» — шкала обновится после первых данных. Цель: ${sphere.target.toStringAsFixed(1)}.'
-                : 'Текущее: ${sphere.current.toStringAsFixed(1)} / Цель: ${sphere.target.toStringAsFixed(1)}',
+            '${(progress * 100).round()}% за сегодня · ${sphere.detailLine}',
             style: GoogleFonts.alegreyaSans(
               fontSize: 12,
+              height: 1.35,
               color: AppColors.textDark.withValues(alpha: 0.68),
             ),
           ),
@@ -1159,7 +971,10 @@ class _HistoryStrip extends StatelessWidget {
   Widget build(BuildContext context) {
     final history = score.history30d;
     if (history.isEmpty) return const SizedBox.shrink();
-    final maxVal = history.reduce((a, b) => a > b ? a : b).toDouble().clamp(1.0, 40.0);
+    final maxVal = history.reduce((a, b) => a > b ? a : b).toDouble().clamp(
+          1.0,
+          FoundationService.totalBricks.toDouble(),
+        );
     final details = score.historyDayDetails;
     return Container(
       padding: const EdgeInsets.fromLTRB(10, 8, 10, 10),
@@ -1171,7 +986,7 @@ class _HistoryStrip extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Text(
-            'История фундамента (30 дней)',
+            'История фундамента (${FoundationService.historyDays} дней)',
             style: GoogleFonts.alegreyaSans(
               fontSize: 12,
               fontWeight: FontWeight.w700,

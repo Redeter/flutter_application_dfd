@@ -5,7 +5,9 @@ import 'package:google_fonts/google_fonts.dart';
 
 import '../neural/neural_insights_service.dart';
 import '../services/auth_service.dart';
+import '../utils/email_validation.dart';
 import 'registration_screen.dart';
+import '../theme/app_typography.dart';
 import '../theme/app_colors.dart';
 
 class LoginScreen extends StatefulWidget {
@@ -21,22 +23,21 @@ class LoginScreen extends StatefulWidget {
 }
 
 class _LoginScreenState extends State<LoginScreen> {
-  final _usernameController = TextEditingController();
+  final _emailController = TextEditingController();
   final _passwordController = TextEditingController();
   final _formKey = GlobalKey<FormState>();
-  static final RegExp _usernameRegExp = RegExp(r'^[a-zA-Z0-9._-]{3,32}$');
   bool _loading = false;
   bool _rememberMe = true;
 
   Future<void> _login() async {
-    final username = _usernameController.text.trim();
+    final email = _emailController.text.trim();
     final password = _passwordController.text;
     final isValid = _formKey.currentState?.validate() ?? false;
     if (!isValid) return;
     setState(() => _loading = true);
     try {
       final ok = await AuthService.instance.login(
-        username: username,
+        email: email,
         password: password,
         rememberSession: _rememberMe,
       );
@@ -48,7 +49,7 @@ class _LoginScreenState extends State<LoginScreen> {
         return;
       }
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Неверный логин или пароль')),
+        const SnackBar(content: Text('Неверная почта или пароль')),
       );
     } on FirebaseAuthException catch (e) {
       if (!mounted) return;
@@ -67,7 +68,7 @@ class _LoginScreenState extends State<LoginScreen> {
 
   @override
   void dispose() {
-    _usernameController.dispose();
+    _emailController.dispose();
     _passwordController.dispose();
     super.dispose();
   }
@@ -103,24 +104,24 @@ class _LoginScreenState extends State<LoginScreen> {
                   ),
                   const SizedBox(height: 18),
                   TextFormField(
-                    controller: _usernameController,
+                    controller: _emailController,
+                    style: AppTypography.formField,
+                    textCapitalization: TextCapitalization.none,
+                    keyboardType: TextInputType.emailAddress,
+                    autocorrect: false,
+                    enableSuggestions: false,
+                    autofillHints: const [AutofillHints.email],
                     cursorColor: Colors.black,
-                    decoration: _inputDecoration('Логин'),
-                    validator: (value) {
-                      final usernameValue = (value ?? '').trim();
-                      if (usernameValue.isEmpty) {
-                        return 'Введите логин';
-                      }
-                      if (!_usernameRegExp.hasMatch(usernameValue)) {
-                        return 'Логин: 3-32 символа, буквы/цифры/._-';
-                      }
-                      return null;
-                    },
+                    decoration: _inputDecoration('Почта'),
+                    validator: validateEmailField,
                   ),
                   const SizedBox(height: 12),
                   TextFormField(
                     controller: _passwordController,
+                    style: AppTypography.formField,
+                    textCapitalization: TextCapitalization.none,
                     obscureText: true,
+                    autofillHints: const [AutofillHints.password],
                     cursorColor: Colors.black,
                     decoration: _inputDecoration('Пароль'),
                     validator: (value) {
@@ -193,6 +194,8 @@ class _LoginScreenState extends State<LoginScreen> {
 
   String _authErrorRu(FirebaseAuthException e) {
     switch (e.code) {
+      case 'invalid-email':
+        return 'Некорректный адрес почты';
       case 'network-request-failed':
         return 'Нет сети. Проверьте подключение к интернету.';
       case 'too-many-requests':

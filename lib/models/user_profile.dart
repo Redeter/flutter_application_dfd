@@ -1,3 +1,5 @@
+import 'foundation_sphere.dart';
+
 enum MentalCondition {
   bipolar,
   depression,
@@ -23,13 +25,31 @@ class UserProfile {
     this.name = '',
     this.conditions = const [],
     this.priorityFocus = PriorityStateFocus.mood,
+    this.spherePriorities = const FoundationSpherePriorities(),
   });
 
   final String name;
   final List<MentalCondition> conditions;
+
+  /// Устаревшее поле; для облака. Основные приоритеты — [spherePriorities].
   final PriorityStateFocus priorityFocus;
+  final FoundationSpherePriorities spherePriorities;
 
   bool get hasConditions => conditions.isNotEmpty;
+
+  UserProfile copyWith({
+    String? name,
+    List<MentalCondition>? conditions,
+    PriorityStateFocus? priorityFocus,
+    FoundationSpherePriorities? spherePriorities,
+  }) {
+    return UserProfile(
+      name: name ?? this.name,
+      conditions: conditions ?? this.conditions,
+      priorityFocus: priorityFocus ?? this.priorityFocus,
+      spherePriorities: spherePriorities ?? this.spherePriorities,
+    );
+  }
 }
 
 extension MentalConditionX on MentalCondition {

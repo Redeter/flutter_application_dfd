@@ -1,5 +1,6 @@
 import 'dart:convert';
 
+import '../models/foundation_sphere.dart';
 import '../models/user_profile.dart';
 import 'auth_service.dart';
 import 'firestore_repository.dart';
@@ -23,10 +24,19 @@ class UserProfileService {
       final priorityFocus = PriorityStateFocusX.fromCode(
         cloud[FirestoreRepository.fieldProfilePriority] as String?,
       );
+      final priorities = cloud[FirestoreRepository.fieldProfileSpherePriorities]
+          is Map
+          ? FoundationSpherePriorities.fromJson(Map<String, dynamic>.from(
+              cloud[FirestoreRepository.fieldProfileSpherePriorities] as Map,
+            ))
+          : FoundationSpherePriorities.migrateFromLegacy(
+              priorityFocusCode: priorityFocus.code,
+            );
       return UserProfile(
         name: name,
         conditions: conditions,
         priorityFocus: priorityFocus,
+        spherePriorities: priorities,
       );
     }
 
@@ -43,10 +53,18 @@ class UserProfileService {
       final priorityFocus = PriorityStateFocusX.fromCode(
         m['priorityFocus'] as String?,
       );
+      final priorities = m['spherePriorities'] is Map
+          ? FoundationSpherePriorities.fromJson(
+              Map<String, dynamic>.from(m['spherePriorities'] as Map),
+            )
+          : FoundationSpherePriorities.migrateFromLegacy(
+              priorityFocusCode: priorityFocus.code,
+            );
       return UserProfile(
         name: name,
         conditions: conditions,
         priorityFocus: priorityFocus,
+        spherePriorities: priorities,
       );
     } catch (_) {
       return const UserProfile();
@@ -54,12 +72,13 @@ class UserProfileService {
   }
 
   Future<void> save(UserProfile profile) async {
-    final login = await AuthService.instance.username();
+    final email = await AuthService.instance.userEmail();
     await FirestoreRepository.instance.saveProfileFields(
       name: profile.name.trim(),
       conditions: profile.conditions.map((e) => e.code).toList(),
       priorityFocus: profile.priorityFocus.code,
-      loginUsername: login ?? '',
+      spherePriorities: profile.spherePriorities.toJson(),
+      profileEmail: email,
     );
 
     final key = await UserScopedStore.scopedKey(_keyProfile);
@@ -69,6 +88,7 @@ class UserProfileService {
         'name': profile.name.trim(),
         'conditions': profile.conditions.map((e) => e.code).toList(),
         'priorityFocus': profile.priorityFocus.code,
+        'spherePriorities': profile.spherePriorities.toJson(),
       }),
     );
   }
