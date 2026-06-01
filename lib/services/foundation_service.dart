@@ -448,11 +448,7 @@ class FoundationService {
       case FoundationSphereIds.nutrition:
         final entries = data.stateEntries.whereType<NutritionEntry>().toList();
         if (entries.isEmpty) return 0;
-        final e = entries.first;
-        final target = FoundationGoals.mainMealsTarget + goals.snackTarget;
-        final marked = e.meals.length + e.snackCount.clamp(0, goals.snackTarget);
-        if (target <= 0) return 0;
-        return (marked / target).clamp(0.0, 1.0);
+        return nutritionProgressForEntry(entries.first, goals);
       case FoundationSphereIds.medication:
         final meds = _medicationsOnDay(data, day);
         if (meds.isEmpty) return null;
@@ -582,23 +578,28 @@ class FoundationService {
       case FoundationSphereIds.nutrition:
         final nutList = todayData.stateEntries.whereType<NutritionEntry>().toList();
         final e = nutList.isEmpty ? null : nutList.first;
-        final targetSlots =
-            FoundationGoals.mainMealsTarget + goals.snackTarget;
         if (e == null) {
+          final snackLine = goals.snackTarget > 0
+              ? ', перекусов ${goals.snackTarget}'
+              : '';
           return (
-            targetSlots.toDouble(),
+            100,
             0,
-            'Цель: ${FoundationGoals.mainMealsTarget} приёма + ${goals.snackTarget} перекус(ов)',
+            'Цель: ${FoundationGoals.mainMealsTarget} приёма$snackLine — отметьте в «+»',
             false,
             true,
           );
         }
-        final marked = e.meals.length + e.snackCount.clamp(0, goals.snackTarget);
+        final progress = nutritionProgressForEntry(e, goals);
+        final mainCount = countMainMeals(e);
+        final snackLine = goals.snackTarget > 0
+            ? ' · перекусы ${e.snackCount.clamp(0, goals.snackTarget)}/${goals.snackTarget}'
+            : '';
         return (
-          targetSlots.toDouble(),
-          marked.toDouble(),
-          'Отмечено $marked из $targetSlots (${e.meals.length} основных, перекусов ${e.snackCount})',
-          marked > 0,
+          100,
+          progress * 100,
+          'Приёмы $mainCount/${FoundationGoals.mainMealsTarget}$snackLine',
+          mainCount > 0 || e.snackCount > 0,
           true,
         );
       case FoundationSphereIds.medication:
@@ -804,6 +805,32 @@ class FoundationService {
       return '$n дня';
     }
     return '$n дней';
+  }
+
+  static const _mainMealNames = {'ЗАВТРАК', 'ОБЕД', 'УЖИН'};
+
+  /// Сколько из трёх основных приёмов отмечено.
+  static int countMainMeals(NutritionEntry entry) {
+    return entry.meals
+        .map((m) => m.toUpperCase())
+        .where(_mainMealNames.contains)
+        .toSet()
+        .length;
+  }
+
+  /// Прогресс питания: все 3 приёма обязательны для 100%; перекусы — к цели из настроек.
+  static double nutritionProgressForEntry(
+    NutritionEntry entry,
+    FoundationGoals goals,
+  ) {
+    final mainMarked =
+        countMainMeals(entry).clamp(0, FoundationGoals.mainMealsTarget);
+    final mealPart = mainMarked / FoundationGoals.mainMealsTarget;
+    final snackTarget = goals.snackTarget;
+    final snackPart = snackTarget <= 0
+        ? 1.0
+        : entry.snackCount.clamp(0, snackTarget) / snackTarget;
+    return (mealPart * snackPart).clamp(0.0, 1.0);
   }
 
   static AggregatedData _subsetForSingleDay(AggregatedData data, DateTime day) {

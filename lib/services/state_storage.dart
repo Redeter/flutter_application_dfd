@@ -2,7 +2,9 @@ import 'dart:convert';
 
 import '../models/state_entries.dart';
 import 'firestore_repository.dart';
+import 'goals_dashboard_reload_hub.dart';
 import 'secure_kv_service.dart';
+import 'statistics_dashboard_reload_hub.dart';
 import 'user_scoped_store.dart';
 
 const _keyStateEntries = 'state_entries';
@@ -66,9 +68,42 @@ class StateStorage {
     }
   }
 
+  static DateTime _dayOnly(DateTime d) => DateTime(d.year, d.month, d.day);
+
+  static bool _sameCalendarDay(DateTime a, DateTime b) =>
+      _dayOnly(a) == _dayOnly(b);
+
   Future<void> save(StateEntryBase entry) async {
     final all = await loadAll();
     all.insert(0, entry);
+    await _write(all);
+  }
+
+  /// Одна запись питания на календарный день (для целей и «+»).
+  Future<void> saveOrReplaceNutritionForDay(NutritionEntry entry) async {
+    final all = await loadAll();
+    all.removeWhere(
+      (e) => e is NutritionEntry && _sameCalendarDay(e.createdAt, entry.createdAt),
+    );
+    all.insert(0, entry);
+    await _write(all);
+  }
+
+  Future<NutritionEntry?> loadNutritionForDay(DateTime day) async {
+    final all = await loadAll();
+    for (final e in all) {
+      if (e is NutritionEntry && _sameCalendarDay(e.createdAt, day)) {
+        return e;
+      }
+    }
+    return null;
+  }
+
+  Future<void> clearNutritionForDay(DateTime day) async {
+    final all = await loadAll();
+    all.removeWhere(
+      (e) => e is NutritionEntry && _sameCalendarDay(e.createdAt, day),
+    );
     await _write(all);
   }
 
@@ -93,5 +128,8 @@ class StateStorage {
 
     final key = await UserScopedStore.scopedKey(_keyStateEntries);
     await SecureKvService.instance.writeString(key, jsonEncode(encoded));
+
+    StatisticsDashboardReloadHub.instance.requestQuietReload();
+    GoalsDashboardReloadHub.instance.requestQuietReload();
   }
 }

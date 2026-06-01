@@ -3,6 +3,7 @@ import 'package:flutter/services.dart';
 import 'package:google_fonts/google_fonts.dart';
 
 import '../models/aggregated_data.dart';
+import '../services/goals_dashboard_reload_hub.dart';
 import '../services/insights_service.dart';
 import '../services/stats_period_sync.dart';
 import '../theme/app_colors.dart';
@@ -34,11 +35,26 @@ class GoalsScreenState extends State<GoalsScreen> {
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      GoalsDashboardReloadHub.instance.attachQuietReload(this, _quietReloadGoals);
+    });
     _load(showLoading: true);
   }
 
   /// Подтянуть агрегаты с диска (например после сброса на другой вкладке в [AppShell]).
   Future<void> reloadAggregatesFromShell() => _load(showLoading: false);
+
+  void _quietReloadGoals() {
+    if (!mounted) return;
+    _load(showLoading: false);
+  }
+
+  @override
+  void dispose() {
+    GoalsDashboardReloadHub.instance.detachQuietReload(this);
+    super.dispose();
+  }
 
   Future<void> _load({required bool showLoading}) async {
     final serial = ++_loadSerial;

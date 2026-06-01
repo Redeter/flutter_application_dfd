@@ -3,6 +3,7 @@ import 'package:flutter_svg/flutter_svg.dart';
 import 'package:google_fonts/google_fonts.dart';
 
 import '../models/state_entries.dart';
+import '../services/foundation_service.dart';
 import '../services/plus_dashboard_unlock_service.dart';
 import '../services/state_storage.dart';
 import '../theme/app_colors.dart';
@@ -53,8 +54,31 @@ class _NutritionEntrySheetState extends State<_NutritionEntrySheet> {
   /// Отметки завтрак / обед / ужин по индексу `_mealIndex`.
   final List<bool> _mealMarked = [false, false, false];
   int _snackCount = 0;
+  int _snackTarget = 1;
   final _sensationsSel = <String>{};
   final _emotionalSel = <String>{};
+
+  @override
+  void initState() {
+    super.initState();
+    _loadTodayMealsAndSnacks();
+  }
+
+  Future<void> _loadTodayMealsAndSnacks() async {
+    final goals = await FoundationService.instance.loadGoals();
+    final entry =
+        await StateStorage.instance.loadNutritionForDay(DateTime.now());
+    if (!mounted) return;
+    setState(() {
+      _snackTarget = goals.snackTarget;
+      if (entry != null) {
+        for (var i = 0; i < _meals.length; i++) {
+          _mealMarked[i] = entry.meals.contains(_meals[i]);
+        }
+        _snackCount = entry.snackCount;
+      }
+    });
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -284,16 +308,34 @@ class _NutritionEntrySheetState extends State<_NutritionEntrySheet> {
                 ),
                 icon: const Icon(Icons.remove),
               ),
-              const SizedBox(width: 20),
-              Text(
-                'ПЕРЕКУС x $_snackCount',
-                style: GoogleFonts.alegreyaSans(
-                  fontSize: 18,
-                  fontWeight: FontWeight.w700,
-                  color: AppColors.textDark,
+              Expanded(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text(
+                      'ПЕРЕКУС x $_snackCount',
+                      textAlign: TextAlign.center,
+                      style: GoogleFonts.alegreyaSans(
+                        fontSize: 18,
+                        fontWeight: FontWeight.w700,
+                        color: AppColors.textDark,
+                      ),
+                    ),
+                    if (_snackTarget > 0) ...[
+                      const SizedBox(height: 2),
+                      Text(
+                        '(цель: $_snackTarget)',
+                        textAlign: TextAlign.center,
+                        style: GoogleFonts.alegreyaSans(
+                          fontSize: 13,
+                          fontWeight: FontWeight.w600,
+                          color: AppColors.textDark.withValues(alpha: 0.65),
+                        ),
+                      ),
+                    ],
+                  ],
                 ),
               ),
-              const SizedBox(width: 20),
               IconButton.filled(
                 onPressed: () => setState(() => _snackCount++),
                 style: IconButton.styleFrom(
@@ -303,6 +345,21 @@ class _NutritionEntrySheetState extends State<_NutritionEntrySheet> {
                 icon: const Icon(Icons.add),
               ),
             ],
+          ),
+          const SizedBox(height: 12),
+          TextButton(
+            onPressed: _resetMealsAndSnacks,
+            style: TextButton.styleFrom(
+              foregroundColor: Colors.green.shade800,
+            ),
+            child: Text(
+              'Сбросить данные о приемах пищи',
+              style: GoogleFonts.alegreyaSans(
+                fontSize: 14,
+                fontWeight: FontWeight.w600,
+                decoration: TextDecoration.underline,
+              ),
+            ),
           ),
         ],
       ),
@@ -419,14 +476,16 @@ class _NutritionEntrySheetState extends State<_NutritionEntrySheet> {
     for (var i = 0; i < _meals.length; i++) {
       if (_mealMarked[i]) mealsSaved.add(_meals[i]);
     }
+    final existing =
+        await StateStorage.instance.loadNutritionForDay(DateTime.now());
     final entry = NutritionEntry(
-      createdAt: DateTime.now(),
+      createdAt: existing?.createdAt ?? DateTime.now(),
       meals: mealsSaved,
       snackCount: _snackCount,
       sensations: _sensationsSel.toList(),
       emotionalConnection: _emotionalSel.toList(),
     );
-    await StateStorage.instance.save(entry);
+    await StateStorage.instance.saveOrReplaceNutritionForDay(entry);
     await PlusDashboardUnlockService.instance.markUnlockedAfterPlusEntry();
     if (mounted) {
       Navigator.pop(context);
@@ -434,5 +493,22 @@ class _NutritionEntrySheetState extends State<_NutritionEntrySheet> {
         const SnackBar(content: Text('Данные о питании сохранены'), behavior: SnackBarBehavior.floating),
       );
     }
+  }
+
+  Future<void> _resetMealsAndSnacks() async {
+    await StateStorage.instance.clearNutritionForDay(DateTime.now());
+    if (!mounted) return;
+    setState(() {
+      for (var i = 0; i < _mealMarked.length; i++) {
+        _mealMarked[i] = false;
+      }
+      _snackCount = 0;
+    });
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(
+        content: Text('Отметки приёмов пищи и перекусов сброшены'),
+        behavior: SnackBarBehavior.floating,
+      ),
+    );
   }
 }

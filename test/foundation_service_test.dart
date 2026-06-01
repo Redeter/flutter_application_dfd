@@ -112,6 +112,39 @@ void main() {
     expect(todayScore, 0);
   });
 
+  test('nutrition progress — без всех приёмов нельзя 100%', () {
+    const goals = FoundationGoals(snackTarget: 2);
+    final entry = NutritionEntry(
+      createdAt: DateTime.now(),
+      meals: const ['ЗАВТРАК', 'ОБЕД'],
+      snackCount: 2,
+    );
+    expect(
+      FoundationService.nutritionProgressForEntry(entry, goals),
+      closeTo(2 / 3, 0.001),
+    );
+  });
+
+  test('nutrition progress — 3 приёма и перекусы по цели', () {
+    const goals = FoundationGoals(snackTarget: 2);
+    final full = NutritionEntry(
+      createdAt: DateTime.now(),
+      meals: const ['ЗАВТРАК', 'ОБЕД', 'УЖИН'],
+      snackCount: 2,
+    );
+    expect(FoundationService.nutritionProgressForEntry(full, goals), 1.0);
+
+    final partialSnacks = NutritionEntry(
+      createdAt: DateTime.now(),
+      meals: const ['ЗАВТРАК', 'ОБЕД', 'УЖИН'],
+      snackCount: 1,
+    );
+    expect(
+      FoundationService.nutritionProgressForEntry(partialSnacks, goals),
+      closeTo(0.5, 0.001),
+    );
+  });
+
   test('medication adherence сегодня', () {
     final day = DateTime.now();
     final med = Medication(
