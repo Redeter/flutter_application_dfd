@@ -264,14 +264,7 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
       (_) => false,
     );
 
-    unawaited(Future<void>(() async {
-      try {
-        await NeuralInsightsService.instance.reloadForActiveUser();
-      } catch (_) {}
-      try {
-        await NotificationService.instance.rescheduleCalendarNotifications();
-      } catch (_) {}
-    }));
+    unawaited(NotificationService.instance.rescheduleCalendarNotifications());
   }
 
   Future<void> _deleteAccount() async {
@@ -308,14 +301,7 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
       (_) => false,
     );
 
-    unawaited(Future<void>(() async {
-      try {
-        await NeuralInsightsService.instance.reloadForActiveUser();
-      } catch (_) {}
-      try {
-        await NotificationService.instance.rescheduleCalendarNotifications();
-      } catch (_) {}
-    }));
+    unawaited(NotificationService.instance.rescheduleCalendarNotifications());
   }
 
   @override

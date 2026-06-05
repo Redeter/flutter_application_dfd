@@ -1,6 +1,7 @@
 import 'dart:convert';
 
 import '../models/calendar_entry.dart';
+import 'auth_service.dart';
 import 'firestore_repository.dart';
 import 'secure_kv_service.dart';
 import 'user_scoped_store.dart';
@@ -13,9 +14,20 @@ class CalendarStorage {
   static final _instance = CalendarStorage._();
 
   List<CalendarEntry>? _cache;
+  String? _cacheUserId;
 
   void clearCache() {
     _cache = null;
+    _cacheUserId = null;
+  }
+
+  /// Кэш календаря привязан к uid — иначе после смены аккаунта видны чужие схемы/визиты.
+  Future<void> _ensureCacheMatchesSession() async {
+    final uid = await AuthService.instance.sessionUserId();
+    if (uid != _cacheUserId) {
+      clearCache();
+      _cacheUserId = uid;
+    }
   }
 
   List<CalendarEntry> _parseList(List<dynamic>? list) {
@@ -43,6 +55,7 @@ class CalendarStorage {
   }
 
   Future<List<CalendarEntry>> loadAll({bool forceRemote = false}) async {
+    await _ensureCacheMatchesSession();
     if (!forceRemote && _cache != null) {
       return List<CalendarEntry>.from(_cache!);
     }

@@ -716,6 +716,14 @@ class NeuralInsightsService {
   }
 
   Future<void> _trainInBackground(AggregatedData? existingData) async {
+    try {
+      await _trainInBackgroundImpl(existingData);
+    } on StateError {
+      // Сессия сброшена (выход) — не обучаем модель без user-scoped ключей.
+    }
+  }
+
+  Future<void> _trainInBackgroundImpl(AggregatedData? existingData) async {
     var model = _net;
     if (model == null) {
       model = await _loadModel();
@@ -756,6 +764,14 @@ class NeuralInsightsService {
 
   /// Периодическое дообучение на реальных данных пользователя.
   Future<void> _maybeRetrainWithRealData(AggregatedData data) async {
+    try {
+      await _maybeRetrainWithRealDataImpl(data);
+    } on StateError {
+      return;
+    }
+  }
+
+  Future<void> _maybeRetrainWithRealDataImpl(AggregatedData data) async {
     if (_net == null || !_trained) return;
     final prefs = await SharedPreferences.getInstance();
     final lastCountKey = await UserScopedStore.scopedKey(_keyLastRetrainCount);

@@ -8,28 +8,55 @@ import '../models/note_item.dart';
 import '../models/state_entries.dart';
 import 'auth_service.dart';
 import 'calendar_storage.dart';
-import 'foundation_service.dart';
+import 'firestore_repository.dart';
 import 'notes_storage.dart';
 import 'secure_kv_service.dart';
+import 'session_data_cache.dart';
 import 'state_storage.dart';
 import 'user_storage_keys.dart';
+
+/// Генерация тестовых данных прервана (выход из аккаунта или [cancelInFlight]).
+class DevDataSeedCancelledException implements Exception {
+  const DevDataSeedCancelledException();
+}
 
 class DevDataSeedService {
   DevDataSeedService._();
   static final DevDataSeedService instance = DevDataSeedService._();
 
+  bool _cancelRequested = false;
+
+  /// Прервать долгую генерацию (вызывается при [AuthService.logout]).
+  void cancelInFlight() => _cancelRequested = true;
+
+  Future<void> _beginGeneration() async {
+    _cancelRequested = false;
+    await _ensureSessionActive();
+  }
+
+  Future<void> _ensureSessionActive() async {
+    if (_cancelRequested) throw const DevDataSeedCancelledException();
+    final uid = await AuthService.instance.sessionUserId();
+    if (uid == null || uid.isEmpty) {
+      throw const DevDataSeedCancelledException();
+    }
+  }
+
   /// Генерация позитивного сценария на 90 дней назад.
   Future<int> generatePositive90Days() async {
+    await _beginGeneration();
     return _generate90Days(positive: true);
   }
 
   /// Генерация негативного сценария на 90 дней назад.
   Future<int> generateNegative90Days() async {
+    await _beginGeneration();
     return _generate90Days(positive: false);
   }
 
   /// Генерация смешанного сценария (волны) на 90 дней назад.
   Future<int> generateMixed90Days() async {
+    await _beginGeneration();
     return _generate90DaysMixed();
   }
 
@@ -58,6 +85,7 @@ class DevDataSeedService {
         .toSet();
 
     for (var d = start; !d.isAfter(end); d = d.add(const Duration(days: 1))) {
+      await _ensureSessionActive();
       final dayShift = random.nextInt(12) - 6;
       final base = positive ? 7 : 4;
 
@@ -225,6 +253,7 @@ class DevDataSeedService {
         .toSet();
 
     for (var d = start; !d.isAfter(end); d = d.add(const Duration(days: 1))) {
+      await _ensureSessionActive();
       final dayIndex = d.difference(start).inDays;
       final phase = dayIndex % 30;
       final base = phase < 10 ? 7 : (phase < 20 ? 4 : 6);
@@ -422,6 +451,7 @@ class DevDataSeedService {
     var added = 0;
 
     for (var dayOffset = 0; dayOffset < horizonDays; dayOffset++) {
+      await _ensureSessionActive();
       final d = today.add(Duration(days: dayOffset));
       for (final drug in drugs) {
         final id = 'seed-profile-${drug.seriesId}-${d.year}-${d.month}-${d.day}';
@@ -525,10 +555,12 @@ class DevDataSeedService {
     }
   }
 
-  /// Полный сброс локальных данных текущей сессии (без удаления аккаунта).
+  /// Полный сброс данных текущей сессии (локально + облако), без удаления аккаунта.
   Future<void> wipeAllData() async {
     final uid = await AuthService.instance.sessionUserId();
     if (uid == null) return;
     await wipeScopedDataForUser(uid);
+    SessionDataCache.clear();
+    await FirestoreRepository.instance.wipeSyncedContent();
   }
 }

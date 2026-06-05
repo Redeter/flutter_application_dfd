@@ -284,6 +284,14 @@ class FirestoreRepository {
     await _mergeUser(patch);
   }
 
+  /// Пустые списки в облаке (заметки, состояние, календарь). Профиль и crypto-meta не трогаем.
+  Future<void> wipeSyncedContent() async {
+    if (!_useCloud) return;
+    await saveJsonList(fieldNotes, const []);
+    await saveJsonList(fieldState, const []);
+    await saveJsonList(fieldCalendar, const []);
+  }
+
   Future<void> deleteUserDocument() async {
     final ref = _userRef();
     if (ref == null) return;

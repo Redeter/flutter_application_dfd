@@ -10,6 +10,7 @@ import '../models/aggregated_data.dart';
 import '../models/insight_result.dart';
 import '../models/local_quality_metrics.dart';
 import '../models/state_entries.dart';
+import '../services/auth_service.dart';
 import '../services/dev_data_seed_service.dart';
 import '../services/insights_service.dart';
 import '../services/notification_service.dart';
@@ -183,6 +184,11 @@ class _StatisticsScreenState extends State<StatisticsScreen> {
   }
 
   Future<void> _load({bool blocking = true}) async {
+    final sessionUserId = await AuthService.instance.sessionUserId();
+    if (sessionUserId == null || sessionUserId.isEmpty) {
+      if (blocking && mounted) setState(() => _loading = false);
+      return;
+    }
     if (blocking && mounted) {
       setState(() => _loading = true);
     }
@@ -511,11 +517,18 @@ class _StatisticsScreenState extends State<StatisticsScreen> {
           ),
         ),
       );
-    } catch (e) {
+    } on DevDataSeedCancelledException {
       if (!mounted) return;
       setState(() => _loading = false);
+    } catch (e) {
+      if (!mounted) return;
+      if (await AuthService.instance.sessionUserId() == null) {
+        setState(() => _loading = false);
+        return;
+      }
+      setState(() => _loading = false);
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Ошибка генерации: $e')),
+        SnackBar(content: Text('Не удалось сгенерировать тестовые данные: $e')),
       );
     }
   }
@@ -631,10 +644,14 @@ class _StatisticsScreenState extends State<StatisticsScreen> {
       await _load();
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Все локальные данные удалены.')),
+        const SnackBar(content: Text('Все данные удалены (устройство и облако).')),
       );
     } catch (e) {
       if (!mounted) return;
+      if (await AuthService.instance.sessionUserId() == null) {
+        setState(() => _loading = false);
+        return;
+      }
       setState(() => _loading = false);
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text('Ошибка сброса: $e')),

@@ -7,6 +7,7 @@ import 'firestore_crypto_service.dart';
 import 'firestore_repository.dart';
 import 'secure_kv_service.dart';
 import 'pin_lock_service.dart';
+import 'session_data_cache.dart';
 
 class AuthEmailTakenException implements Exception {
   AuthEmailTakenException([this.message = 'Этот адрес почты уже зарегистрирован']);
@@ -40,6 +41,8 @@ class AuthService {
     final remember =
         await SecureKvService.instance.readString(rememberSessionKey);
     if (remember != 'true') {
+      DevDataSeedService.instance.cancelInFlight();
+      SessionDataCache.clear();
       await _auth.signOut();
     }
   }
@@ -95,6 +98,7 @@ class AuthService {
       throw AuthEmailTakenException();
     }
 
+    SessionDataCache.clear();
     final cred = await _auth.createUserWithEmailAndPassword(
       email: norm,
       password: password,
@@ -102,6 +106,7 @@ class AuthService {
     if (cred.user?.uid == null) {
       throw StateError('Не удалось создать пользователя Firebase');
     }
+    SessionDataCache.clear();
     // После регистрации пользователь уже в сессии — сохраняем её, как при «Запомнить меня».
     await _setRememberSession(true);
     await _bootstrapFirestoreCrypto(password);
@@ -114,7 +119,9 @@ class AuthService {
   }) async {
     final norm = normalizeEmail(email);
     try {
+      SessionDataCache.clear();
       await _auth.signInWithEmailAndPassword(email: norm, password: password);
+      SessionDataCache.clear();
       await _setRememberSession(rememberSession);
       await _bootstrapFirestoreCrypto(password);
       return true;
@@ -130,6 +137,8 @@ class AuthService {
   }
 
   Future<void> logout() async {
+    DevDataSeedService.instance.cancelInFlight();
+    SessionDataCache.clear();
     if (debugSessionUserIdOverride != null) {
       debugSessionUserIdOverride = null;
       return;
