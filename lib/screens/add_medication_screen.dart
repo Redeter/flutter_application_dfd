@@ -37,6 +37,7 @@ class _AddMedicationScreenState extends State<AddMedicationScreen> {
   late final TextEditingController _dailyDosageController;
   late String _reminder;
   late List<MedicationDose> _schedule;
+  bool _saving = false;
 
   @override
   void initState() {
@@ -162,6 +163,7 @@ class _AddMedicationScreenState extends State<AddMedicationScreen> {
   }
 
   Future<void> _save() async {
+    if (_saving) return;
     final name = _nameController.text.trim();
     if (name.isEmpty) return;
     if (_schedule.isEmpty) {
@@ -175,6 +177,10 @@ class _AddMedicationScreenState extends State<AddMedicationScreen> {
       return;
     }
 
+    _saving = true;
+    setState(() {});
+
+    try {
     final daily = _dailyDosageController.text.trim();
     final dosage = daily.isEmpty ? '—' : daily;
     final dailyDosage = daily.isEmpty ? null : daily;
@@ -227,10 +233,20 @@ class _AddMedicationScreenState extends State<AddMedicationScreen> {
       }
       await CalendarStorage.instance.saveMany(batch);
     }
-    if (mounted) {
-      Navigator.pop(context, true);
+    if (!mounted) return;
+    Navigator.pop(context, true);
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text('Препарат сохранён'), behavior: SnackBarBehavior.floating),
+    );
+    } catch (_) {
+      if (!mounted) return;
+      _saving = false;
+      setState(() {});
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Препарат сохранён'), behavior: SnackBarBehavior.floating),
+        const SnackBar(
+          content: Text('Не удалось сохранить препарат'),
+          behavior: SnackBarBehavior.floating,
+        ),
       );
     }
   }
@@ -448,26 +464,32 @@ class _AddMedicationScreenState extends State<AddMedicationScreen> {
   }
 
   Widget _saveButton() {
-    return LaconicTap(
-      onTap: _save,
-      child: SizedBox(
-        width: double.infinity,
-        child: FilledButton(
-          onPressed: _save,
-          style: FilledButton.styleFrom(
-            backgroundColor: AppColors.orange,
-            foregroundColor: AppColors.white,
-            padding: const EdgeInsets.symmetric(vertical: 18),
-            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(28)),
-          ),
-          child: Text(
-            'Сохранить',
-            style: GoogleFonts.alegreyaSans(
-              fontSize: 18,
-              fontWeight: FontWeight.w700,
-            ),
-          ),
+    return SizedBox(
+      width: double.infinity,
+      child: FilledButton(
+        onPressed: _saving ? null : _save,
+        style: FilledButton.styleFrom(
+          backgroundColor: AppColors.orange,
+          foregroundColor: AppColors.white,
+          padding: const EdgeInsets.symmetric(vertical: 18),
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(28)),
         ),
+        child: _saving
+            ? const SizedBox(
+                height: 22,
+                width: 22,
+                child: CircularProgressIndicator(
+                  strokeWidth: 2,
+                  color: AppColors.white,
+                ),
+              )
+            : Text(
+                'Сохранить',
+                style: GoogleFonts.alegreyaSans(
+                  fontSize: 18,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
       ),
     );
   }

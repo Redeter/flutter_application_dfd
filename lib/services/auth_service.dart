@@ -36,16 +36,32 @@ class AuthService {
 
   Future<void> enforceRememberPolicyOnColdStart() async {
     if (debugSessionUserIdOverride != null) return;
+    await _waitForAuthPersistenceReady();
     final user = _auth.currentUser;
     if (user == null) return;
-    final remember =
-        await SecureKvService.instance.readString(rememberSessionKey);
+    final remember = await _readRememberFlag();
+    if (remember == null) {
+      // Сессия Firebase есть, флаг в Secure Storage потерян (часто на release APK).
+      await _setRememberSession(true);
+      return;
+    }
     if (remember != 'true') {
       DevDataSeedService.instance.cancelInFlight();
       SessionDataCache.clear();
       await _auth.signOut();
     }
   }
+
+  /// Firebase восстанавливает persisted-сессию асинхронно — без ожидания
+  /// [currentUser] на cold start часто null и пользователь видит экран входа.
+  Future<void> _waitForAuthPersistenceReady() async {
+    try {
+      await _auth.authStateChanges().first.timeout(const Duration(seconds: 8));
+    } catch (_) {}
+  }
+
+  Future<String?> _readRememberFlag() =>
+      SecureKvService.instance.readWithMigration(rememberSessionKey);
 
   Future<String?> sessionUserId() async {
     if (debugSessionUserIdOverride != null) {
@@ -178,14 +194,16 @@ class AuthService {
     await enforceRememberPolicyOnColdStart();
     final user = _auth.currentUser;
     if (user == null) return false;
-    final remember =
-        await SecureKvService.instance.readString(rememberSessionKey);
+    var remember = await _readRememberFlag();
+    if (remember == null) {
+      await _setRememberSession(true);
+      remember = 'true';
+    }
     if (remember != 'true') return false;
     final cryptoReady =
         await FirestoreCryptoService.instance.ensureForActiveSession();
     if (!cryptoReady) {
-      await _auth.signOut();
-      await _setRememberSession(false);
+      // Сессия Firebase сохранена — нужен повторный ввод пароля, не полный выход.
       return false;
     }
     return true;

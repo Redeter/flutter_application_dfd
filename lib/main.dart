@@ -37,9 +37,9 @@ class _BootstrapApp extends StatelessWidget {
       options: DefaultFirebaseOptions.currentPlatform,
     );
     await FirebaseBootstrap.init();
-    await AuthService.instance.enforceRememberPolicyOnColdStart();
     await SharedPreferences.getInstance();
     await StorageMigrationService.instance.ensureMigrated();
+    await AuthService.instance.enforceRememberPolicyOnColdStart();
     unawaited(_preloadFonts());
     WidgetsBinding.instance.addPostFrameCallback((_) {
       unawaited(_bootstrapNotifications());

@@ -28,6 +28,7 @@ class _AddAppointmentScreenState extends State<AddAppointmentScreen> {
   late final TextEditingController _noteController;
   late TimeOfDay _time;
   late String _reminder;
+  bool _saving = false;
 
   @override
   void initState() {
@@ -52,9 +53,14 @@ class _AddAppointmentScreenState extends State<AddAppointmentScreen> {
   }
 
   Future<void> _save() async {
+    if (_saving) return;
     final title = _titleController.text.trim();
     if (title.isEmpty) return;
 
+    _saving = true;
+    setState(() {});
+
+    try {
     final a = widget.appointment;
     final entry = Appointment(
       id: a?.id ?? DateTime.now().millisecondsSinceEpoch.toString(),
@@ -66,10 +72,20 @@ class _AddAppointmentScreenState extends State<AddAppointmentScreen> {
       reminder: _reminder,
     );
     await CalendarStorage.instance.save(entry);
-    if (mounted) {
-      Navigator.pop(context, true);
+    if (!mounted) return;
+    Navigator.pop(context, true);
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text('Запись сохранена'), behavior: SnackBarBehavior.floating),
+    );
+    } catch (_) {
+      if (!mounted) return;
+      _saving = false;
+      setState(() {});
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Запись сохранена'), behavior: SnackBarBehavior.floating),
+        const SnackBar(
+          content: Text('Не удалось сохранить запись'),
+          behavior: SnackBarBehavior.floating,
+        ),
       );
     }
   }
@@ -235,20 +251,29 @@ class _AddAppointmentScreenState extends State<AddAppointmentScreen> {
     return SizedBox(
       width: double.infinity,
       child: FilledButton(
-        onPressed: _save,
+        onPressed: _saving ? null : _save,
         style: FilledButton.styleFrom(
           backgroundColor: AppColors.orange,
           foregroundColor: AppColors.white,
           padding: const EdgeInsets.symmetric(vertical: 18),
           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
         ),
-        child: Text(
-          'Сохранить',
-          style: GoogleFonts.alegreyaSans(
-            fontSize: 18,
-            fontWeight: FontWeight.w700,
-          ),
-        ),
+        child: _saving
+            ? const SizedBox(
+                height: 22,
+                width: 22,
+                child: CircularProgressIndicator(
+                  strokeWidth: 2,
+                  color: AppColors.white,
+                ),
+              )
+            : Text(
+                'Сохранить',
+                style: GoogleFonts.alegreyaSans(
+                  fontSize: 18,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
       ),
     );
   }

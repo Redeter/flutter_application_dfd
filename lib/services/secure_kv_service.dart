@@ -6,10 +6,11 @@ class SecureKvService {
   static final SecureKvService instance = SecureKvService._();
 
   /// EncryptedSharedPreferences стабильнее на части Samsung/Release-сборок.
+  /// resetOnError: false — иначе при сбое чтения стираются ключи (в т.ч. «Запомнить меня»).
   static const _secure = FlutterSecureStorage(
     aOptions: AndroidOptions(
       encryptedSharedPreferences: true,
-      resetOnError: true,
+      resetOnError: false,
     ),
   );
 
