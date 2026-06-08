@@ -40,6 +40,27 @@ class NotificationService {
   final FlutterLocalNotificationsPlugin _plugin = FlutterLocalNotificationsPlugin();
   bool _initialized = false;
 
+  /// После входа или изменения календаря — пересобрать локальные напоминания.
+  Future<void> bootstrapRemindersForActiveSession() async {
+    if (kIsWeb) return;
+    await init();
+    if (await AuthService.instance.sessionUserId() == null) return;
+    await rescheduleCalendarNotifications();
+  }
+
+  Future<AndroidScheduleMode> _resolveAndroidScheduleMode() async {
+    if (kIsWeb || !Platform.isAndroid) {
+      return AndroidScheduleMode.exactAllowWhileIdle;
+    }
+    final android = _plugin.resolvePlatformSpecificImplementation<
+        AndroidFlutterLocalNotificationsPlugin>();
+    final canExact = await android?.canScheduleExactNotifications();
+    if (canExact == true) {
+      return AndroidScheduleMode.exactAllowWhileIdle;
+    }
+    return AndroidScheduleMode.inexactAllowWhileIdle;
+  }
+
   Future<void> _configureLocalTimeZone() async {
     if (kIsWeb) return;
     try {
@@ -123,6 +144,7 @@ class NotificationService {
     final now = DateTime.now();
     final horizon = now.add(const Duration(days: _kScheduleHorizonDays));
     var scheduledCount = 0;
+    final androidMode = await _resolveAndroidScheduleMode();
 
     Future<void> trySchedule(
       int id,
@@ -133,7 +155,7 @@ class NotificationService {
       if (Platform.isAndroid && scheduledCount >= _kAndroidAlarmSoftLimit) return;
       if (when.isAfter(horizon)) return;
       try {
-        await _schedule(id, when, title, body);
+        await _schedule(id, when, title, body, androidMode: androidMode);
         scheduledCount++;
       } catch (_) {
         // Не даем единичной ошибке Android alarm manager падать всей пересборке.
@@ -230,6 +252,7 @@ class NotificationService {
     final (hour, minute) =
         await FoundationService.instance.getQuestEveningReminderClock();
     final scheduled = _nextTzInstanceOfClock(hour, minute);
+    final androidMode = await _resolveAndroidScheduleMode();
     try {
       await _plugin.zonedSchedule(
         _kFoundationQuestEveningReminderId,
@@ -246,12 +269,37 @@ class NotificationService {
           ),
           iOS: DarwinNotificationDetails(),
         ),
-        androidScheduleMode: AndroidScheduleMode.exactAllowWhileIdle,
+        androidScheduleMode: androidMode,
         uiLocalNotificationDateInterpretation:
             UILocalNotificationDateInterpretation.absoluteTime,
         matchDateTimeComponents: DateTimeComponents.time,
       );
-    } catch (_) {}
+    } catch (_) {
+      if (androidMode == AndroidScheduleMode.exactAllowWhileIdle) {
+        try {
+          await _plugin.zonedSchedule(
+            _kFoundationQuestEveningReminderId,
+            'Шаг дня в «Цели»',
+            'Успели отметить выполнение шага? Откройте вкладку Цели.',
+            scheduled,
+            const NotificationDetails(
+              android: AndroidNotificationDetails(
+                'foundation_quest',
+                'Цели — шаг дня',
+                channelDescription: 'Вечернее напоминание об отметке шага',
+                importance: Importance.defaultImportance,
+                priority: Priority.defaultPriority,
+              ),
+              iOS: DarwinNotificationDetails(),
+            ),
+            androidScheduleMode: AndroidScheduleMode.inexactAllowWhileIdle,
+            uiLocalNotificationDateInterpretation:
+                UILocalNotificationDateInterpretation.absoluteTime,
+            matchDateTimeComponents: DateTimeComponents.time,
+          );
+        } catch (_) {}
+      }
+    }
   }
 
   tz.TZDateTime _nextTzInstanceOfClock(int hour, int minute) {
@@ -266,26 +314,49 @@ class NotificationService {
 
   String _twoDigits(int n) => n.toString().padLeft(2, '0');
 
-  Future<void> _schedule(int id, DateTime when, String title, String body) async {
-    await _plugin.zonedSchedule(
-      id,
-      title,
-      body,
-      tz.TZDateTime.from(when, tz.local),
-      const NotificationDetails(
-        android: AndroidNotificationDetails(
-          'health_reminders',
-          'Health reminders',
-          channelDescription: 'Medication and appointments reminders',
-          importance: Importance.high,
-          priority: Priority.high,
-        ),
-        iOS: DarwinNotificationDetails(),
+  Future<void> _schedule(
+    int id,
+    DateTime when,
+    String title,
+    String body, {
+    AndroidScheduleMode? androidMode,
+  }) async {
+    final mode = androidMode ?? await _resolveAndroidScheduleMode();
+    final details = const NotificationDetails(
+      android: AndroidNotificationDetails(
+        'health_reminders',
+        'Health reminders',
+        channelDescription: 'Medication and appointments reminders',
+        importance: Importance.high,
+        priority: Priority.high,
       ),
-      androidScheduleMode: AndroidScheduleMode.exactAllowWhileIdle,
-      uiLocalNotificationDateInterpretation:
-          UILocalNotificationDateInterpretation.absoluteTime,
+      iOS: DarwinNotificationDetails(),
     );
+    final whenTz = tz.TZDateTime.from(when, tz.local);
+    try {
+      await _plugin.zonedSchedule(
+        id,
+        title,
+        body,
+        whenTz,
+        details,
+        androidScheduleMode: mode,
+        uiLocalNotificationDateInterpretation:
+            UILocalNotificationDateInterpretation.absoluteTime,
+      );
+    } catch (_) {
+      if (mode != AndroidScheduleMode.exactAllowWhileIdle) rethrow;
+      await _plugin.zonedSchedule(
+        id,
+        title,
+        body,
+        whenTz,
+        details,
+        androidScheduleMode: AndroidScheduleMode.inexactAllowWhileIdle,
+        uiLocalNotificationDateInterpretation:
+            UILocalNotificationDateInterpretation.absoluteTime,
+      );
+    }
   }
 
   int _stableId(String input) {

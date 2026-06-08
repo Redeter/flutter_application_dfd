@@ -40,10 +40,8 @@ class _BootstrapApp extends StatelessWidget {
     await SharedPreferences.getInstance();
     await StorageMigrationService.instance.ensureMigrated();
     await AuthService.instance.enforceRememberPolicyOnColdStart();
+    unawaited(NotificationService.instance.bootstrapRemindersForActiveSession());
     unawaited(_preloadFonts());
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      unawaited(_bootstrapNotifications());
-    });
   }
 
   static Future<void> _preloadFonts() async {
@@ -117,11 +115,6 @@ class _BootstrapApp extends StatelessWidget {
       },
     );
   }
-}
-
-Future<void> _bootstrapNotifications() async {
-  await NotificationService.instance.init();
-  await NotificationService.instance.rescheduleCalendarNotifications();
 }
 
 class MyApp extends StatelessWidget {

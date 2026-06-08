@@ -186,9 +186,6 @@ class InsightsService {
     if (has(MentalCondition.ptsd)) {
       out.add('При перегрузке используйте мягкое заземление 5-4-3-2-1 и снизьте стимулы.');
     }
-    if (has(MentalCondition.asd)) {
-      out.add('Сохраните предсказуемый ритм дня и закладывайте буфер после сенсорной нагрузки.');
-    }
     final seen = <String>{};
     return out.where(seen.add).take(5).toList();
   }

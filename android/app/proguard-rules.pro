@@ -16,3 +16,4 @@
 
 # Плагин локальных уведомлений (dexterous / flutter_local_notifications).
 -keep class com.dexterous.** { *; }
+-keep class com.dexterous.flutterlocalnotifications.** { *; }

@@ -7,7 +7,6 @@ enum MentalCondition {
   bpd,
   ed,
   ptsd,
-  asd,
 }
 
 enum PriorityStateFocus {
@@ -60,7 +59,6 @@ extension MentalConditionX on MentalCondition {
         MentalCondition.bpd => 'bpd',
         MentalCondition.ed => 'ed',
         MentalCondition.ptsd => 'ptsd',
-        MentalCondition.asd => 'asd',
       };
 
   String get label => switch (this) {
@@ -70,7 +68,6 @@ extension MentalConditionX on MentalCondition {
         MentalCondition.bpd => 'Пограничное расстройство',
         MentalCondition.ed => 'РПП',
         MentalCondition.ptsd => 'ПТСР',
-        MentalCondition.asd => 'РАС',
       };
 
   static MentalCondition? fromCode(String code) {
