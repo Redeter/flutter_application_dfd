@@ -4,6 +4,7 @@ import 'package:google_fonts/google_fonts.dart';
 
 import '../models/calendar_entry.dart';
 import '../services/calendar_storage.dart';
+import '../services/notification_service.dart';
 import '../theme/app_colors.dart';
 import '../widgets/laconic_tap.dart';
 import '../widgets/time_picker_modal.dart';
@@ -47,7 +48,7 @@ class _AddMedicationScreenState extends State<AddMedicationScreen> {
     _dailyDosageController = TextEditingController(
       text: m?.dailyDosage ?? m?.dosage ?? '',
     );
-    _reminder = m?.reminder ?? kCalendarReminderOptions[0];
+    _reminder = normalizeCalendarReminder(m?.reminder);
     _schedule = m != null ? List.from(m.schedule) : [];
   }
 
@@ -233,6 +234,7 @@ class _AddMedicationScreenState extends State<AddMedicationScreen> {
       }
       await CalendarStorage.instance.saveMany(batch);
     }
+    await NotificationService.instance.rescheduleCalendarNotifications();
     if (!mounted) return;
     Navigator.pop(context, true);
     ScaffoldMessenger.of(context).showSnackBar(

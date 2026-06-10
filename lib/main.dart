@@ -1,4 +1,4 @@
-import 'dart:async';
+import 'dart:async' show unawaited;
 
 import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter/material.dart';
@@ -23,8 +23,6 @@ void main() {
   WidgetsFlutterBinding.ensureInitialized();
   runApp(const _BootstrapApp());
 }
-
-void unawaited(Future<void> f) {}
 
 /// Быстрый первый кадр: тяжёлая инициализация не блокирует белый splash Android.
 class _BootstrapApp extends StatelessWidget {

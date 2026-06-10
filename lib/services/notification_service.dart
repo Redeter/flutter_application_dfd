@@ -13,19 +13,18 @@ import 'calendar_storage.dart';
 import 'foundation_service.dart';
 
 
-Duration? _earlyOffsetForReminder(String? reminder) {
-  final r = reminder ?? kCalendarReminderOptions[0];
-  switch (r) {
-    case 'За 15 мин':
-      return const Duration(minutes: 15);
-    case 'За 1 час':
-      return const Duration(hours: 1);
-    case 'За день':
-      return const Duration(days: 1);
-    case 'Не напоминать':
-    default:
-      return null;
-  }
+class _PendingNotification {
+  const _PendingNotification({
+    required this.id,
+    required this.when,
+    required this.title,
+    required this.body,
+  });
+
+  final int id;
+  final DateTime when;
+  final String title;
+  final String body;
 }
 
 
@@ -85,14 +84,19 @@ class NotificationService {
     const ios = DarwinInitializationSettings();
     const settings = InitializationSettings(android: android, iOS: ios);
     await _plugin.initialize(settings);
-    await _plugin
-        .resolvePlatformSpecificImplementation<
-            AndroidFlutterLocalNotificationsPlugin>()
-        ?.requestNotificationsPermission();
-    await _plugin
-        .resolvePlatformSpecificImplementation<
-            AndroidFlutterLocalNotificationsPlugin>()
-        ?.requestExactAlarmsPermission();
+    final androidPlugin = _plugin.resolvePlatformSpecificImplementation<
+        AndroidFlutterLocalNotificationsPlugin>();
+    await androidPlugin?.requestNotificationsPermission();
+    await androidPlugin?.requestExactAlarmsPermission();
+    // Явно создаём канал до zonedSchedule — на части прошивок иначе будильники не показываются.
+    await androidPlugin?.createNotificationChannel(
+      const AndroidNotificationChannel(
+        'health_reminders',
+        'Health reminders',
+        description: 'Medication and appointments reminders',
+        importance: Importance.high,
+      ),
+    );
     await _plugin
         .resolvePlatformSpecificImplementation<
             IOSFlutterLocalNotificationsPlugin>()
@@ -134,36 +138,70 @@ class NotificationService {
   Future<void> rescheduleCalendarNotifications() async {
     if (kIsWeb) return;
     await init();
-    await _plugin.cancelAll();
     final sessionUserId = await AuthService.instance.sessionUserId();
     if (sessionUserId == null || sessionUserId.isEmpty) {
-      // Пользователь вышел: не пытаемся читать user-scoped календарь без сессии.
+      // Без сессии не трогаем уже запланированные будильники.
       return;
     }
+
     final entries = await CalendarStorage.instance.loadAll();
     final now = DateTime.now();
     final horizon = now.add(const Duration(days: _kScheduleHorizonDays));
-    var scheduledCount = 0;
-    final androidMode = await _resolveAndroidScheduleMode();
+    final pending = _collectPendingNotifications(
+      entries: entries,
+      now: now,
+      horizon: horizon,
+    );
+    pending.sort((a, b) => a.when.compareTo(b.when));
 
-    Future<void> trySchedule(
-      int id,
-      DateTime when,
-      String title,
-      String body,
-    ) async {
-      if (Platform.isAndroid && scheduledCount >= _kAndroidAlarmSoftLimit) return;
-      if (when.isAfter(horizon)) return;
+    final maxCalendarSlots = Platform.isAndroid
+        ? _kAndroidAlarmSoftLimit - 1
+        : pending.length;
+    final toSchedule = pending.take(maxCalendarSlots).toList();
+
+    await _plugin.cancelAll();
+    final androidMode = await _resolveAndroidScheduleMode();
+    for (final item in toSchedule) {
       try {
-        await _schedule(id, when, title, body, androidMode: androidMode);
-        scheduledCount++;
+        await _schedule(
+          item.id,
+          item.when,
+          item.title,
+          item.body,
+          androidMode: androidMode,
+        );
       } catch (_) {
-        // Не даем единичной ошибке Android alarm manager падать всей пересборке.
+        // Единичная ошибка alarm manager не должна срывать всю пересборку.
       }
+    }
+    await scheduleFoundationQuestEveningReminderIfNeeded();
+  }
+
+  List<_PendingNotification> _collectPendingNotifications({
+    required List<CalendarEntry> entries,
+    required DateTime now,
+    required DateTime horizon,
+  }) {
+    final out = <_PendingNotification>[];
+
+    void addIfValid({
+      required String idKey,
+      required DateTime when,
+      required String title,
+      required String body,
+    }) {
+      if (when.isBefore(now) || when.isAfter(horizon)) return;
+      out.add(
+        _PendingNotification(
+          id: _stableId(idKey),
+          when: when,
+          title: title,
+          body: body,
+        ),
+      );
     }
 
     for (final e in entries) {
-      if (Platform.isAndroid && scheduledCount >= _kAndroidAlarmSoftLimit) break;
       switch (e) {
         case Medication():
           final times = e.schedule.isNotEmpty
@@ -174,7 +212,9 @@ class NotificationService {
               : <String>[e.dosage.isEmpty ? '—' : e.dosage];
           for (var i = 0; i < times.length; i++) {
             if (i < e.skippedPerDose.length && e.skippedPerDose[i]) continue;
-            if (i < e.takenAtPerDose.length && e.takenAtPerDose[i] != null) continue;
+            if (i < e.takenAtPerDose.length && e.takenAtPerDose[i] != null) {
+              continue;
+            }
             final t = times[i];
             final amount = i < amounts.length ? amounts[i] : '—';
             final dt = DateTime(
@@ -184,23 +224,22 @@ class NotificationService {
               t.hour,
               t.minute,
             );
-            if (!dt.isBefore(now)) {
-              await trySchedule(
-                _stableId('${e.id}:med:$i:at'),
-                dt,
-                'Время принять препарат',
-                '${e.name} — $amount',
-              );
-            }
-            final early = _earlyOffsetForReminder(e.reminder);
+            addIfValid(
+              idKey: '${e.id}:med:$i:at',
+              when: dt,
+              title: 'Время принять препарат',
+              body: '${e.name} — $amount',
+            );
+            final early = calendarReminderEarlyOffset(e.reminder);
             if (early != null) {
               final earlyAt = dt.subtract(early);
               if (!earlyAt.isBefore(now) && earlyAt.isBefore(dt)) {
-                await trySchedule(
-                  _stableId('${e.id}:med:$i:early'),
-                  earlyAt,
-                  'Напоминание о приёме',
-                  '${e.name} в ${_twoDigits(t.hour)}:${_twoDigits(t.minute)} — $amount',
+                addIfValid(
+                  idKey: '${e.id}:med:$i:early',
+                  when: earlyAt,
+                  title: 'Напоминание о приёме',
+                  body:
+                      '${e.name} в ${_twoDigits(t.hour)}:${_twoDigits(t.minute)} — $amount',
                 );
               }
             }
@@ -213,29 +252,28 @@ class NotificationService {
             e.time.hour,
             e.time.minute,
           );
-          if (!visit.isBefore(now)) {
-            await trySchedule(
-              _stableId('${e.id}:visit:at'),
-              visit,
-              'Запись на приём',
-              e.title,
-            );
-          }
-          final early = _earlyOffsetForReminder(e.reminder);
+          addIfValid(
+            idKey: '${e.id}:visit:at',
+            when: visit,
+            title: 'Запись на приём',
+            body: e.title,
+          );
+          final early = calendarReminderEarlyOffset(e.reminder);
           if (early != null) {
             final earlyAt = visit.subtract(early);
             if (!earlyAt.isBefore(now) && earlyAt.isBefore(visit)) {
-              await trySchedule(
-                _stableId('${e.id}:visit:early'),
-                earlyAt,
-                'Скоро приём',
-                '${e.title} в ${_twoDigits(e.time.hour)}:${_twoDigits(e.time.minute)}',
+              addIfValid(
+                idKey: '${e.id}:visit:early',
+                when: earlyAt,
+                title: 'Скоро приём',
+                body:
+                    '${e.title} в ${_twoDigits(e.time.hour)}:${_twoDigits(e.time.minute)}',
               );
             }
           }
       }
     }
-    await scheduleFoundationQuestEveningReminderIfNeeded();
+    return out;
   }
 
   /// Ежедневное локальное напоминание заглянуть в «Цели» (если включено в профиле).

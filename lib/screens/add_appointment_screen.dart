@@ -2,12 +2,12 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 
+import '../constants/calendar_reminders.dart';
 import '../models/calendar_entry.dart';
 import '../services/calendar_storage.dart';
+import '../services/notification_service.dart';
 import '../theme/app_colors.dart';
 import '../widgets/time_picker_modal.dart';
-
-const _reminders = ['За 15 мин', 'За 1 час', 'За день', 'Не напоминать'];
 
 class AddAppointmentScreen extends StatefulWidget {
   const AddAppointmentScreen({
@@ -37,7 +37,7 @@ class _AddAppointmentScreenState extends State<AddAppointmentScreen> {
     _titleController = TextEditingController(text: a?.title ?? '');
     _noteController = TextEditingController(text: a?.note ?? '');
     _time = a?.time ?? const TimeOfDay(hour: 15, minute: 0);
-    _reminder = a?.reminder ?? _reminders[0];
+    _reminder = normalizeCalendarReminder(a?.reminder);
   }
 
   @override
@@ -72,6 +72,7 @@ class _AddAppointmentScreenState extends State<AddAppointmentScreen> {
       reminder: _reminder,
     );
     await CalendarStorage.instance.save(entry);
+    await NotificationService.instance.rescheduleCalendarNotifications();
     if (!mounted) return;
     Navigator.pop(context, true);
     ScaffoldMessenger.of(context).showSnackBar(
@@ -166,7 +167,9 @@ class _AddAppointmentScreenState extends State<AddAppointmentScreen> {
               child: DropdownButtonFormField<String>(
                 value: _reminder,
                 decoration: _inputDecoration(),
-                items: _reminders.map((r) => DropdownMenuItem(value: r, child: Text(r))).toList(),
+                items: kCalendarReminderOptions
+                    .map((r) => DropdownMenuItem(value: r, child: Text(r)))
+                    .toList(),
                 onChanged: (v) => setState(() => _reminder = v ?? _reminder),
               ),
             ),
