@@ -1,6 +1,7 @@
 import 'dart:convert';
 
 import '../models/calendar_entry.dart';
+import '../utils/stats_helpers.dart';
 import 'auth_service.dart';
 import 'firestore_repository.dart';
 import 'secure_kv_service.dart';
@@ -116,14 +117,54 @@ class CalendarStorage {
     await _write(all);
   }
 
+  /// Обновляет все записи одной серии препарата (имя, дозировка, расписание, напоминание).
+  /// Статус «принято» / «пропущено» сохраняется отдельно для каждого дня.
+  Future<void> updateMedicationSeries(
+    Medication anchor,
+    Medication template,
+  ) async {
+    final all = await loadAll();
+    final seriesId = template.seriesId ??
+        anchor.seriesId ??
+        'series_${DateTime.now().millisecondsSinceEpoch}';
+    var changed = false;
+
+    for (var i = 0; i < all.length; i++) {
+      final e = all[i];
+      if (e is! Medication || !medicationsShareSeries(anchor, e)) continue;
+
+      final nextSchedule = List<MedicationDose>.from(template.schedule);
+      final mergedTaken = List<DateTime?>.generate(
+        nextSchedule.length,
+        (j) => j < e.takenAtPerDose.length ? e.takenAtPerDose[j] : null,
+      );
+      final mergedSkipped = List<bool>.generate(
+        nextSchedule.length,
+        (j) => j < e.skippedPerDose.length && e.skippedPerDose[j],
+      );
+
+      all[i] = Medication(
+        id: e.id,
+        date: DateTime(e.date.year, e.date.month, e.date.day),
+        time: nextSchedule.isNotEmpty ? nextSchedule.first.time : e.time,
+        name: template.name,
+        dosage: template.dosage,
+        dailyDosage: template.dailyDosage,
+        reminder: template.reminder,
+        schedule: nextSchedule,
+        seriesId: seriesId,
+        takenAtPerDose: mergedTaken,
+        skippedPerDose: mergedSkipped,
+      );
+      changed = true;
+    }
+
+    if (changed) await _write(all);
+  }
+
   Future<void> deleteMedication(Medication m) async {
     final all = await loadAll();
-    final sid = m.seriesId;
-    if (sid != null && sid.isNotEmpty) {
-      all.removeWhere((e) => e is Medication && e.seriesId == sid);
-    } else {
-      all.removeWhere((e) => e.id == m.id);
-    }
+    all.removeWhere((e) => e is Medication && medicationsShareSeries(m, e));
     await _write(all);
   }
 

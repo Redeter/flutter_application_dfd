@@ -136,7 +136,6 @@ class InsightsService {
     final extraOverall = [
       input.overallInsight,
       if (baselineLine.isNotEmpty) baselineLine,
-      if (profile.hasConditions) 'Режим профиля: ${profile.conditions.map((e) => e.label).join(', ')}.',
       if (causal.isNotEmpty) 'Связи по времени: ${causal.take(2).join(' ')}',
     ].where((e) => e.trim().isNotEmpty).join(' ');
 
@@ -416,10 +415,10 @@ class InsightsService {
       }
     }
     if (base1 >= 4 && linked1 / base1 >= 0.5) {
-      out.add('плохой сон часто влияет на следующий день (t+1)');
+      out.add('плохой сон часто влияет на следующий день');
     }
     if (base2 >= 4 && linked2 / base2 >= 0.45) {
-      out.add('эффект сна заметен и через 2 дня (t+2)');
+      out.add('эффект сна заметен и через 2 дня');
     }
     return out;
   }
@@ -444,7 +443,7 @@ class InsightsService {
     if (streakMoodCount < threshold && streakEnergyCount < threshold) return '';
     final triggerText = triggers.isEmpty ? 'нагрузку и режим' : triggers.first;
     final nextStep = causal.isEmpty ? 'сфокусируйтесь на сне и коротких паузах.' : 'проверьте режим сна и восстановление в ближайшие 2 дня.';
-    return 'Мягкий риск выгорания: последние дни нестабильны. Частый триггер — $triggerText, next step: $nextStep';
+    return 'Мягкий риск выгорания: последние дни нестабильны. Частый триггер — $triggerText. Следующий шаг: $nextStep';
   }
 
   List<String> _buildConfidenceReasons(AggregatedData data, double confidence) {

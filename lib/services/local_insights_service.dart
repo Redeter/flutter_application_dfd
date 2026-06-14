@@ -280,11 +280,11 @@ class LocalInsightsService {
     final parts = <String>[];
     if (avgMood != null) {
       if (avgMood >= 7) {
-        parts.add('Настроение в целом хорошее (${avgMood.toStringAsFixed(1)}/10)');
+        parts.add('Настроение в целом хорошее');
       } else if (avgMood >= 5) {
-        parts.add('Настроение среднее (${avgMood.toStringAsFixed(1)}/10)');
+        parts.add('Настроение среднее');
       } else {
-        parts.add('Настроение снижено (${avgMood.toStringAsFixed(1)}/10)');
+        parts.add('Настроение снижено');
       }
     }
     if (avgSleep != null) {

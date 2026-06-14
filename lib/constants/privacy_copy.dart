@@ -16,11 +16,14 @@ abstract final class PrivacyCopy {
   /// Бейдж на карточке инсайта.
   static const insightLocalAnalysisBadge = 'анализ на устройстве';
 
-  /// Подпись под блоком советов.
-  static const recommendationsFooter =
+  /// Краткая подпись под блоком советов (видна сразу).
+  static const recommendationsFooterBrief =
       'Советы рассчитываются на устройстве по вашим записям. Записи синхронизируются '
-      'с аккаунтом Firebase в зашифрованном виде. Не диагноз и не терапия; '
-      'при ухудшении состояния обратитесь к специалисту.';
+      'с аккаунтом Firebase в зашифрованном виде.';
+
+  /// Дополнительная подпись под «Подробнее» в блоке советов.
+  static const recommendationsFooterDetails =
+      'Не диагноз и не терапия; при ухудшении состояния обратитесь к специалисту.';
 
   /// Пустое состояние статистики.
   static const statisticsEmptyHint =

@@ -189,15 +189,7 @@ class _AddMedicationScreenState extends State<AddMedicationScreen> {
     final m = widget.medication;
     if (m != null) {
       final nextSchedule = List<MedicationDose>.from(_schedule);
-      final mergedTaken = List<DateTime?>.generate(
-        nextSchedule.length,
-        (i) => i < m.takenAtPerDose.length ? m.takenAtPerDose[i] : null,
-      );
-      final mergedSkipped = List<bool>.generate(
-        nextSchedule.length,
-        (i) => i < m.skippedPerDose.length && m.skippedPerDose[i],
-      );
-      final entry = Medication(
+      final template = Medication(
         id: m.id,
         date: DateTime(m.date.year, m.date.month, m.date.day),
         time: _schedule.first.time,
@@ -207,10 +199,8 @@ class _AddMedicationScreenState extends State<AddMedicationScreen> {
         dailyDosage: dailyDosage,
         schedule: nextSchedule,
         seriesId: m.seriesId,
-        takenAtPerDose: mergedTaken,
-        skippedPerDose: mergedSkipped,
       );
-      await CalendarStorage.instance.save(entry);
+      await CalendarStorage.instance.updateMedicationSeries(m, template);
     } else {
       final baseMillis = DateTime.now().millisecondsSinceEpoch;
       final start = DateTime(widget.date.year, widget.date.month, widget.date.day);

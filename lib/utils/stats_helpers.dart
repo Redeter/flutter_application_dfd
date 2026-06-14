@@ -12,6 +12,37 @@ String medicationRegimenKey(Medication m) {
   return '${m.name.toLowerCase()}|${m.dosage}';
 }
 
+/// Отпечаток расписания приёма (время и количество по каждому слоту).
+String medicationScheduleFingerprint(Medication m) {
+  return m.schedule
+      .map(
+        (d) =>
+            '${d.time.hour}:${d.time.minute.toString().padLeft(2, '0')}|${d.amount.trim().toLowerCase()}',
+      )
+      .join(';');
+}
+
+/// Одна ли это серия ежедневных записей препарата (для редактирования и удаления).
+bool medicationsShareSeries(Medication anchor, Medication candidate) {
+  final sid = anchor.seriesId;
+  if (sid != null && sid.isNotEmpty) {
+    if (candidate.seriesId == sid) return true;
+    if (candidate.seriesId != null && candidate.seriesId!.isNotEmpty) {
+      return false;
+    }
+    return medicationRegimenKey(anchor) == medicationRegimenKey(candidate) &&
+        medicationScheduleFingerprint(anchor) ==
+            medicationScheduleFingerprint(candidate);
+  }
+
+  final csid = candidate.seriesId;
+  if (csid != null && csid.isNotEmpty) return false;
+
+  return medicationRegimenKey(anchor) == medicationRegimenKey(candidate) &&
+      medicationScheduleFingerprint(anchor) ==
+          medicationScheduleFingerprint(candidate);
+}
+
 /// Сколько разных препаратов/схем в списке (не число строк календаря по дням).
 int countDistinctMedicationRegimens(Iterable<Medication> meds) {
   final seen = <String>{};

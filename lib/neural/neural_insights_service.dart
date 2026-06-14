@@ -618,29 +618,29 @@ class NeuralInsightsService {
     final parts = <String>[];
     if (avgMood != null) {
       if (avgMood >= 7) {
-        parts.add('Настроение в целом хорошее (${avgMood.toStringAsFixed(1)}/10)');
+        parts.add('Настроение в целом хорошее');
       } else if (avgMood >= 5) {
-        parts.add('Настроение среднее (${avgMood.toStringAsFixed(1)}/10)');
+        parts.add('Настроение среднее');
       } else {
-        parts.add('Настроение снижено (${avgMood.toStringAsFixed(1)}/10)');
+        parts.add('Настроение снижено');
       }
     }
     if (avgSleep != null) {
       if (avgSleep >= 7) {
-        parts.add('Качество сна хорошее (${avgSleep.toStringAsFixed(1)}/10)');
+        parts.add('Качество сна хорошее');
       } else if (avgSleep >= 5) {
-        parts.add('Качество сна среднее (${avgSleep.toStringAsFixed(1)}/10)');
+        parts.add('Качество сна среднее');
       } else {
-        parts.add('Качество сна нуждается во внимании (${avgSleep.toStringAsFixed(1)}/10)');
+        parts.add('Качество сна нуждается во внимании');
       }
     }
     if (avgEnergy != null) {
       if (avgEnergy >= 7) {
-        parts.add('Энергия в норме (${avgEnergy.toStringAsFixed(1)}/10)');
+        parts.add('Энергия в норме');
       } else if (avgEnergy >= 5) {
-        parts.add('Энергия средняя (${avgEnergy.toStringAsFixed(1)}/10)');
+        parts.add('Энергия средняя');
       } else {
-        parts.add('Уровень энергии низкий (${avgEnergy.toStringAsFixed(1)}/10)');
+        parts.add('Уровень энергии низкий');
       }
     }
     if (emotions.isNotEmpty) {

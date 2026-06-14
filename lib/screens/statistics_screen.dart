@@ -51,6 +51,7 @@ class _StatisticsScreenState extends State<StatisticsScreen> {
   String _abMode = 'auto';
   int _loadEpoch = 0;
   bool _plusDashboardUnlocked = false;
+  bool _recommendationsFooterExpanded = false;
   String? _draggingBlockId;
   final List<String> _blockOrder = [
     'data_summary',
@@ -801,17 +802,22 @@ class _StatisticsScreenState extends State<StatisticsScreen> {
   Widget _buildRingsAndCards() {
     final stats = _localStats;
     final d = _data!;
+    final selectedDay = DateTime(
+      _selectedDate.year,
+      _selectedDate.month,
+      _selectedDate.day,
+    );
     final clock = DateTime.now();
-    final today = DateTime(clock.year, clock.month, clock.day);
-    final notesToday = countNotesOnCalendarDay(d, today);
+    final notesOnSelectedDay = countNotesOnCalendarDay(d, selectedDay);
     final notesTotal = d.notes.length;
     final medsActiveUniqueNames =
-        countDistinctActiveMedicationNames(d.medications, today);
-    final visitsToday = countAppointmentsOnCalendarDay(d, today);
+        countDistinctActiveMedicationNames(d.medications, selectedDay);
+    final visitsOnSelectedDay = countAppointmentsOnCalendarDay(d, selectedDay);
     final visitsTotal = d.appointments.length;
     final nextVisit = nextAppointmentVisitOnOrAfter(d, clock);
-    final dosesToday = countMedicationDosesOnCalendarDay(d, today);
+    final dosesOnSelectedDay = countMedicationDosesOnCalendarDay(d, selectedDay);
     final nextIntake = nextMedicationIntakeOnOrAfter(d, clock);
+    final dayLeftCaption = _metricDayCaption(selectedDay);
     final (start, end) = _range;
     final periodKey =
         '${_viewWeek ? 'week' : 'day'}-${start.year}-${start.month}-${start.day}-${end.year}-${end.month}-${end.day}';
@@ -898,9 +904,9 @@ class _StatisticsScreenState extends State<StatisticsScreen> {
                         Icons.edit_note_rounded,
                         [AppColors.lightBlue, const Color(0xFF64B5F6)],
                         body: _metricSlashPairRow(
-                          notesToday,
+                          notesOnSelectedDay,
                           notesTotal,
-                          leftCaption: 'сегодня',
+                          leftCaption: dayLeftCaption,
                           rightCaption: 'всего',
                         ),
                       ),
@@ -922,9 +928,9 @@ class _StatisticsScreenState extends State<StatisticsScreen> {
                         Icons.event_available_rounded,
                         [const Color(0xFFC8E6C9), const Color(0xFFA5D6A7)],
                         body: _metricSlashPairRow(
-                          visitsToday,
+                          visitsOnSelectedDay,
                           visitsTotal,
-                          leftCaption: 'сегодня',
+                          leftCaption: dayLeftCaption,
                           rightCaption: 'всего',
                           captionStyle: _metricCardCaptionStyle().copyWith(fontSize: 10),
                         ),
@@ -932,12 +938,12 @@ class _StatisticsScreenState extends State<StatisticsScreen> {
                       ),
                       _buildMetricCard(
                         cardWidth,
-                        'Сегодня',
+                        _metricDayCardTitle(selectedDay),
                         Icons.schedule_rounded,
                         [AppColors.lavender, Color(0xFFD8CAEB)],
                         body: _metricSingleStack(
-                          '$dosesToday',
-                          'слотов приёма на сегодня',
+                          '$dosesOnSelectedDay',
+                          'слотов приёма за день',
                           centered: true,
                           valueFontSize: 31,
                           captionStyle:
@@ -1045,6 +1051,26 @@ class _StatisticsScreenState extends State<StatisticsScreen> {
 
   /// Карточки с нижним футером («Приёмы», «Сегодня»): выше, чтобы цифры не сжимались сильнее «Заметок».
   static const double _kMetricCardHeightWithFooter = 122;
+
+  DateTime _calendarDay(DateTime d) => DateTime(d.year, d.month, d.day);
+
+  String _metricDayCaption(DateTime day) {
+    final selected = _calendarDay(day);
+    final today = _calendarDay(DateTime.now());
+    if (selected == today) return 'сегодня';
+    if (selected == today.subtract(const Duration(days: 1))) return 'вчера';
+    if (selected == today.add(const Duration(days: 1))) return 'завтра';
+    return '${day.day}.${day.month.toString().padLeft(2, '0')}';
+  }
+
+  String _metricDayCardTitle(DateTime day) {
+    final selected = _calendarDay(day);
+    final today = _calendarDay(DateTime.now());
+    if (selected == today) return 'Сегодня';
+    if (selected == today.subtract(const Duration(days: 1))) return 'Вчера';
+    if (selected == today.add(const Duration(days: 1))) return 'Завтра';
+    return '${day.day}.${day.month.toString().padLeft(2, '0')}';
+  }
 
   TextStyle _metricCardCaptionStyle() => GoogleFonts.alegreyaSans(
         fontSize: 9,
@@ -1529,25 +1555,47 @@ class _StatisticsScreenState extends State<StatisticsScreen> {
               Icon(Icons.lightbulb_outline_rounded,
                   color: AppColors.lightGreen, size: 24),
               const SizedBox(width: 10),
-              Text(
-                'Советы',
-                style: GoogleFonts.alegreyaSans(
-                  fontSize: 16,
-                  fontWeight: FontWeight.w800,
-                  color: AppColors.textDark,
+              Expanded(
+                child: Text(
+                  'Советы',
+                  style: GoogleFonts.alegreyaSans(
+                    fontSize: 16,
+                    fontWeight: FontWeight.w800,
+                    color: AppColors.textDark,
+                  ),
+                ),
+              ),
+              TextButton(
+                onPressed: () => setState(
+                  () => _recommendationsFooterExpanded = !_recommendationsFooterExpanded,
+                ),
+                style: TextButton.styleFrom(
+                  padding: EdgeInsets.zero,
+                  minimumSize: Size.zero,
+                  tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                  visualDensity: VisualDensity.compact,
+                ),
+                child: Text(
+                  _recommendationsFooterExpanded ? 'Скрыть' : 'Подробнее',
+                  style: GoogleFonts.alegreyaSans(
+                    fontSize: 12,
+                    fontWeight: FontWeight.w600,
+                  ),
                 ),
               ),
             ],
           ),
-          const SizedBox(height: 8),
-          Text(
-            PrivacyCopy.recommendationsFooter,
-            style: GoogleFonts.alegreyaSans(
-              fontSize: 12,
-              height: 1.35,
-              color: AppColors.textDark.withValues(alpha: 0.62),
+          if (_recommendationsFooterExpanded) ...[
+            const SizedBox(height: 8),
+            Text(
+              '${PrivacyCopy.recommendationsFooterBrief} ${PrivacyCopy.recommendationsFooterDetails}',
+              style: GoogleFonts.alegreyaSans(
+                fontSize: 12,
+                height: 1.35,
+                color: AppColors.textDark.withValues(alpha: 0.62),
+              ),
             ),
-          ),
+          ],
           const SizedBox(height: 12),
           ..._insight!.recommendations.asMap().entries.map((entry) {
             final i = entry.key;
@@ -1635,22 +1683,12 @@ class _StatisticsScreenState extends State<StatisticsScreen> {
                     ),
                     Padding(
                       padding: const EdgeInsets.only(left: 30, top: 6),
-                      child: Row(
-                        children: [
-                          Expanded(
-                            child: Text(
-                              'Основание: ${_insight!.recommendationExplanations[r] ?? 'тренд последних дней'}',
-                              style: GoogleFonts.alegreyaSans(
-                                fontSize: 12,
-                                color: AppColors.textDark.withValues(alpha: 0.65),
-                              ),
-                            ),
-                          ),
-                          TextButton(
-                            onPressed: () => _showRecommendationExplain(r),
-                            child: const Text('Подробнее'),
-                          ),
-                        ],
+                      child: Text(
+                        'Основание: ${_insight!.recommendationExplanations[r] ?? 'тренд последних дней'}',
+                        style: GoogleFonts.alegreyaSans(
+                          fontSize: 12,
+                          color: AppColors.textDark.withValues(alpha: 0.65),
+                        ),
                       ),
                     ),
                   ],
@@ -1955,49 +1993,6 @@ class _StatisticsScreenState extends State<StatisticsScreen> {
               ),
             ),
           ],
-          const SizedBox(height: 10),
-          ..._insight!.recommendations.take(3).map((rec) {
-            final facts = (_insight!.recommendationReasons[rec] ?? const <String>[]).take(3).toList();
-            return Padding(
-              padding: const EdgeInsets.only(bottom: 8),
-              child: Container(
-                padding: const EdgeInsets.all(10),
-                decoration: BoxDecoration(
-                  color: AppColors.cream,
-                  borderRadius: BorderRadius.circular(10),
-                ),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      rec,
-                      style: GoogleFonts.alegreyaSans(
-                        fontSize: 13,
-                        fontWeight: FontWeight.w700,
-                        color: AppColors.textDark,
-                      ),
-                    ),
-                    const SizedBox(height: 4),
-                    Text(
-                      'Скор уверенности: ${(((_insight!.recommendationScores[rec] ?? _insight!.confidence) * 100).round())}%',
-                      style: GoogleFonts.alegreyaSans(
-                        fontSize: 12,
-                        color: AppColors.textDark.withValues(alpha: 0.65),
-                      ),
-                    ),
-                    const SizedBox(height: 4),
-                    ...facts.map((f) => Text(
-                          '• $f',
-                          style: GoogleFonts.alegreyaSans(
-                            fontSize: 12,
-                            color: AppColors.textDark.withValues(alpha: 0.75),
-                          ),
-                        )),
-                  ],
-                ),
-              ),
-            );
-          }),
         ],
       ),
     );
@@ -2291,26 +2286,6 @@ class _StatisticsScreenState extends State<StatisticsScreen> {
             ),
           ],
         ),
-      ),
-    );
-  }
-
-  void _showRecommendationExplain(String recommendation) {
-    final reasons = (_insight?.recommendationReasons[recommendation] ?? const <String>[]).take(3).toList();
-    showDialog<void>(
-      context: context,
-      builder: (_) => AlertDialog(
-        title: const Text('На чем основан совет'),
-        content: Text(
-          reasons.isEmpty ? 'Совет построен на трендах последних дней.' : reasons.join('\n'),
-          style: GoogleFonts.alegreyaSans(fontSize: 14, height: 1.4),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text('Закрыть'),
-          ),
-        ],
       ),
     );
   }
