@@ -26,7 +26,7 @@ extension FoundationSphereIdX on String {
       };
 }
 
-/// Включение сферы: 0 — выкл.; 1 — учитывается в целях (равный вес).
+/// Включение сферы в расчёте фундамента (вкл. / выкл., без весов).
 class FoundationSpherePriorities {
   const FoundationSpherePriorities({
     this.sleep = 1,
@@ -70,8 +70,7 @@ class FoundationSpherePriorities {
   Iterable<String> get activeIds =>
       FoundationSphereIds.ordered.where(isActive);
 
-  int get activeWeightSum =>
-      FoundationSphereIds.ordered.fold(0, (s, id) => s + forId(id));
+  int get activeCount => activeIds.length;
 
   FoundationSpherePriorities copyWith({
     int? sleep,

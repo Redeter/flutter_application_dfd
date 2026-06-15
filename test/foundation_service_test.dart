@@ -63,7 +63,7 @@ void main() {
     expect(mood.progress, greaterThan(0));
   });
 
-  test('приоритет 0 — сфера скрыта', () {
+  test('выключенная сфера не участвует в расчёте', () {
     final goalsHidden = goals.copyWith(
       priorities: const FoundationSpherePriorities(
         sleep: 0,
@@ -143,6 +143,38 @@ void main() {
       FoundationService.nutritionProgressForEntry(partialSnacks, goals),
       closeTo(0.5, 0.001),
     );
+  });
+
+  test('два дня подряд с записями — серия 2 и учёт в среднем', () {
+    final today = FoundationService.dayOnly(DateTime.now());
+    final yesterday = today.subtract(const Duration(days: 1));
+    final data = AggregatedData(
+      notes: const [],
+      stateEntries: [
+        MoodEntry(createdAt: today, value: 8),
+        SleepEntry(createdAt: today, quality: 8),
+        EnergyEntry(createdAt: today, level: 8),
+        NutritionEntry(
+          createdAt: today,
+          meals: const ['ЗАВТРАК', 'ОБЕД', 'УЖИН'],
+          snackCount: 1,
+        ),
+        MoodEntry(createdAt: yesterday, value: 8),
+        SleepEntry(createdAt: yesterday, quality: 8),
+        EnergyEntry(createdAt: yesterday, level: 8),
+        NutritionEntry(
+          createdAt: yesterday,
+          meals: const ['ЗАВТРАК', 'ОБЕД', 'УЖИН'],
+          snackCount: 1,
+        ),
+      ],
+      medications: const [],
+      appointments: const [],
+    );
+    final s = FoundationService.instance.compute(data, goals, statsPeriodCaption: cap);
+    expect(s.activityStreak, 2);
+    expect(s.filledBricks, greaterThan(0));
+    expect(s.rawOverallProgress, greaterThan(0));
   });
 
   test('medication adherence сегодня', () {

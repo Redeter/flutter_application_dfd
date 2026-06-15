@@ -37,7 +37,7 @@ class _AddAppointmentScreenState extends State<AddAppointmentScreen> {
     _titleController = TextEditingController(text: a?.title ?? '');
     _noteController = TextEditingController(text: a?.note ?? '');
     _time = a?.time ?? const TimeOfDay(hour: 15, minute: 0);
-    _reminder = normalizeCalendarReminder(a?.reminder);
+    _reminder = normalizeAppointmentReminder(a?.reminder);
   }
 
   @override
@@ -167,7 +167,7 @@ class _AddAppointmentScreenState extends State<AddAppointmentScreen> {
               child: DropdownButtonFormField<String>(
                 value: _reminder,
                 decoration: _inputDecoration(),
-                items: kCalendarReminderOptions
+                items: kAppointmentReminderOptions
                     .map((r) => DropdownMenuItem(value: r, child: Text(r)))
                     .toList(),
                 onChanged: (v) => setState(() => _reminder = v ?? _reminder),

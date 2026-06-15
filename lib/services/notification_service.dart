@@ -9,6 +9,7 @@ import 'package:timezone/timezone.dart' as tz;
 import '../constants/calendar_reminders.dart';
 import '../models/calendar_entry.dart';
 import 'auth_service.dart';
+import 'calendar_notification_planner.dart';
 import 'calendar_storage.dart';
 import 'foundation_service.dart';
 
@@ -245,31 +246,18 @@ class NotificationService {
             }
           }
         case Appointment():
-          final visit = DateTime(
-            e.date.year,
-            e.date.month,
-            e.date.day,
-            e.time.hour,
-            e.time.minute,
-          );
-          addIfValid(
-            idKey: '${e.id}:visit:at',
-            when: visit,
-            title: 'Запись на приём',
-            body: e.title,
-          );
-          final early = calendarReminderEarlyOffset(e.reminder);
-          if (early != null) {
-            final earlyAt = visit.subtract(early);
-            if (!earlyAt.isBefore(now) && earlyAt.isBefore(visit)) {
-              addIfValid(
-                idKey: '${e.id}:visit:early',
-                when: earlyAt,
-                title: 'Скоро приём',
-                body:
-                    '${e.title} в ${_twoDigits(e.time.hour)}:${_twoDigits(e.time.minute)}',
-              );
-            }
+          for (final planned in planAppointmentNotifications(
+            appointment: e,
+            now: now,
+          )) {
+            out.add(
+              _PendingNotification(
+                id: _stableId(planned.idKey),
+                when: planned.when,
+                title: planned.title,
+                body: planned.body,
+              ),
+            );
           }
       }
     }

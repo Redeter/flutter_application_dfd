@@ -93,7 +93,7 @@ class _FoundationScreenState extends State<FoundationScreen> {
   Future<void> _load() async {
     final profile = await UserProfileService.instance.load();
     var goals = await FoundationService.instance.loadGoals();
-    if (goals.priorities.activeWeightSum == 0) {
+    if (goals.priorities.activeCount == 0) {
       await FoundationService.instance
           .syncGoalsPrioritiesFromProfile(profile.spherePriorities);
       goals = await FoundationService.instance.loadGoals();
@@ -626,7 +626,6 @@ class _FoundationScreenState extends State<FoundationScreen> {
                     _FoundationHero(
                       score: _score!,
                       nextStepLine: _profileAdjustedNextStep(_score!.nextStep),
-                      questStreak: _questStreak,
                       stepMetByData: FoundationService.instance
                           .todayStepSatisfiedByPlusData(
                         data: widget.data,
@@ -680,13 +679,11 @@ class _FoundationHero extends StatelessWidget {
   const _FoundationHero({
     required this.score,
     required this.nextStepLine,
-    required this.questStreak,
     required this.stepMetByData,
   });
 
   final FoundationScore score;
   final String nextStepLine;
-  final int questStreak;
   final bool stepMetByData;
 
   @override
@@ -767,7 +764,7 @@ class _FoundationHero extends StatelessWidget {
               ),
             ),
           ],
-          if (questStreak > 0) ...[
+          if (score.activityStreak > 0) ...[
             const SizedBox(height: 8),
             Align(
               alignment: Alignment.centerLeft,
@@ -778,7 +775,7 @@ class _FoundationHero extends StatelessWidget {
                   borderRadius: BorderRadius.circular(20),
                 ),
                 child: Text(
-                  'Серия: $questStreak ${_foundationPluralDaysRu(questStreak)}',
+                  'Серия: ${score.activityStreak} ${_foundationPluralDaysRu(score.activityStreak)}',
                   maxLines: 2,
                   overflow: TextOverflow.ellipsis,
                   style: GoogleFonts.alegreyaSans(

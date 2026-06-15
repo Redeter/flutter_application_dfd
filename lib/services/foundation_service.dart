@@ -293,7 +293,7 @@ class FoundationService {
       overall: overall,
     );
 
-    final visibleSpheres = sphereScores.where((s) => s.priority > 0).toList();
+    final visibleSpheres = sphereScores;
 
     final weakest = [...visibleSpheres]
       ..sort((a, b) {
@@ -377,6 +377,7 @@ class FoundationService {
       spheres: visibleSpheres,
       nextStep: _nextStepFor(nextSphereId),
       nextStepSphereId: nextSphereId,
+      activityStreak: streak,
       brickDelta7d: delta7,
       riskCracks: cracks,
       riskCracksExplanation: cracksWhy,
@@ -395,19 +396,18 @@ class FoundationService {
     );
   }
 
-  /// Дневной прогресс 0–1 по активным сферам (приоритет > 0).
+  /// Дневной прогресс 0–1: среднее по включённым сферам (без весов).
   static double dailyFoundationScore({
     required AggregatedData data,
     required DateTime day,
     required FoundationGoals goals,
   }) {
     final dayData = _subsetForSingleDay(data, dayOnly(day));
-    final p = goals.priorities;
-    var weighted = 0.0;
-    var sumPriority = 0;
+    final active = goals.priorities;
+    var sum = 0.0;
+    var count = 0;
     for (final id in FoundationSphereIds.ordered) {
-      final pr = p.forId(id);
-      if (pr <= 0) continue;
+      if (!active.isActive(id)) continue;
       final prog = _sphereProgressForDay(
         data: dayData,
         day: dayOnly(day),
@@ -415,11 +415,11 @@ class FoundationService {
         sphereId: id,
       );
       if (prog == null) continue;
-      weighted += prog * pr;
-      sumPriority += pr;
+      sum += prog;
+      count++;
     }
-    if (sumPriority == 0) return 0;
-    return (weighted / sumPriority).clamp(0.0, 1.0);
+    if (count == 0) return 0;
+    return (sum / count).clamp(0.0, 1.0);
   }
 
   static double? _sphereProgressForDay({
@@ -428,8 +428,7 @@ class FoundationService {
     required FoundationGoals goals,
     required String sphereId,
   }) {
-    final pr = goals.priorities.forId(sphereId);
-    if (pr <= 0) return null;
+    if (!goals.priorities.isActive(sphereId)) return null;
 
     switch (sphereId) {
       case FoundationSphereIds.sleep:
@@ -467,9 +466,9 @@ class FoundationService {
     required double overall,
   }) {
     final scores = <FoundationSphereScore>[];
+    final activeCount = goals.priorities.activeCount;
     for (final id in FoundationSphereIds.ordered) {
-      final priority = goals.priorities.forId(id);
-      if (priority <= 0) continue;
+      if (!goals.priorities.isActive(id)) continue;
 
       final progress =
           _sphereProgressForDay(
@@ -483,7 +482,6 @@ class FoundationService {
       final (target, current, detail, logged, configurable) =
           _sphereTodayDetails(id, todayData, today, goals, data);
 
-      final sumPri = goals.priorities.activeWeightSum;
       scores.add(
         FoundationSphereScore(
           id: id,
@@ -491,10 +489,9 @@ class FoundationService {
           target: target,
           current: current,
           progress: progress,
-          priority: priority,
-          brickContribution: sumPri == 0
+          brickContribution: activeCount == 0
               ? 0
-              : ((progress * totalBricks * priority) / sumPri).round(),
+              : ((progress * totalBricks) / activeCount).round(),
           loggedToday: logged,
           detailLine: detail,
           isConfigurable: configurable,

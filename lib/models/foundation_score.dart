@@ -27,6 +27,7 @@ class FoundationScore {
     required this.spheres,
     required this.nextStep,
     required this.nextStepSphereId,
+    required this.activityStreak,
     required this.brickDelta7d,
     required this.riskCracks,
     required this.riskCracksExplanation,
@@ -50,7 +51,7 @@ class FoundationScore {
   /// Отображаемый прогресс (после сглаживания в [FoundationService.applyDisplaySmoothing]).
   final double overallProgress;
 
-  /// Сырой взвешенный прогресс до сглаживания.
+  /// Сырой средний прогресс до сглаживания.
   final double rawOverallProgress;
 
   final List<FoundationSphereScore> spheres;
@@ -58,6 +59,9 @@ class FoundationScore {
 
   /// Сфера подсказки «шаг на сегодня».
   final String nextStepSphereId;
+
+  /// Подряд идущие дни с ненулевым дневным прогрессом (записи «+» / календарь).
+  final int activityStreak;
 
   final int brickDelta7d;
   final int riskCracks;
@@ -89,6 +93,7 @@ class FoundationScore {
       spheres: spheres,
       nextStep: nextStep,
       nextStepSphereId: nextStepSphereId,
+      activityStreak: activityStreak,
       brickDelta7d: brickDelta7d,
       riskCracks: riskCracks,
       riskCracksExplanation: riskCracksExplanation,
@@ -115,7 +120,6 @@ class FoundationSphereScore {
     required this.target,
     required this.current,
     required this.progress,
-    required this.priority,
     required this.brickContribution,
     required this.loggedToday,
     required this.detailLine,
@@ -131,7 +135,6 @@ class FoundationSphereScore {
 
   /// Прогресс за сегодня (0–1).
   final double progress;
-  final int priority;
   final int brickContribution;
   final bool loggedToday;
   final String detailLine;

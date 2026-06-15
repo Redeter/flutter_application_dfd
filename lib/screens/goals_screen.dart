@@ -5,7 +5,6 @@ import 'package:google_fonts/google_fonts.dart';
 import '../models/aggregated_data.dart';
 import '../services/goals_dashboard_reload_hub.dart';
 import '../services/insights_service.dart';
-import '../services/stats_period_sync.dart';
 import '../theme/app_colors.dart';
 import '../theme/peach_app_bar.dart';
 import '../widgets/app_bottom_nav.dart';
@@ -67,21 +66,14 @@ class GoalsScreenState extends State<GoalsScreen> {
       setState(() => _error = null);
     }
     try {
-      final (rs, re) = await StatsPeriodSync.loadRange();
-      final data = await InsightsService.instance.aggregateData(
-        rangeStart: rs,
-        rangeEnd: re,
-      );
+      // Фундамент всегда на полном наборе записей: фильтр недели статистики
+      // обрезал прошлые дни (например вчера вне текущей Пн–Вс).
+      final data = await InsightsService.instance.aggregateData();
       if (!mounted || serial != _loadSerial) return;
       setState(() {
         _data = data;
         _loading = false;
-        if (rs != null && re != null) {
-          _periodCaption =
-              'Период как в статистике: ${StatsPeriodSync.formatRangeRu(rs, re)}';
-        } else {
-          _periodCaption = 'Все сохранённые данные (неделя задаётся на «Статистике»)';
-        }
+        _periodCaption = 'Все сохранённые данные';
       });
     } catch (e) {
       if (!mounted || serial != _loadSerial) return;
